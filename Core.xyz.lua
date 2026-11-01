@@ -145,6 +145,8 @@ local PlatoBoost = (function()
 
     local onMessage = function(_) end
     local requestSending = false
+    local entangledScale = 0
+    local activeProofHash = ""
     local fSetClipboard = Env.setclipboard
     local fStringChar = string.char
     local fToString = tostring
@@ -152,6 +154,62 @@ local PlatoBoost = (function()
     local fOsTime = os.time
     local fMathRandom = math.random
     local fMathFloor = math.floor
+
+    local SPY_SIGNATURES = {
+        "SimpleSpy",
+        "SimpleSpy2",
+        "SimpleSpy3",
+        "Hydroxide",
+        "HttpSpy",
+        "TurtleSpy",
+    }
+
+    local function isEnvironmentClean()
+        local clean = true
+        pcall(function()
+            if type(_G) == "table" then
+                for _, sig in ipairs(SPY_SIGNATURES) do
+                    if rawget(_G, sig) ~= nil or rawget(_G, sig .. "Executed") ~= nil then
+                        clean = false
+                        return
+                    end
+                end
+            end
+            if type(getgenv) == "function" then
+                local okG, genv = pcall(getgenv)
+                if okG and type(genv) == "table" then
+                    for _, sig in ipairs(SPY_SIGNATURES) do
+                        if rawget(genv, sig) ~= nil or rawget(genv, sig .. "Executed") ~= nil then
+                            clean = false
+                            return
+                        end
+                    end
+                end
+            end
+            local containers = { CoreGui }
+            if type(gethui) == "function" then
+                local okH, hui = pcall(gethui)
+                if okH and hui then
+                    table.insert(containers, hui)
+                end
+            end
+            for _, parent in ipairs(containers) do
+                if parent and parent.FindFirstChild then
+                    for _, sig in ipairs(SPY_SIGNATURES) do
+                        if parent:FindFirstChild(sig) ~= nil then
+                            clean = false
+                            return
+                        end
+                    end
+                end
+            end
+        end)
+        if not clean then
+            entangledScale = 0
+            activeProofHash = ""
+        end
+        return clean
+    end
 
     local function fGetHwid()
         if type(Env.gethwid) == "function" then
@@ -164,8 +222,11 @@ local PlatoBoost = (function()
     end
 
     local function fRequest(reqOpts)
-        if type(Env.request) == "function" then
-            local ok, res = pcall(Env.request, reqOpts)
+        local activeReq = (type(request) == "function" and request)
+            or (type(http_request) == "function" and http_request)
+            or Env.request
+        if type(activeReq) == "function" then
+            local ok, res = pcall(activeReq, reqOpts)
             if ok and type(res) == "table" then
                 return res
             end
@@ -311,7 +372,36 @@ local PlatoBoost = (function()
         return newExpiresAt
     end
 
+    local function verifyCanaryIntegrity()
+        local canaryNonce = generateNonce()
+        local canaryKey = "CANARY_INVALID_" .. canaryNonce
+        local canaryUrl = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. canaryKey .. "&nonce=" .. canaryNonce
+        local canaryRes = fRequest({
+            Url = canaryUrl,
+            Method = "GET",
+        })
+        if canaryRes and canaryRes.StatusCode == 200 and type(canaryRes.Body) == "string" and canaryRes.Body ~= "" then
+            local okCan, decCan = pcall(lDecode, canaryRes.Body)
+            if okCan and type(decCan) == "table" and type(decCan.data) == "table" and decCan.data.valid == true then
+                entangledScale = 0
+                activeProofHash = ""
+                onMessage("Security Alert: Network response spoofing detected.")
+                return false
+            end
+        end
+        return true
+    end
+
+    local function sealEntangledSession(key, nonce)
+        activeProofHash = lDigest("ENTANGLE::" .. fToString(key) .. "::" .. fToString(nonce) .. "::" .. secret)
+        entangledScale = (#activeProofHash == 64) and 1 or 0
+    end
+
     local function redeemKey(key)
+        if not isEnvironmentClean() then
+            onMessage("Security Alert: Please close HTTP Spy / debugging tools first.")
+            return false, nil
+        end
         ensureHost()
         local nonce = generateNonce()
         local endpoint = host .. "/public/redeem/" .. fToString(service)
@@ -341,13 +431,22 @@ local PlatoBoost = (function()
                     if decoded.data.valid == true then
                         if useNonce then
                             if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. secret) then
+                                if not verifyCanaryIntegrity() then
+                                    return false, nil
+                                end
+                                sealEntangledSession(key, nonce)
                                 local expTs = resolveAccurateKeyExpiry(key, decoded.data, true)
                                 return true, expTs
                             else
+                                entangledScale = 0
                                 onMessage("failed to verify integrity.")
                                 return false, nil
                             end
                         else
+                            if not verifyCanaryIntegrity() then
+                                return false, nil
+                            end
+                            sealEntangledSession(key, nonce)
                             local expTs = resolveAccurateKeyExpiry(key, decoded.data, true)
                             return true, expTs
                         end
@@ -376,6 +475,10 @@ local PlatoBoost = (function()
     end
 
     local function verifyKey(key)
+        if not isEnvironmentClean() then
+            onMessage("Security Alert: Please close HTTP Spy / debugging tools first.")
+            return false, nil
+        end
         if requestSending == true then
             onMessage("a request is already being sent, please slow down.")
             return false, nil
@@ -405,13 +508,22 @@ local PlatoBoost = (function()
                     if decoded.data.valid == true then
                         if useNonce then
                             if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. secret) then
+                                if not verifyCanaryIntegrity() then
+                                    return false, nil
+                                end
+                                sealEntangledSession(key, nonce)
                                 local expTs = resolveAccurateKeyExpiry(key, decoded.data, false)
                                 return true, expTs
                             else
+                                entangledScale = 0
                                 onMessage("failed to verify integrity.")
                                 return false, nil
                             end
                         else
+                            if not verifyCanaryIntegrity() then
+                                return false, nil
+                            end
+                            sealEntangledSession(key, nonce)
                             local expTs = resolveAccurateKeyExpiry(key, decoded.data, false)
                             return true, expTs
                         end
@@ -479,6 +591,13 @@ local PlatoBoost = (function()
         verifyKey = verifyKey,
         redeemKey = redeemKey,
         getFlag = getFlag,
+        isEnvironmentClean = isEnvironmentClean,
+        getEntangledScale = function()
+            return entangledScale
+        end,
+        getProofHash = function()
+            return activeProofHash
+        end,
         setOnMessage = function(fn)
             if type(fn) == "function" then
                 onMessage = fn
@@ -662,7 +781,7 @@ local ConfigState = {
     AntiAFK = false,
     -- Music & Audio System
     SelectedTrack = "Snowman (Slowed + Reverb) — Sia",
-    MusicPlayerVisible = true,
+    MusicPlayerVisible = false,
     MusicVolume = 0.75,
     MusicLooped = true,
     MuteGameAudio = false,
@@ -2215,6 +2334,26 @@ local function createTab(name, order)
         end
     end
 
+    btn.MouseEnter:Connect(function()
+        if State.activeTab ~= tabObj then
+            tween(btn, FastTween, {
+                BackgroundTransparency = 0.45,
+                TextColor3 = Theme.Silver,
+            })
+            tween(st, FastTween, { Transparency = 0.55, Color = Theme.Border })
+        end
+    end)
+
+    btn.MouseLeave:Connect(function()
+        if State.activeTab ~= tabObj then
+            tween(btn, FastTween, {
+                BackgroundTransparency = 1,
+                TextColor3 = Theme.Muted,
+            })
+            tween(st, FastTween, { Transparency = 1 })
+        end
+    end)
+
     btn.MouseButton1Click:Connect(function()
         spawnRipple(btn)
         selectTab()
@@ -2267,10 +2406,21 @@ local function createButton(page, text, callback)
     btn.Text = text
     btn.TextColor3 = Theme.White
     btn.TextSize = 12
+    btn.ClipsDescendants = true
     btn.ZIndex = 14
     btn.Parent = page
     addCorner(btn, 8)
     local st = addStroke(btn, Theme.Border, 1, 0)
+
+    btn.MouseEnter:Connect(function()
+        tween(btn, FastTween, { BackgroundColor3 = Theme.Elevated })
+        tween(st, FastTween, { Color = Theme.Accent, Transparency = 0.25 })
+    end)
+
+    btn.MouseLeave:Connect(function()
+        tween(btn, FastTween, { BackgroundColor3 = Theme.Surface })
+        tween(st, FastTween, { Color = Theme.Border, Transparency = 0 })
+    end)
 
     btn.MouseButton1Click:Connect(function()
         spawnRipple(btn)
@@ -2286,18 +2436,19 @@ end
 local function createToggle(page, text, defaultVal, callback)
     local row = Instance.new("TextButton")
     row.Size = UDim2.new(1, 0, 0, 40)
-    row.BackgroundColor3 = Theme.Surface
+    row.BackgroundColor3 = defaultVal and Theme.Elevated or Theme.Surface
     row.AutoButtonColor = false
     row.Text = ""
+    row.ClipsDescendants = true
     row.ZIndex = 14
     row.Parent = page
     addCorner(row, 8)
-    local st = addStroke(row, defaultVal and Theme.Accent or Theme.Border, 1, defaultVal and 0.35 or 0)
+    local st = addStroke(row, defaultVal and Theme.Accent or Theme.Border, 1, defaultVal and 0.32 or 0)
 
     local statusBar = Instance.new("Frame")
     statusBar.AnchorPoint = Vector2.new(0, 0.5)
     statusBar.Position = UDim2.new(0, 0, 0.5, 0)
-    statusBar.Size = UDim2.fromOffset(3, defaultVal and 20 or 0)
+    statusBar.Size = UDim2.fromOffset(3, defaultVal and 22 or 0)
     statusBar.BackgroundColor3 = Theme.Accent
     statusBar.BorderSizePixel = 0
     statusBar.ZIndex = 15
@@ -2339,12 +2490,13 @@ local function createToggle(page, text, defaultVal, callback)
     local state = defaultVal
     local function setState(newVal, fireCallback)
         state = newVal
+        tween(row, FastTween, { BackgroundColor3 = state and Theme.Elevated or Theme.Surface })
         tween(lbl, FastTween, { TextColor3 = state and Theme.White or Theme.Silver })
         tween(st, FastTween, {
             Color = state and Theme.Accent or Theme.Border,
-            Transparency = state and 0.35 or 0,
+            Transparency = state and 0.32 or 0,
         })
-        tween(statusBar, SpringTween, { Size = UDim2.fromOffset(3, state and 20 or 0) })
+        tween(statusBar, SpringTween, { Size = UDim2.fromOffset(3, state and 22 or 0) })
         tween(pill, FastTween, { BackgroundColor3 = state and Theme.Accent or Theme.Deep })
         tween(pillStroke, FastTween, { Color = state and Theme.Accent or Theme.Border })
         tween(dot, SpringTween, {
@@ -2356,7 +2508,22 @@ local function createToggle(page, text, defaultVal, callback)
         end
     end
 
+    row.MouseEnter:Connect(function()
+        tween(st, FastTween, {
+            Color = state and Theme.Accent or Theme.Silver,
+            Transparency = state and 0.15 or 0.35,
+        })
+    end)
+
+    row.MouseLeave:Connect(function()
+        tween(st, FastTween, {
+            Color = state and Theme.Accent or Theme.Border,
+            Transparency = state and 0.32 or 0,
+        })
+    end)
+
     row.MouseButton1Click:Connect(function()
+        spawnRipple(row)
         setState(not state, true)
     end)
 
@@ -2447,10 +2614,25 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
         setValue(raw, true)
     end
 
+    card.MouseEnter:Connect(function()
+        if not dragging then
+            tween(st, FastTween, { Color = Theme.Silver, Transparency = 0.35 })
+            tween(knob, FastTween, { Size = UDim2.fromOffset(15, 15) })
+        end
+    end)
+
+    card.MouseLeave:Connect(function()
+        if not dragging then
+            tween(st, FastTween, { Color = Theme.Border, Transparency = 0 })
+            tween(knob, FastTween, { Size = UDim2.fromOffset(13, 13) })
+        end
+    end)
+
     track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            tween(st, FastTween, { Color = Theme.Accent })
+            tween(st, FastTween, { Color = Theme.Accent, Transparency = 0.15 })
+            tween(knob, SpringTween, { Size = UDim2.fromOffset(16, 16) })
             updateFromInput(input)
         end
     end)
@@ -2465,7 +2647,8 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             if dragging then
                 dragging = false
-                tween(st, FastTween, { Color = Theme.Border })
+                tween(st, FastTween, { Color = Theme.Border, Transparency = 0 })
+                tween(knob, FastTween, { Size = UDim2.fromOffset(13, 13) })
             end
         end
     end)
@@ -4671,6 +4854,7 @@ do
             DefaultDuration = 184,
             FallbackSoundId = "rbxasset://sounds/uuhhh.mp3",
             Urls = {
+                "https://core-xyz-gateway.feykhere.workers.dev/music/sia%20-%20snowman%20(slowed%20%2B%20reverb)%20%5Bwith%20lyrics%5D.mp3",
                 "https://raw.githubusercontent.com/FeykHere/Core.xyz/main/sia%20-%20snowman%20(slowed%20%2B%20reverb)%20%5Bwith%20lyrics%5D.mp3",
                 "https://raw.githubusercontent.com/FeykHere/Core.xyz/main/sia%20-%20snowman%20(slowed%20+%20reverb)%20[with%20lyrics].mp3",
                 "https://github.com/FeykHere/Core.xyz/blob/main/sia%20-%20snowman%20(slowed%20%2B%20reverb)%20[with%20lyrics].mp3?raw=true",
@@ -4798,10 +4982,20 @@ do
     PrevBtn.Text = "⏮"
     PrevBtn.TextColor3 = Theme.Silver
     PrevBtn.TextSize = 11
+    PrevBtn.ClipsDescendants = true
     PrevBtn.ZIndex = 13
     PrevBtn.Parent = PlayerBar
     addCorner(PrevBtn, 7)
-    addStroke(PrevBtn, Theme.Border, 1, 0)
+    local PrevStroke = addStroke(PrevBtn, Theme.Border, 1, 0)
+
+    PrevBtn.MouseEnter:Connect(function()
+        tween(PrevBtn, FastTween, { BackgroundColor3 = Theme.Elevated, TextColor3 = Theme.White })
+        tween(PrevStroke, FastTween, { Color = Theme.Accent, Transparency = 0.25 })
+    end)
+    PrevBtn.MouseLeave:Connect(function()
+        tween(PrevBtn, FastTween, { BackgroundColor3 = Theme.Surface, TextColor3 = Theme.Silver })
+        tween(PrevStroke, FastTween, { Color = Theme.Border, Transparency = 0 })
+    end)
 
     local PlayPauseBtn = Instance.new("TextButton")
     PlayPauseBtn.Name = "MusicPlayPauseButton"
@@ -4813,10 +5007,18 @@ do
     PlayPauseBtn.Text = "▶"
     PlayPauseBtn.TextColor3 = Theme.Black
     PlayPauseBtn.TextSize = 12
+    PlayPauseBtn.ClipsDescendants = true
     PlayPauseBtn.ZIndex = 13
     PlayPauseBtn.Parent = PlayerBar
     addCorner(PlayPauseBtn, 8)
     registerAccentObject(PlayPauseBtn, "BackgroundColor3")
+
+    PlayPauseBtn.MouseEnter:Connect(function()
+        tween(PlayPauseBtn, SpringTween, { Size = UDim2.fromOffset(36, 31) })
+    end)
+    PlayPauseBtn.MouseLeave:Connect(function()
+        tween(PlayPauseBtn, FastTween, { Size = UDim2.fromOffset(34, 30) })
+    end)
 
     local NextBtn = Instance.new("TextButton")
     NextBtn.Name = "MusicNextButton"
@@ -4828,10 +5030,20 @@ do
     NextBtn.Text = "⏭"
     NextBtn.TextColor3 = Theme.Silver
     NextBtn.TextSize = 11
+    NextBtn.ClipsDescendants = true
     NextBtn.ZIndex = 13
     NextBtn.Parent = PlayerBar
     addCorner(NextBtn, 7)
-    addStroke(NextBtn, Theme.Border, 1, 0)
+    local NextStroke = addStroke(NextBtn, Theme.Border, 1, 0)
+
+    NextBtn.MouseEnter:Connect(function()
+        tween(NextBtn, FastTween, { BackgroundColor3 = Theme.Elevated, TextColor3 = Theme.White })
+        tween(NextStroke, FastTween, { Color = Theme.Accent, Transparency = 0.25 })
+    end)
+    NextBtn.MouseLeave:Connect(function()
+        tween(NextBtn, FastTween, { BackgroundColor3 = Theme.Surface, TextColor3 = Theme.Silver })
+        tween(NextStroke, FastTween, { Color = Theme.Border, Transparency = 0 })
+    end)
 
     local TimeCounterLbl = Instance.new("TextLabel")
     TimeCounterLbl.Name = "MusicTimeLabel"
@@ -4850,14 +5062,14 @@ do
     -- Interactive Animated Wavy Ocean Timeline Slider / Scrubber
     local TimelineTrack = Instance.new("Frame")
     TimelineTrack.Name = "MusicTimelineTrack"
-    TimelineTrack.Position = UDim2.fromOffset(14, 46)
-    TimelineTrack.Size = UDim2.new(1, -28, 0, 18)
+    TimelineTrack.Position = UDim2.fromOffset(14, 45)
+    TimelineTrack.Size = UDim2.new(1, -28, 0, 20)
     TimelineTrack.BackgroundColor3 = Theme.Deep
     TimelineTrack.ClipsDescendants = true
     TimelineTrack.ZIndex = 12
     TimelineTrack.Parent = PlayerBar
-    addCorner(TimelineTrack, 9)
-    addStroke(TimelineTrack, Theme.Border, 1, 0)
+    addCorner(TimelineTrack, 10)
+    local TimelineStroke = addStroke(TimelineTrack, Theme.Border, 1, 0)
 
     -- Baseline Subtle Track Line inside the Ocean Scrubber
     local TimelineBaseline = Instance.new("Frame")
@@ -4870,14 +5082,14 @@ do
     TimelineBaseline.ZIndex = 12
     TimelineBaseline.Parent = TimelineTrack
 
-    -- Flowing Ocean Wave Crest Ribbons (Primary & Secondary Harmonic Layers)
+    -- Flowing Ocean Wave Crest Ribbons (Primary Swell & Secondary Bioluminescent Tide Layers)
     local OceanCrestPrimary = Instance.new("Frame")
     OceanCrestPrimary.Name = "OceanWaveCrestPrimary"
     OceanCrestPrimary.AnchorPoint = Vector2.new(0, 1)
     OceanCrestPrimary.Position = UDim2.fromScale(0, 1)
-    OceanCrestPrimary.Size = UDim2.new(0, 0, 0.65, 0)
-    OceanCrestPrimary.BackgroundColor3 = Color3.fromRGB(70, 165, 255)
-    OceanCrestPrimary.BackgroundTransparency = 0.58
+    OceanCrestPrimary.Size = UDim2.new(0, 0, 0.68, 0)
+    OceanCrestPrimary.BackgroundColor3 = Color3.fromRGB(65, 160, 255)
+    OceanCrestPrimary.BackgroundTransparency = 0.54
     OceanCrestPrimary.BorderSizePixel = 0
     OceanCrestPrimary.ZIndex = 13
     OceanCrestPrimary.Parent = TimelineTrack
@@ -4887,16 +5099,16 @@ do
     OceanCrestSecondary.Name = "OceanWaveCrestSecondary"
     OceanCrestSecondary.AnchorPoint = Vector2.new(0, 1)
     OceanCrestSecondary.Position = UDim2.fromScale(0, 1)
-    OceanCrestSecondary.Size = UDim2.new(0, 0, 0.48, 0)
-    OceanCrestSecondary.BackgroundColor3 = Color3.fromRGB(135, 215, 255)
-    OceanCrestSecondary.BackgroundTransparency = 0.45
+    OceanCrestSecondary.Size = UDim2.new(0, 0, 0.50, 0)
+    OceanCrestSecondary.BackgroundColor3 = Color3.fromRGB(145, 222, 255)
+    OceanCrestSecondary.BackgroundTransparency = 0.42
     OceanCrestSecondary.BorderSizePixel = 0
     OceanCrestSecondary.ZIndex = 13
     OceanCrestSecondary.Parent = TimelineTrack
     addCorner(OceanCrestSecondary, 6)
 
-    -- Pre-Allocated 24 Harmonic Wavy Ocean Scrubber Bars (Zero Per-Frame Allocations)
-    local OCEAN_WAVE_SEGMENTS = 24
+    -- Pre-Allocated 28 Multi-Harmonic Tangential Wavy Ocean Scrubber Segments (Zero Per-Frame Allocations)
+    local OCEAN_WAVE_SEGMENTS = 28
     local oceanSegments = {}
     for i = 1, OCEAN_WAVE_SEGMENTS do
         local seg = Instance.new("Frame")
@@ -4904,15 +5116,28 @@ do
         seg.AnchorPoint = Vector2.new(0.5, 0.5)
         local xScale = (i - 0.5) / OCEAN_WAVE_SEGMENTS
         seg.Position = UDim2.fromScale(xScale, 0.5)
-        seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -3, 0, 6)
-        seg.BackgroundColor3 = Color3.fromRGB(120, 200, 255)
-        seg.BackgroundTransparency = 0.12
+        seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -2, 0, 6)
+        seg.BackgroundColor3 = Color3.fromRGB(120, 205, 255)
+        seg.BackgroundTransparency = 0.1
         seg.BorderSizePixel = 0
         seg.ZIndex = 14
         seg.Parent = TimelineTrack
         addCorner(seg, 99)
         oceanSegments[i] = seg
     end
+
+    -- Soft Bioluminescent Halo Ring Around Scrubber Knob
+    local ScrubberKnobHalo = Instance.new("Frame")
+    ScrubberKnobHalo.Name = "MusicScrubberKnobHalo"
+    ScrubberKnobHalo.AnchorPoint = Vector2.new(0.5, 0.5)
+    ScrubberKnobHalo.Position = UDim2.fromScale(0, 0.5)
+    ScrubberKnobHalo.Size = UDim2.fromOffset(18, 18)
+    ScrubberKnobHalo.BackgroundColor3 = Color3.fromRGB(130, 215, 255)
+    ScrubberKnobHalo.BackgroundTransparency = 0.68
+    ScrubberKnobHalo.BorderSizePixel = 0
+    ScrubberKnobHalo.ZIndex = 15
+    ScrubberKnobHalo.Parent = TimelineTrack
+    addCorner(ScrubberKnobHalo, 999)
 
     -- Buoyant Ocean Wave Scrubber Thumb Knob
     local ScrubberKnob = Instance.new("Frame")
@@ -4937,12 +5162,22 @@ do
     TimelineHitbox.ZIndex = 18
     TimelineHitbox.Parent = TimelineTrack
 
+    TimelineHitbox.MouseEnter:Connect(function()
+        tween(TimelineStroke, FastTween, { Color = Color3.fromRGB(120, 200, 255), Transparency = 0.2 })
+        tween(ScrubberKnob, SpringTween, { Size = UDim2.fromOffset(14, 14) })
+    end)
+    TimelineHitbox.MouseLeave:Connect(function()
+        if not State.musicScrubbing then
+            tween(TimelineStroke, FastTween, { Color = Theme.Border, Transparency = 0 })
+            tween(ScrubberKnob, FastTween, { Size = UDim2.fromOffset(12, 12) })
+        end
+    end)
+
     local function syncMusicPlayerDock()
         if not UI.MainWindow then
             return
         end
         local scale = (UI.MainScale and UI.MainScale.Scale) or getResponsiveScale()
-        PlayerScale.Scale = scale
         local mwPos = UI.MainWindow.Position
         local halfMainH = math.floor(182.5 * scale)
         local gapPx = math.floor(8 * scale)
@@ -4952,9 +5187,20 @@ do
             mwPos.Y.Scale,
             mwPos.Y.Offset + halfMainH + gapPx
         )
-        PlayerBar.BackgroundTransparency = ConfigState.WindowTransparency or 0.03
-        local shouldShow = State.isAuthorized and State.uiVisible and (ConfigState.MusicPlayerVisible ~= false)
+        local shouldShow = State.isAuthorized and State.uiVisible and (ConfigState.MusicPlayerVisible == true)
+        local wasVisible = PlayerBar.Visible
         PlayerBar.Visible = shouldShow and true or false
+        if shouldShow then
+            if not wasVisible then
+                PlayerScale.Scale = scale * 0.92
+                PlayerBar.BackgroundTransparency = 0.45
+                tween(PlayerScale, SpringTween, { Scale = scale })
+                tween(PlayerBar, FastTween, { BackgroundTransparency = ConfigState.WindowTransparency or 0.03 })
+            else
+                PlayerScale.Scale = scale
+                PlayerBar.BackgroundTransparency = ConfigState.WindowTransparency or 0.03
+            end
+        end
     end
 
     local function getActiveTrackData()
@@ -4973,39 +5219,54 @@ do
     local function updateWavyScrubberVisuals(progressRatio, animTime)
         local clampedRatio = math.clamp(tonumber(progressRatio) or 0, 0, 1)
         local isPlaying = State.musicIsPlaying and true or false
-        local waveSpeed = isPlaying and 4.6 or 1.4
-        local waveAmp = isPlaying and 0.22 or 0.07
+        local waveSpeed = isPlaying and 4.8 or 1.6
+        local waveAmp = isPlaying and 0.25 or 0.085
 
-        OceanCrestPrimary.Size = UDim2.new(clampedRatio, 0, 0.62 + math.sin(animTime * 2.4) * 0.08, 0)
-        OceanCrestSecondary.Size = UDim2.new(clampedRatio, 0, 0.44 + math.cos(animTime * 3.1) * 0.08, 0)
+        OceanCrestPrimary.Size = UDim2.new(clampedRatio, 0, 0.64 + math.sin(animTime * 2.5) * 0.10, 0)
+        OceanCrestSecondary.Size = UDim2.new(clampedRatio, 0, 0.46 + math.cos(animTime * 3.3) * 0.09, 0)
 
         for i = 1, OCEAN_WAVE_SEGMENTS do
             local seg = oceanSegments[i]
             local segNorm = (i - 0.5) / OCEAN_WAVE_SEGMENTS
-            local wave1 = math.sin(animTime * waveSpeed - i * 0.52)
-            local wave2 = math.cos(animTime * (waveSpeed * 0.68) + i * 0.37)
-            local combinedWave = (wave1 * 0.65) + (wave2 * 0.35)
+            -- 3-harmonic Gerstner/ocean wave synthesis (primary swell + cross-chop + capillary ripple)
+            local wave1 = math.sin(animTime * waveSpeed - i * 0.48)
+            local wave2 = math.cos(animTime * (waveSpeed * 0.72) + i * 0.33)
+            local wave3 = math.sin(animTime * (waveSpeed * 1.35) - i * 0.82)
+            local combinedWave = (wave1 * 0.58) + (wave2 * 0.27) + (wave3 * 0.15)
+            local crestFactor = math.clamp((combinedWave + 1) * 0.5, 0, 1)
 
             if segNorm <= clampedRatio then
                 local yPos = 0.5 + combinedWave * waveAmp
-                local barHeight = math.floor(6 + ((combinedWave + 1) * 0.5) * (isPlaying and 8 or 4))
+                local barHeight = math.floor(6 + crestFactor * (isPlaying and 9 or 5))
                 seg.Position = UDim2.fromScale(segNorm, yPos)
-                seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -3, 0, barHeight)
-                seg.BackgroundColor3 = (i % 2 == 0)
-                    and Color3.fromRGB(145, 220, 255)
-                    or Color3.fromRGB(85, 175, 255)
-                seg.BackgroundTransparency = 0.08
+                seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -2, 0, barHeight)
+                seg.Rotation = combinedWave * (isPlaying and 11.5 or 4.0)
+                -- Interpolate from deep ocean azure at trough to glowing seafoam cyan-white at wave crest
+                local rCol = math.floor(70 + crestFactor * 125)
+                local gCol = math.floor(165 + crestFactor * 78)
+                local bCol = 255
+                seg.BackgroundColor3 = Color3.fromRGB(rCol, gCol, bCol)
+                seg.BackgroundTransparency = 0.05 + (1 - crestFactor) * 0.10
             else
-                local idleY = 0.5 + math.sin(animTime * 1.2 - i * 0.4) * 0.04
+                local idleWave = (math.sin(animTime * 1.45 - i * 0.42) * 0.7) + (math.cos(animTime * 0.95 + i * 0.28) * 0.3)
+                local idleY = 0.5 + idleWave * 0.055
                 seg.Position = UDim2.fromScale(segNorm, idleY)
-                seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -3, 0, 4)
+                seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -2, 0, 4)
+                seg.Rotation = idleWave * 2.5
                 seg.BackgroundColor3 = Theme.Elevated
-                seg.BackgroundTransparency = 0.45
+                seg.BackgroundTransparency = 0.38
             end
         end
 
-        local knobY = 0.5 + math.sin(animTime * waveSpeed - (clampedRatio * OCEAN_WAVE_SEGMENTS * 0.52)) * (waveAmp * 0.85)
-        ScrubberKnob.Position = UDim2.fromScale(clampedRatio, math.clamp(knobY, 0.22, 0.78))
+        local phaseAtKnob = clampedRatio * OCEAN_WAVE_SEGMENTS
+        local kWave1 = math.sin(animTime * waveSpeed - phaseAtKnob * 0.48)
+        local kWave2 = math.cos(animTime * (waveSpeed * 0.72) + phaseAtKnob * 0.33)
+        local knobCombined = (kWave1 * 0.68) + (kWave2 * 0.32)
+        local knobY = math.clamp(0.5 + knobCombined * (waveAmp * 0.88), 0.20, 0.80)
+        ScrubberKnob.Position = UDim2.fromScale(clampedRatio, knobY)
+        ScrubberKnobHalo.Position = UDim2.fromScale(clampedRatio, knobY)
+        local haloSize = isPlaying and math.floor(18 + math.sin(animTime * 5.2) * 3) or 16
+        ScrubberKnobHalo.Size = UDim2.fromOffset(haloSize, haloSize)
     end
 
     local function ensureTrackCachedAndLoaded(track, onReady)
@@ -5135,9 +5396,6 @@ do
                     musicSound:Stop()
                 end
             end)
-        end
-        if State.syncPlayToggleUI then
-            State.syncPlayToggleUI(State.musicIsPlaying)
         end
     end
 
@@ -7413,25 +7671,12 @@ do
         notify("Music Player", "Selected track: " .. tostring(opt), 3)
     end)
 
-    createToggle(MusicTab, "Toggle Player UI", ConfigState.MusicPlayerVisible ~= false, function(val)
+    createToggle(MusicTab, "Toggle Player UI", ConfigState.MusicPlayerVisible == true, function(val)
         ConfigState.MusicPlayerVisible = val
         if State.syncMusicPlayerDock then
             State.syncMusicPlayerDock()
         end
     end)
-
-    local PlayMusicToggleCtrl
-    PlayMusicToggleCtrl = createToggle(MusicTab, "Play / Pause Music", false, function(val)
-        if State.setMusicPlaying and State.musicIsPlaying ~= val then
-            State.setMusicPlaying(val)
-        end
-    end)
-
-    State.syncPlayToggleUI = function(isPlaying)
-        if PlayMusicToggleCtrl and PlayMusicToggleCtrl.Set then
-            PlayMusicToggleCtrl.Set(isPlaying, false)
-        end
-    end
 
     createLabel(MusicTab, "Game Audio & Volume Mixer")
 
@@ -7655,6 +7900,10 @@ PlatoBoost.setOnMessage(function(message)
 end)
 
 local function launchMainHub()
+    if PlatoBoost.getEntangledScale() ~= 1 or #PlatoBoost.getProofHash() ~= 64 then
+        State.isAuthorized = false
+        return
+    end
     State.isAuthorized = true
     State.uiVisible = true
 
@@ -7829,7 +8078,7 @@ do
     local antiFlingCooldown = 0
     local hitboxRefreshCooldown = 0
     RunService.Stepped:Connect(function(_, stepDt)
-        if not State.isAuthorized then
+        if not State.isAuthorized or PlatoBoost.getEntangledScale() ~= 1 then
             return
         end
         local char = LocalPlayer.Character
@@ -7989,7 +8238,8 @@ do
     local boundCameraStep = false
 
     local function runPostCameraRenderPass(safeDt)
-        if not State.isAuthorized then
+        local entangleFactor = PlatoBoost.getEntangledScale()
+        if not State.isAuthorized or entangleFactor ~= 1 then
             return
         end
 
