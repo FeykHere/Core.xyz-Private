@@ -242,7 +242,7 @@ local PlatoBoost = (function()
         return { StatusCode = 0, Body = "" }
     end
 
-    local host = "https://api.platoboost.com"
+    local host = "https://api.platoboost.net"
     local cachedLink, cachedTime = "", 0
     local hostChecked = false
 
@@ -256,7 +256,7 @@ local PlatoBoost = (function()
             Method = "GET",
         })
         if not hostResponse or (hostResponse.StatusCode ~= 200 and hostResponse.StatusCode ~= 429) then
-            host = "https://api.platoboost.net"
+            host = "https://api.platoboost.com"
         end
     end
 
@@ -322,29 +322,184 @@ local PlatoBoost = (function()
         return false, link
     end
 
-    local function resolveAccurateKeyExpiry(keyStr, apiData, isFreshRedemption)
-        local now = fOsTime()
-        -- 1. Check if Platoboost response includes an explicit expiration timestamp or remaining seconds
-        if type(apiData) == "table" then
-            local rawExp = apiData.expiresAt or apiData.expires_at or apiData.expire or apiData.expiration
-            if type(rawExp) == "number" and rawExp > 0 then
-                if rawExp > 1e12 then
-                    return fMathFloor(rawExp / 1000)
-                elseif rawExp > now then
-                    return fMathFloor(rawExp)
+    local function fFloorFloat(x)
+        x = (tonumber(x) or 0) + 0.0
+        return x - (x % 1.0)
+    end
+
+    local function parseFlexibleExpiryFromTable(tbl, now)
+        if type(tbl) ~= "table" then
+            return nil
+        end
+        now = (tonumber(now) or 0) + 0.0
+        if tbl.lifetime == true or tbl.permanent == true or tbl.isPermanent == true or tbl.neverExpires == true then
+            return -1
+        end
+        -- 1. Check minutesLeft (Platoboost /api/session/status format: e.g. 30,000,000 mins for 500,000h dev key)
+        local rawMins = tonumber(tbl.minutesLeft or tbl.minutes_left or tbl.durationMinutes or tbl.duration_minutes)
+        if rawMins and rawMins > 0 then
+            return fFloorFloat(now + (rawMins * 60.0))
+        end
+        -- 2. Check hoursLeft / durationHours (e.g. 500000 hours)
+        local rawHrs = tonumber(tbl.hoursLeft or tbl.hours_left or tbl.durationHours or tbl.duration_hours or tbl.hours)
+        if rawHrs and rawHrs > 0 then
+            return fFloorFloat(now + (rawHrs * 3600.0))
+        end
+        -- 3. Check daysLeft / durationDays
+        local rawDays = tonumber(tbl.daysLeft or tbl.days_left or tbl.durationDays or tbl.duration_days)
+        if rawDays and rawDays > 0 then
+            return fFloorFloat(now + (rawDays * 86400.0))
+        end
+        -- 4. Check explicit expiration timestamp (number, numeric string, or ISO-8601 string)
+        local rawExp = tbl.expiresAt or tbl.expires_at or tbl.expire or tbl.expiration or tbl.expiry or tbl.validUntil or tbl.valid_until
+        if rawExp ~= nil then
+            local numExp = tonumber(rawExp)
+            if numExp and numExp > 0 then
+                numExp = numExp + 0.0
+                if numExp > 1e12 then
+                    return fFloorFloat(numExp / 1000.0)
+                elseif numExp > now then
+                    return fFloorFloat(numExp)
                 else
-                    return now + fMathFloor(rawExp)
+                    return fFloorFloat(now + numExp)
+                end
+            elseif type(rawExp) == "string" then
+                local y, m, d, hh, mm, ss = string.match(rawExp, "^(%d%d%d%d)%-(%d%d)%-(%d%d)[T%s](%d%d):(%d%d):(%d%d)")
+                if y and m and d and hh and mm and ss then
+                    local okT, parsedTs = pcall(os.time, {
+                        year = tonumber(y),
+                        month = tonumber(m),
+                        day = tonumber(d),
+                        hour = tonumber(hh),
+                        min = tonumber(mm),
+                        sec = tonumber(ss),
+                    })
+                    if okT and type(parsedTs) == "number" and parsedTs > now then
+                        return parsedTs + 0.0
+                    end
                 end
             end
-            local rawRem = apiData.timeLeft or apiData.time_left or apiData.remaining or apiData.duration
-            if type(rawRem) == "number" and rawRem > 0 then
-                return now + fMathFloor(rawRem)
+        end
+        -- 5. Check remaining seconds / duration
+        local rawRem = tonumber(tbl.timeLeft or tbl.time_left or tbl.remaining or tbl.secondsLeft or tbl.seconds_left or tbl.duration or tbl.ttl)
+        if rawRem and rawRem > 0 then
+            return fFloorFloat(now + rawRem)
+        end
+        return nil
+    end
+
+    local function queryRelayStatusWithTicket(relayOrigin, ticket, now)
+        if not ticket or ticket == "" then
+            return nil
+        end
+        local statusRes = fRequest({
+            Url = relayOrigin .. "/api/session/status?ticket=" .. ticket,
+            Method = "GET",
+        })
+        if statusRes and statusRes.StatusCode == 200 and type(statusRes.Body) == "string" and statusRes.Body ~= "" then
+            local okS, decS = pcall(lDecode, statusRes.Body)
+            if okS and type(decS) == "table" and type(decS.data) == "table" then
+                local parsedStatusExp = parseFlexibleExpiryFromTable(decS.data, now)
+                if parsedStatusExp then
+                    return parsedStatusExp
+                end
+            end
+        end
+        return nil
+    end
+
+    local function fetchLiveRelayKeyExpiry(now, forceNewTicket)
+        if forceNewTicket then
+            cachedLink = ""
+            cachedTime = 0
+        end
+        local okLink, linkUrl = cacheLink()
+        if not okLink or type(linkUrl) ~= "string" or linkUrl == "" then
+            return nil, nil, nil
+        end
+        local relayOrigin = string.match(linkUrl, "^(https?://[^/]+)") or "https://auth.platorelay.com"
+        local ticket = string.match(linkUrl, "[?&]d=([^&#]+)") or string.match(linkUrl, "[?&]ticket=([^&#]+)")
+        local exp = queryRelayStatusWithTicket(relayOrigin, ticket, now)
+        if exp then
+            return exp, relayOrigin, ticket
+        end
+        if not forceNewTicket then
+            cachedLink = ""
+            cachedTime = 0
+            local okFresh, freshUrl = cacheLink()
+            if okFresh and type(freshUrl) == "string" and freshUrl ~= "" then
+                relayOrigin = string.match(freshUrl, "^(https?://[^/]+)") or relayOrigin
+                local freshTicket = string.match(freshUrl, "[?&]d=([^&#]+)") or string.match(freshUrl, "[?&]ticket=([^&#]+)")
+                if freshTicket and freshTicket ~= "" and freshTicket ~= ticket then
+                    ticket = freshTicket
+                    exp = queryRelayStatusWithTicket(relayOrigin, ticket, now)
+                    if exp then
+                        return exp, relayOrigin, ticket
+                    end
+                end
+            end
+        end
+        return nil, relayOrigin, ticket
+    end
+
+    local function fetchRelayServiceDurationSeconds(relayOrigin, ticket)
+        if not relayOrigin or not ticket or ticket == "" then
+            return nil
+        end
+        local metaRes = fRequest({
+            Url = relayOrigin .. "/api/session/metadata?ticket=" .. ticket,
+            Method = "GET",
+        })
+        if metaRes and metaRes.StatusCode == 200 and type(metaRes.Body) == "string" and metaRes.Body ~= "" then
+            local okM, decM = pcall(lDecode, metaRes.Body)
+            if okM and type(decM) == "table" and type(decM.data) == "table" then
+                local durHours = tonumber(decM.data.durationHours or decM.data.duration)
+                if durHours and durHours > 0 then
+                    return fFloorFloat(durHours * 3600.0)
+                end
+            end
+        end
+        return nil
+    end
+
+    local function resolveAccurateKeyExpiry(keyStr, apiData, isFreshRedemption)
+        local now = (tonumber(fOsTime()) or 0) + 0.0
+        local keyId = lDigest(fGetHwid() .. "::" .. fToString(keyStr or ""))
+        local hwidId = lDigest(fGetHwid())
+
+        -- 1. Check if Platoboost response payload includes an explicit expiration timestamp or remaining duration
+        if type(apiData) == "table" then
+            local directExp = parseFlexibleExpiryFromTable(apiData, now)
+                or parseFlexibleExpiryFromTable(apiData.key, now)
+                or parseFlexibleExpiryFromTable(apiData.whitelist, now)
+            if directExp then
+                pcall(function()
+                    safeWriteFile(KEY_META_FILE, lEncode({
+                        keyId = keyId,
+                        hwidId = hwidId,
+                        redeemedAt = now,
+                        expiresAt = directExp,
+                    }))
+                end)
+                return directExp
             end
         end
 
-        -- 2. Track exact activation/expiry timestamp per HWID + Key on disk so re-executions show exact live remaining time
-        local keyId = lDigest(fGetHwid() .. "::" .. fToString(keyStr or ""))
-        local hwidId = lDigest(fGetHwid())
+        -- 2. Query Platoboost Live Session Status (/api/session/status?ticket=...) for exact minutesLeft (e.g. 500,000h dev keys -> 30,000,000 mins)
+        local liveRelayExp, relayOrigin, ticket = fetchLiveRelayKeyExpiry(now, isFreshRedemption)
+        if liveRelayExp and (liveRelayExp == -1 or liveRelayExp > now) then
+            pcall(function()
+                safeWriteFile(KEY_META_FILE, lEncode({
+                    keyId = keyId,
+                    hwidId = hwidId,
+                    redeemedAt = now,
+                    expiresAt = liveRelayExp,
+                }))
+            end)
+            return liveRelayExp
+        end
+
+        -- 3. Track exact activation/expiry timestamp per HWID + Key on disk so re-executions continue counting down without resetting to 24h
         local savedRaw = safeReadFile(KEY_META_FILE)
         local meta = nil
         if savedRaw and savedRaw ~= "" then
@@ -354,13 +509,15 @@ local PlatoBoost = (function()
             end
         end
 
-        if not isFreshRedemption and type(meta) == "table" then
-            if (meta.keyId == keyId or meta.hwidId == hwidId) and type(meta.expiresAt) == "number" and meta.expiresAt > now then
+        if type(meta) == "table" and type(meta.expiresAt) == "number" and (meta.expiresAt == -1 or meta.expiresAt > now) then
+            if meta.keyId == keyId or (not isFreshRedemption and meta.hwidId == hwidId) then
                 return meta.expiresAt
             end
         end
 
-        local newExpiresAt = now + DEFAULT_KEY_DURATION
+        -- 4. Check if Platoboost service flag or relay metadata defines a custom service duration
+        local relayDurationSec = fetchRelayServiceDurationSeconds(relayOrigin, ticket)
+        local newExpiresAt = now + (relayDurationSec or DEFAULT_KEY_DURATION)
         pcall(function()
             safeWriteFile(KEY_META_FILE, lEncode({
                 keyId = keyId,
@@ -375,7 +532,8 @@ local PlatoBoost = (function()
     local function verifyCanaryIntegrity()
         local canaryNonce = generateNonce()
         local canaryKey = "CANARY_INVALID_" .. canaryNonce
-        local canaryUrl = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. canaryKey .. "&nonce=" .. canaryNonce
+        local canaryId = lDigest("CANARY_HWID_" .. canaryNonce)
+        local canaryUrl = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. canaryId .. "&key=" .. canaryKey .. "&nonce=" .. canaryNonce
         local canaryRes = fRequest({
             Url = canaryUrl,
             Method = "GET",
@@ -4327,6 +4485,140 @@ do
         Sunny = "rbxassetid://9114221580",
     }
 
+    -- Realistic Rain And Thunderstorm Asset (rbxassetid://1250626578) Loader & Stealth Sanitizer
+    local REALISTIC_RAIN_ASSET_ID = "rbxassetid://1250626578"
+    local realisticCanopyEmitters = {}
+    local realisticSplashEmitters = {}
+    local realisticAssetLoaded = false
+
+    local function loadRealisticRainAsset()
+        if realisticAssetLoaded then
+            return
+        end
+        realisticAssetLoaded = true
+        pcall(function()
+            local objects = nil
+            if type(game) == "table" or type(game) == "userdata" then
+                if game.GetObjects then
+                    local okG, resG = pcall(function()
+                        return game:GetObjects(REALISTIC_RAIN_ASSET_ID)
+                    end)
+                    if okG and type(resG) == "table" then
+                        objects = resG
+                    end
+                end
+            end
+            if not objects and type(getobjects) == "function" then
+                local okO, resO = pcall(getobjects, REALISTIC_RAIN_ASSET_ID)
+                if okO and type(resO) == "table" then
+                    objects = resO
+                end
+            end
+            if type(objects) ~= "table" or #objects == 0 then
+                return
+            end
+
+            for _, rootObj in ipairs(objects) do
+                if rootObj then
+                    local allNodes = { rootObj }
+                    if rootObj.GetDescendants then
+                        local okD, descList = pcall(function()
+                            return rootObj:GetDescendants()
+                        end)
+                        if okD and type(descList) == "table" then
+                            for _, d in ipairs(descList) do
+                                table.insert(allNodes, d)
+                            end
+                        end
+                    end
+
+                    -- 1. Strip any embedded Scripts / LocalScripts / ModuleScripts for 100% anti-cheat stealth
+                    for _, node in ipairs(allNodes) do
+                        pcall(function()
+                            if node:IsA("BaseScript") or node:IsA("Script") or node:IsA("LocalScript") or node:IsA("ModuleScript") then
+                                node:Destroy()
+                            end
+                        end)
+                    end
+
+                    -- 2. Harvest ParticleEmitters & Sound IDs from rbxassetid://1250626578
+                    for _, node in ipairs(allNodes) do
+                        pcall(function()
+                            if node:IsA("ParticleEmitter") then
+                                local cloned = node:Clone()
+                                local nodeNameLower = string.lower(tostring(node.Name or ""))
+                                local parentNameLower = string.lower(tostring((node.Parent and node.Parent.Name) or ""))
+                                local isSplash = (string.find(nodeNameLower, "splash") ~= nil)
+                                    or (string.find(nodeNameLower, "ground") ~= nil)
+                                    or (string.find(nodeNameLower, "hit") ~= nil)
+                                    or (string.find(nodeNameLower, "ripple") ~= nil)
+                                    or (string.find(parentNameLower, "splash") ~= nil)
+                                    or (string.find(parentNameLower, "ground") ~= nil)
+
+                                local baseRate = tonumber(cloned.Rate) or (isSplash and 320 or 500)
+                                cloned.Enabled = false
+                                cloned.LockedToPart = false
+                                if isSplash then
+                                    cloned.Name = "CoreXyz_Asset1250626578_Splash_" .. tostring(#realisticSplashEmitters + 1)
+                                    cloned.Parent = groundSplashPart
+                                    table.insert(realisticSplashEmitters, { Emitter = cloned, BaseRate = baseRate })
+                                    if cloned.Texture and tostring(cloned.Texture) ~= "" then
+                                        groundSplashEmitter.Texture = cloned.Texture
+                                    end
+                                else
+                                    cloned.Name = "CoreXyz_Asset1250626578_Rain_" .. tostring(#realisticCanopyEmitters + 1)
+                                    cloned.Parent = weatherPart
+                                    table.insert(realisticCanopyEmitters, { Emitter = cloned, BaseRate = baseRate })
+                                    if cloned.Texture and tostring(cloned.Texture) ~= "" then
+                                        weatherEmitter.Texture = cloned.Texture
+                                    end
+                                end
+                            elseif node:IsA("Sound") then
+                                local sId = tostring(node.SoundId or "")
+                                local sName = string.lower(tostring(node.Name or ""))
+                                if sId ~= "" and (string.find(sId, "rbxassetid://") or string.find(sId, "roblox%.com/asset")) then
+                                    if string.find(sName, "thunder") or string.find(sName, "lightning") then
+                                        thunderSound.SoundId = sId
+                                        spatialThunderSound.SoundId = sId
+                                    elseif string.find(sName, "rain") or string.find(sName, "storm") then
+                                        WEATHER_SOUND_IDS.Rain = sId
+                                        WEATHER_SOUND_IDS.Thunderstorm = sId
+                                    end
+                                end
+                            end
+                        end)
+                    end
+
+                    pcall(function()
+                        rootObj:Destroy()
+                    end)
+                end
+            end
+        end)
+    end
+
+    local function setRealisticAssetEmittersState(enabled, rateMultiplier)
+        local mult = rateMultiplier or 1.0
+        for _, item in ipairs(realisticCanopyEmitters) do
+            if item.Emitter and item.Emitter.Parent then
+                pcall(function()
+                    item.Emitter.Rate = math.floor((item.BaseRate or 500) * mult)
+                    item.Emitter.Enabled = enabled and true or false
+                end)
+            end
+        end
+        for _, item in ipairs(realisticSplashEmitters) do
+            if item.Emitter and item.Emitter.Parent then
+                pcall(function()
+                    item.Emitter.Rate = math.floor((item.BaseRate or 320) * mult)
+                    item.Emitter.Enabled = enabled and true or false
+                end)
+            end
+        end
+    end
+
+    loadRealisticRainAsset()
+
     local function makeNumRange(minV, maxV)
         if type(NumberRange) == "table" and NumberRange.new then
             return NumberRange.new(minV, maxV or minV)
@@ -4497,8 +4789,9 @@ do
         hideLightningBolts()
 
         if ConfigState.WeatherPreset == "Rain" then
+            loadRealisticRainAsset()
             weatherPart.Size = Vector3.new(160, 42, 160)
-            weatherEmitter.Texture = "rbxassetid://258128463"
+            weatherEmitter.Texture = weatherEmitter.Texture ~= "" and weatherEmitter.Texture or "rbxassetid://258128463"
             weatherEmitter.Rate = 620
             streakEmitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
             streakEmitter.Rate = 320
@@ -4560,6 +4853,7 @@ do
             streakEmitter.Enabled = true
             mistEmitter.Enabled = true
             groundSplashEmitter.Enabled = true
+            setRealisticAssetEmittersState(true, 1.0)
             sunRays.Enabled = false
             weatherBloom.Enabled = true
             weatherBloom.Intensity = 0.35
@@ -4569,8 +4863,9 @@ do
             colorCorr.Saturation = -0.18
             colorCorr.TintColor = Color3.fromRGB(218, 232, 255)
         elseif ConfigState.WeatherPreset == "Thunderstorm" then
+            loadRealisticRainAsset()
             weatherPart.Size = Vector3.new(175, 46, 175)
-            weatherEmitter.Texture = "rbxassetid://258128463"
+            weatherEmitter.Texture = weatherEmitter.Texture ~= "" and weatherEmitter.Texture or "rbxassetid://258128463"
             weatherEmitter.Rate = 850
             streakEmitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
             streakEmitter.Rate = 440
@@ -4630,6 +4925,7 @@ do
             streakEmitter.Enabled = true
             mistEmitter.Enabled = true
             groundSplashEmitter.Enabled = true
+            setRealisticAssetEmittersState(true, 1.35)
             sunRays.Enabled = false
             weatherBloom.Enabled = true
             weatherBloom.Intensity = 0.65
@@ -4694,6 +4990,7 @@ do
             streakEmitter.Enabled = true
             mistEmitter.Enabled = true
             groundSplashEmitter.Enabled = false
+            setRealisticAssetEmittersState(false, 1.0)
             sunRays.Enabled = false
             weatherBloom.Enabled = true
             weatherBloom.Intensity = 0.42
@@ -4707,6 +5004,7 @@ do
             streakEmitter.Enabled = false
             mistEmitter.Enabled = false
             groundSplashEmitter.Enabled = false
+            setRealisticAssetEmittersState(false, 1.0)
             sunRays.Enabled = true
             sunRays.Intensity = 0.32
             sunRays.Spread = 0.90
@@ -4727,6 +5025,7 @@ do
             streakEmitter.Enabled = false
             mistEmitter.Enabled = false
             groundSplashEmitter.Enabled = false
+            setRealisticAssetEmittersState(false, 1.0)
             sunRays.Enabled = false
             weatherBloom.Enabled = false
             colorCorr.Enabled = false
@@ -4821,6 +5120,9 @@ do
     State.applyWeatherPreset = applyWeatherPreset
     State.syncWeatherAudio = syncWeatherAudio
     State.updateWeatherFrame = updateWeatherFrame
+    UI.RealisticRainAssetId = REALISTIC_RAIN_ASSET_ID
+    UI.RealisticCanopyEmitters = realisticCanopyEmitters
+    UI.RealisticSplashEmitters = realisticSplashEmitters
     UI.WeatherEmitterPart = weatherPart
     UI.WeatherEmitter = weatherEmitter
     UI.WeatherStreakEmitter = streakEmitter
@@ -5948,19 +6250,27 @@ local function formatRemainingKeyTime()
     if State.keyExpireTimestamp == -1 then
         return "Lifetime"
     end
-    local now = os.time()
-    local rem = math.max(0, (State.keyExpireTimestamp or (now + 86400)) - now)
+    local now = (tonumber(os.time()) or 0) + 0.0
+    local exp = (tonumber(State.keyExpireTimestamp) or (now + 86400.0)) + 0.0
+    local rem = math.max(0.0, exp - now)
     if rem <= 0 then
         return "EXPIRED"
     end
-    local days = math.floor(rem / 86400)
-    local hrs = math.floor((rem % 86400) / 3600)
-    local mins = math.floor((rem % 3600) / 60)
-    local secs = math.floor(rem % 60)
-    if days > 0 then
-        return string.format("%dd %02dh %02dm %02ds", days, hrs, mins, secs)
+    local function floorF(v)
+        v = (tonumber(v) or 0) + 0.0
+        return v - (v % 1.0)
     end
-    return string.format("%02dh %02dm %02ds", hrs, mins, secs)
+    local totalHrs = floorF(rem / 3600.0)
+    local days = floorF(rem / 86400.0)
+    local hrs = floorF((rem % 86400.0) / 3600.0)
+    local mins = floorF((rem % 3600.0) / 60.0)
+    local secs = floorF(rem % 60.0)
+    if totalHrs >= 100 then
+        return string.format("%.0fh %02.0fm %02.0fs (%.0fd)", totalHrs, mins, secs, days)
+    elseif days > 0 then
+        return string.format("%.0fd %02.0fh %02.0fm %02.0fs (%.0fh)", days, hrs, mins, secs, totalHrs)
+    end
+    return string.format("%02.0fh %02.0fm %02.0fs", hrs, mins, secs)
 end
 
 --------------------------------------------------------------------------------
