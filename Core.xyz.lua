@@ -2434,7 +2434,7 @@ do
 
     local HeaderSub = Instance.new("TextLabel")
     HeaderSub.Position = UDim2.fromOffset(42, 24)
-    HeaderSub.Size = UDim2.fromOffset(260, 14)
+    HeaderSub.Size = UDim2.fromOffset(220, 14)
     HeaderSub.BackgroundTransparency = 1
     HeaderSub.Font = Enum.Font.Code
     HeaderSub.Text = "UNIVERSAL V4.5  ·  ULTRA-FPS STEALTH"
@@ -2443,6 +2443,116 @@ do
     HeaderSub.TextXAlignment = Enum.TextXAlignment.Left
     HeaderSub.ZIndex = 13
     HeaderSub.Parent = HeaderBar
+
+    local HeaderSearchHolder = Instance.new("Frame")
+    HeaderSearchHolder.Name = "HeaderSearchHolder"
+    HeaderSearchHolder.AnchorPoint = Vector2.new(1, 0.5)
+    HeaderSearchHolder.Position = UDim2.new(1, -46, 0.5, 0)
+    HeaderSearchHolder.Size = UDim2.fromOffset(168, 28)
+    HeaderSearchHolder.BackgroundColor3 = Theme.Surface
+    HeaderSearchHolder.ZIndex = 14
+    HeaderSearchHolder.Parent = HeaderBar
+    addCorner(HeaderSearchHolder, 6)
+    local HeaderSearchStroke = addStroke(HeaderSearchHolder, Theme.Border, 1, 0)
+
+    local HeaderSearchBox = Instance.new("TextBox")
+    HeaderSearchBox.Name = "HeaderSearchBox"
+    HeaderSearchBox.Position = UDim2.fromOffset(10, 0)
+    HeaderSearchBox.Size = UDim2.new(1, -30, 1, 0)
+    HeaderSearchBox.BackgroundTransparency = 1
+    HeaderSearchBox.ClearTextOnFocus = false
+    HeaderSearchBox.Font = Enum.Font.Code
+    HeaderSearchBox.PlaceholderText = "Filter features..."
+    HeaderSearchBox.PlaceholderColor3 = Theme.Muted
+    HeaderSearchBox.Text = ""
+    HeaderSearchBox.TextColor3 = Theme.White
+    HeaderSearchBox.TextSize = 10
+    HeaderSearchBox.TextXAlignment = Enum.TextXAlignment.Left
+    HeaderSearchBox.ZIndex = 15
+    HeaderSearchBox.Parent = HeaderSearchHolder
+
+    local HeaderSearchClearBtn = Instance.new("TextButton")
+    HeaderSearchClearBtn.Name = "HeaderSearchClearBtn"
+    HeaderSearchClearBtn.AnchorPoint = Vector2.new(1, 0.5)
+    HeaderSearchClearBtn.Position = UDim2.new(1, -4, 0.5, 0)
+    HeaderSearchClearBtn.Size = UDim2.fromOffset(18, 18)
+    HeaderSearchClearBtn.BackgroundTransparency = 1
+    HeaderSearchClearBtn.AutoButtonColor = false
+    HeaderSearchClearBtn.Font = Enum.Font.GothamBold
+    HeaderSearchClearBtn.Text = "×"
+    HeaderSearchClearBtn.TextColor3 = Theme.Muted
+    HeaderSearchClearBtn.TextSize = 12
+    HeaderSearchClearBtn.Visible = false
+    HeaderSearchClearBtn.ZIndex = 16
+    HeaderSearchClearBtn.Parent = HeaderSearchHolder
+
+    local function nodeMatchesQuery(node, q)
+        if not node then
+            return false
+        end
+        local nodeName = string.lower(tostring(node.Name or ""))
+        if string.find(nodeName, q, 1, true) then
+            return true
+        end
+        if (node:IsA("TextLabel") or node:IsA("TextButton") or node:IsA("TextBox")) and node.Text then
+            if string.find(string.lower(tostring(node.Text)), q, 1, true) then
+                return true
+            end
+        end
+        for _, desc in ipairs(node:GetDescendants()) do
+            if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
+                if string.find(string.lower(tostring(desc.Text)), q, 1, true) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function applyFeatureSearchFilter(rawQuery)
+        local q = string.lower(string.gsub(tostring(rawQuery or ""), "^%s*(.-)%s*$", "%1"))
+        HeaderSearchClearBtn.Visible = (#q > 0)
+        for _, tab in ipairs(State.Tabs) do
+            if tab.Page then
+                for _, child in ipairs(tab.Page:GetChildren()) do
+                    local isGuiElem = child:IsA("GuiObject")
+                        or child:IsA("Frame")
+                        or child:IsA("TextButton")
+                        or child:IsA("TextLabel")
+                        or child:IsA("TextBox")
+                        or child:IsA("ScrollingFrame")
+                    if isGuiElem then
+                        if #q == 0 then
+                            child.Visible = true
+                        else
+                            child.Visible = nodeMatchesQuery(child, q)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    State.applyFeatureSearchFilter = applyFeatureSearchFilter
+    UI.HeaderSearchBox = HeaderSearchBox
+
+    HeaderSearchBox.Focused:Connect(function()
+        tween(HeaderSearchStroke, FastTween, { Color = Theme.Accent, Transparency = 0.1 })
+    end)
+    HeaderSearchBox.FocusLost:Connect(function()
+        tween(HeaderSearchStroke, FastTween, { Color = Theme.Border, Transparency = 0 })
+        applyFeatureSearchFilter(HeaderSearchBox.Text)
+    end)
+    if HeaderSearchBox.GetPropertyChangedSignal then
+        pcall(function()
+            HeaderSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                applyFeatureSearchFilter(HeaderSearchBox.Text)
+            end)
+        end)
+    end
+    HeaderSearchClearBtn.MouseButton1Click:Connect(function()
+        HeaderSearchBox.Text = ""
+        applyFeatureSearchFilter("")
+    end)
 
     local MinimizeBtn = Instance.new("TextButton")
     MinimizeBtn.AnchorPoint = Vector2.new(1, 0.5)
@@ -3177,6 +3287,19 @@ do
 
     rgbaBox.FocusLost:Connect(function()
         local raw = tostring(rgbaBox.Text or "")
+        local hexMatch = string.match(raw, "^%s*#?(%x%x%x%x%x%x)%s*$")
+        if hexMatch then
+            local r = tonumber(string.sub(hexMatch, 1, 2), 16) or 255
+            local g = tonumber(string.sub(hexMatch, 3, 4), 16) or 255
+            local b = tonumber(string.sub(hexMatch, 5, 6), 16) or 255
+            local col = Color3.fromRGB(r, g, b)
+            local h, s, v = color3ToHSV(col)
+            pickerState.H = h
+            pickerState.S = s
+            pickerState.V = v
+            syncPickerVisuals(true)
+            return
+        end
         local nums = {}
         for token in string.gmatch(raw, "[%d%.]+") do
             local n = tonumber(token)
@@ -3227,14 +3350,14 @@ do
     UI.createSectionBox = function(page, sectionTitle)
         local wrapper = Instance.new("Frame")
         wrapper.Name = "SectionBox_" .. tostring(sectionTitle)
-        wrapper.Size = UDim2.new(1, 0, 0, 48)
+        wrapper.Size = UDim2.new(1, 0, 0, 30)
         wrapper.AutomaticSize = Enum.AutomaticSize.Y
         wrapper.BackgroundColor3 = Theme.Deep
         wrapper.BackgroundTransparency = 0.12
         wrapper.ZIndex = 14
         wrapper.Parent = page
         addCorner(wrapper, 8)
-        addStroke(wrapper, Theme.Border, 1, 0)
+        local wrapperStroke = addStroke(wrapper, Theme.Border, 1, 0)
 
         local titleBg = Instance.new("Frame")
         titleBg.Name = "SectionHeaderBadge"
@@ -3244,9 +3367,22 @@ do
         titleBg.ZIndex = 15
         titleBg.Parent = wrapper
 
+        local accentPip = Instance.new("Frame")
+        accentPip.Name = "SectionAccentPip"
+        accentPip.AnchorPoint = Vector2.new(0, 0.5)
+        accentPip.Position = UDim2.new(0, 0, 0.5, 0)
+        accentPip.Size = UDim2.fromOffset(3, 11)
+        accentPip.BackgroundColor3 = Theme.Accent
+        accentPip.BorderSizePixel = 0
+        accentPip.ZIndex = 16
+        accentPip.Parent = titleBg
+        addCorner(accentPip, 99)
+        registerAccentObject(accentPip, "BackgroundColor3")
+
         local titleLbl = Instance.new("TextLabel")
         titleLbl.Name = "SectionTitleLabel"
-        titleLbl.Size = UDim2.fromScale(1, 1)
+        titleLbl.Position = UDim2.fromOffset(9, 0)
+        titleLbl.Size = UDim2.new(1, -30, 1, 0)
         titleLbl.BackgroundTransparency = 1
         titleLbl.Font = Enum.Font.GothamBold
         titleLbl.Text = tostring(sectionTitle)
@@ -3256,6 +3392,20 @@ do
         titleLbl.ZIndex = 15
         titleLbl.Parent = titleBg
 
+        local collapseBtn = Instance.new("TextButton")
+        collapseBtn.Name = "SectionCollapseBtn"
+        collapseBtn.AnchorPoint = Vector2.new(1, 0.5)
+        collapseBtn.Position = UDim2.new(1, 0, 0.5, 0)
+        collapseBtn.Size = UDim2.fromOffset(18, 18)
+        collapseBtn.BackgroundTransparency = 1
+        collapseBtn.AutoButtonColor = false
+        collapseBtn.Font = Enum.Font.GothamBold
+        collapseBtn.Text = "▾"
+        collapseBtn.TextColor3 = Theme.Muted
+        collapseBtn.TextSize = 11
+        collapseBtn.ZIndex = 16
+        collapseBtn.Parent = titleBg
+
         local content = Instance.new("Frame")
         content.Name = "SectionContent"
         content.Position = UDim2.fromOffset(0, 26)
@@ -3264,6 +3414,21 @@ do
         content.BackgroundTransparency = 1
         content.ZIndex = 14
         content.Parent = wrapper
+
+        local isCollapsed = false
+        collapseBtn.MouseButton1Click:Connect(function()
+            isCollapsed = not isCollapsed
+            content.Visible = not isCollapsed
+            collapseBtn.Text = isCollapsed and "▸" or "▾"
+            collapseBtn.TextColor3 = isCollapsed and Theme.Accent or Theme.Muted
+        end)
+
+        wrapper.MouseEnter:Connect(function()
+            tween(wrapperStroke, FastTween, { Color = Theme.Accent, Transparency = 0.45 })
+        end)
+        wrapper.MouseLeave:Connect(function()
+            tween(wrapperStroke, FastTween, { Color = Theme.Border, Transparency = 0 })
+        end)
 
         local pad = Instance.new("UIPadding")
         pad.PaddingTop = UDim.new(0, 2)
@@ -12311,24 +12476,27 @@ do
             end
         end
 
-        if ConfigState.CustomCamFOV then
+        if ConfigState.CustomCamFOV and camera.FieldOfView ~= ConfigState.CamFOV then
             camera.FieldOfView = ConfigState.CamFOV
         end
 
-        UI.FovCircle.Visible = ConfigState.ShowFOV
+        if UI.FovCircle.Visible ~= ConfigState.ShowFOV then
+            UI.FovCircle.Visible = ConfigState.ShowFOV
+        end
         if ConfigState.ShowFOV and UI.FovOuterStroke then
             UI.FovOuterStroke.Thickness = 1.6 + 0.45 * math.sin(animClock * 4.2)
         end
 
-        -- Classic Single-Toggle Aimbot Lock-In (Locks Camera CFrame & Character Horizontally to Target)
+        -- Classic Single-Toggle Aimbot Lock-In (Frame-rate independent exponential smoothing + horizontal character tracking)
         if ConfigState.Aimbot then
             local target = getClosestTarget(camera)
             State.cachedAimTarget = target
             if target and target.Parent then
                 local targetPos = target.Position
                 local camGoal = CFrame.new(camera.CFrame.Position, targetPos)
-                local smooth = math.clamp(ConfigState.Smoothness or 0.9, 0.05, 1)
-                camera.CFrame = camera.CFrame:Lerp(camGoal, smooth)
+                local rawSmooth = math.clamp(ConfigState.Smoothness or 0.9, 0.05, 1)
+                local expFactor = (rawSmooth >= 0.98) and 1 or math.clamp(1 - math.exp(-(rawSmooth * 34) * safeDt), rawSmooth * 0.5, 1)
+                camera.CFrame = camera.CFrame:Lerp(camGoal, expFactor)
 
                 -- Rotate LocalPlayer's Character horizontally toward the locked target so your character aims with your screen!
                 if myHRP and not ConfigState.Spinbot and not State.orbitingPlayerName then
