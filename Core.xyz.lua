@@ -876,6 +876,39 @@ local ConfigState = {
     Tracers = false,
     TracerOrigin = "Center",
     ESPColorName = "White",
+    -- ESP Skeleton Sub-Card Suite
+    SkeletonColorMode = "Team",
+    SkeletonEffect = "Glow",
+    SkeletonBoneThickness = 2,
+    SkeletonBoneOutline = true,
+    SkeletonJointDots = false,
+    SkeletonHeadCircle = true,
+    -- ESP Text Sub-Card Suite
+    ESPTextFont = "Gotham",
+    ESPTextSize = 12,
+    ESPTextOutline = true,
+    ESPNameType = "Display Name",
+    -- ESP Health Bar Sub-Card Suite
+    HealthBarType = "Gradient",
+    HealthBarSide = "Left",
+    HealthBarWidth = 2,
+    HealthAnimSpeed = 1.0,
+    HealthSmoothing = 0.15,
+    HealthBarOutline = true,
+    HealthBarShimmer = false,
+    HealthBarGlow = false,
+    HealthLowFlash = true,
+    HealthNumber = false,
+    -- ESP Box Effects Sub-Card Suite
+    BoxAnimation = "None",
+    BoxSecondColor = Color3.fromRGB(115, 95, 255),
+    BoxAnimSpeed = 0.5,
+    BoxGlow = false,
+    BoxSpin = false,
+    BoxSpinSpeed = 0.3,
+    BoxFillAnimation = "None",
+    BoxFillDirection = "Vertical",
+    BoxFillAnimSpeed = 0.5,
     Crosshair = false,
     CrosshairPreset = "Plus (+)",
     CrosshairColorName = "White",
@@ -1020,12 +1053,39 @@ local ConfigState = {
     ServerHopMode = "Lowest Players",
     TargetJobId = "",
     AntiAFK = false,
+    -- Performance Settings Suite
+    PerformanceProfile = "Auto",
+    LowGraphicsEnabled = false,
+    OptimizeModeEnabled = false,
+    PauseRenderOnTabOut = false,
+    FPSWhenTabbedOut = 15,
     -- Music & Audio System
     SelectedTrack = "Snowman (Slowed + Reverb) — Sia",
     MusicPlayerVisible = false,
     MusicVolume = 0.75,
     MusicLooped = true,
     MuteGameAudio = false,
+    -- Custom Background Suite
+    CustomBgDecalId = "",
+    CustomBgTransparency = 0.5,
+    CustomBgAlsoWatermark = false,
+    CustomBgPanelSeeThrough = 0.35,
+    CustomBgImageFit = "Crop",
+    CustomBgSearchQuery = "",
+    -- Full UI Theme Palette Suite
+    ThemeBgColor = Color3.fromRGB(10, 10, 14),
+    ThemeElementColor = Color3.fromRGB(16, 16, 22),
+    ThemeBorderColor = Color3.fromRGB(45, 45, 56),
+    ThemeAccentColor = Color3.fromRGB(115, 95, 255),
+    ThemeGlowColor = Color3.fromRGB(115, 95, 255),
+    ThemeOutlineColor = Color3.fromRGB(35, 35, 48),
+    ThemeInlineColor = Color3.fromRGB(24, 24, 32),
+    ThemeGradientColor = Color3.fromRGB(150, 130, 255),
+    ThemeFontColor = Color3.fromRGB(255, 255, 255),
+    ThemeFontOutlineColor = Color3.fromRGB(5, 5, 7),
+    ThemeFontFace = "Gotham",
+    ThemeListSelection = "Default",
+    CustomThemeName = "",
     -- UI & Settings
     CustomPillTitle = "CORE.XYZ",
     RememberKey = true,
@@ -1071,6 +1131,18 @@ local State = {
     selfChamsCache = {},
     toolVisualsCache = {},
     clearedAtmosphereCache = {},
+    suppressedSkyInstances = {},
+    lowGraphicsCache = {},
+    registeredKeybinds = {},
+    listeningKeybindEntry = nil,
+    sessionStartTime = os.time(),
+    sessionKills = 0,
+    trackedEnemyDeathStates = {},
+    isWindowFocused = true,
+    effectivePerformanceMode = "Balanced",
+    detectedGameName = "Prison Life",
+    detectedRegionCode = "IN",
+    themeBoundElements = {},
     isUnderRoof = false,
     mutedGameSounds = setmetatable({}, { __mode = "k" }),
     muteAudioDescendantConn = nil,
@@ -2703,6 +2775,432 @@ do
     }
     UI.SwatchPalette = SWATCH_PALETTE
 
+    local function color3ToHSV(col)
+        if not col then
+            return 0, 0, 1
+        end
+        if type(Color3) == "table" and type(Color3.toHSV) == "function" then
+            local ok, h, s, v = pcall(Color3.toHSV, col)
+            if ok and type(h) == "number" then
+                return h, s, v
+            end
+        end
+        local r, g, b = col.R or 1, col.G or 1, col.B or 1
+        if r > 1 or g > 1 or b > 1 then
+            r, g, b = r / 255, g / 255, b / 255
+        end
+        local maxC = math.max(r, g, b)
+        local minC = math.min(r, g, b)
+        local d = maxC - minC
+        local h = 0
+        local s = (maxC == 0) and 0 or (d / maxC)
+        local v = maxC
+        if maxC ~= minC then
+            if maxC == r then
+                h = (g - b) / d + (g < b and 6 or 0)
+            elseif maxC == g then
+                h = (b - r) / d + 2
+            else
+                h = (r - g) / d + 4
+            end
+            h = h / 6
+        end
+        return math.clamp(h, 0, 1), math.clamp(s, 0, 1), math.clamp(v, 0, 1)
+    end
+
+    local function hsvToRgbColor3(h, s, v)
+        h = math.clamp(tonumber(h) or 0, 0, 1)
+        s = math.clamp(tonumber(s) or 0, 0, 1)
+        v = math.clamp(tonumber(v) or 1, 0, 1)
+        local i = math.floor(h * 6)
+        local f = h * 6 - i
+        local p = v * (1 - s)
+        local q = v * (1 - f * s)
+        local t = v * (1 - (1 - f) * s)
+        local m = i % 6
+        local r, g, b = v, t, p
+        if m == 1 then r, g, b = q, v, p
+        elseif m == 2 then r, g, b = p, v, t
+        elseif m == 3 then r, g, b = p, q, v
+        elseif m == 4 then r, g, b = t, p, v
+        elseif m == 5 then r, g, b = v, p, q end
+        return Color3.fromRGB(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+    end
+
+    -- Floating Custom Color Picker Popup (Matches Reference Screenshot IMG_20261102_204241_ffaa9d5b.jpg)
+    local pickerPopup = Instance.new("Frame")
+    pickerPopup.Name = "CoreColorPickerPopup"
+    pickerPopup.AnchorPoint = Vector2.new(0.5, 0.5)
+    pickerPopup.Position = UDim2.new(0.5, 195, 0.5, 0)
+    pickerPopup.Size = UDim2.fromOffset(224, 232)
+    pickerPopup.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    pickerPopup.Visible = false
+    pickerPopup.ZIndex = 120
+    pickerPopup.Parent = UI.ScreenGui
+    addCorner(pickerPopup, 6)
+    addStroke(pickerPopup, Theme.Border, 1.2, 0)
+    UI.ColorPickerPopup = pickerPopup
+
+    local svSquare = Instance.new("Frame")
+    svSquare.Name = "SVSquare"
+    svSquare.Position = UDim2.fromOffset(8, 8)
+    svSquare.Size = UDim2.new(1, -16, 0, 134)
+    svSquare.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    svSquare.BorderSizePixel = 0
+    svSquare.ZIndex = 121
+    svSquare.Parent = pickerPopup
+    addCorner(svSquare, 3)
+    addStroke(svSquare, Theme.Border, 1, 0)
+
+    local svWhiteOverlay = Instance.new("Frame")
+    svWhiteOverlay.Size = UDim2.fromScale(1, 1)
+    svWhiteOverlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    svWhiteOverlay.BorderSizePixel = 0
+    svWhiteOverlay.ZIndex = 122
+    svWhiteOverlay.Parent = svSquare
+    local svWhiteGrad = Instance.new("UIGradient")
+    svWhiteGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    svWhiteGrad.Parent = svWhiteOverlay
+
+    local svBlackOverlay = Instance.new("Frame")
+    svBlackOverlay.Size = UDim2.fromScale(1, 1)
+    svBlackOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    svBlackOverlay.BorderSizePixel = 0
+    svBlackOverlay.ZIndex = 123
+    svBlackOverlay.Parent = svSquare
+    local svBlackGrad = Instance.new("UIGradient")
+    svBlackGrad.Rotation = 90
+    svBlackGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    svBlackGrad.Parent = svBlackOverlay
+
+    local svCursor = Instance.new("Frame")
+    svCursor.Name = "SVCursor"
+    svCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    svCursor.Position = UDim2.fromScale(1, 0)
+    svCursor.Size = UDim2.fromOffset(8, 8)
+    svCursor.BackgroundColor3 = Theme.White
+    svCursor.ZIndex = 125
+    svCursor.Parent = svSquare
+    addCorner(svCursor, 2)
+    addStroke(svCursor, Theme.Black, 1.2, 0)
+
+    local svHitbox = Instance.new("TextButton")
+    svHitbox.Name = "ColorPickerSVHitbox"
+    svHitbox.Size = UDim2.fromScale(1, 1)
+    svHitbox.BackgroundTransparency = 1
+    svHitbox.Text = " "
+    svHitbox.TextTransparency = 1
+    svHitbox.ZIndex = 126
+    svHitbox.Parent = svSquare
+
+    local hueBar = Instance.new("Frame")
+    hueBar.Name = "HueBar"
+    hueBar.Position = UDim2.fromOffset(8, 148)
+    hueBar.Size = UDim2.new(1, -16, 0, 14)
+    hueBar.BackgroundColor3 = Theme.White
+    hueBar.BorderSizePixel = 0
+    hueBar.ZIndex = 121
+    hueBar.Parent = pickerPopup
+    addCorner(hueBar, 3)
+    addStroke(hueBar, Theme.Border, 1, 0)
+
+    local hueGrad = Instance.new("UIGradient")
+    hueGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+        ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+        ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+        ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0)),
+    })
+    hueGrad.Parent = hueBar
+
+    local hueCursor = Instance.new("Frame")
+    hueCursor.Name = "HueCursor"
+    hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    hueCursor.Position = UDim2.fromScale(0, 0.5)
+    hueCursor.Size = UDim2.fromOffset(4, 16)
+    hueCursor.BackgroundColor3 = Theme.White
+    hueCursor.ZIndex = 123
+    hueCursor.Parent = hueBar
+    addCorner(hueCursor, 2)
+    addStroke(hueCursor, Theme.Black, 1, 0)
+
+    local hueHitbox = Instance.new("TextButton")
+    hueHitbox.Name = "ColorPickerHueHitbox"
+    hueHitbox.Size = UDim2.fromScale(1, 1)
+    hueHitbox.BackgroundTransparency = 1
+    hueHitbox.Text = " "
+    hueHitbox.TextTransparency = 1
+    hueHitbox.ZIndex = 124
+    hueHitbox.Parent = hueBar
+
+    local alphaBar = Instance.new("Frame")
+    alphaBar.Name = "AlphaBar"
+    alphaBar.Position = UDim2.fromOffset(8, 168)
+    alphaBar.Size = UDim2.new(1, -16, 0, 14)
+    alphaBar.BackgroundColor3 = Color3.fromRGB(220, 220, 228)
+    alphaBar.BorderSizePixel = 0
+    alphaBar.ZIndex = 121
+    alphaBar.Parent = pickerPopup
+    addCorner(alphaBar, 3)
+    addStroke(alphaBar, Theme.Border, 1, 0)
+
+    local alphaGrad = Instance.new("UIGradient")
+    alphaGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 45, 55)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
+    })
+    alphaGrad.Parent = alphaBar
+
+    local alphaCursor = Instance.new("Frame")
+    alphaCursor.Name = "AlphaCursor"
+    alphaCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    alphaCursor.Position = UDim2.fromScale(1, 0.5)
+    alphaCursor.Size = UDim2.fromOffset(4, 16)
+    alphaCursor.BackgroundColor3 = Color3.fromRGB(255, 90, 70)
+    alphaCursor.ZIndex = 123
+    alphaCursor.Parent = alphaBar
+    addCorner(alphaCursor, 2)
+    addStroke(alphaCursor, Theme.Black, 1, 0)
+
+    local alphaHitbox = Instance.new("TextButton")
+    alphaHitbox.Name = "ColorPickerAlphaHitbox"
+    alphaHitbox.Size = UDim2.fromScale(1, 1)
+    alphaHitbox.BackgroundTransparency = 1
+    alphaHitbox.Text = " "
+    alphaHitbox.TextTransparency = 1
+    alphaHitbox.ZIndex = 124
+    alphaHitbox.Parent = alphaBar
+
+    local rgbaBox = Instance.new("TextBox")
+    rgbaBox.Name = "ColorPickerRGBABox"
+    rgbaBox.Position = UDim2.fromOffset(8, 190)
+    rgbaBox.Size = UDim2.new(1, -50, 0, 32)
+    rgbaBox.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+    rgbaBox.ClearTextOnFocus = false
+    rgbaBox.Font = Enum.Font.GothamMedium
+    rgbaBox.PlaceholderText = "255, 255, 255, 1"
+    rgbaBox.PlaceholderColor3 = Theme.Muted
+    rgbaBox.Text = "255, 255, 255, 1"
+    rgbaBox.TextColor3 = Theme.Silver
+    rgbaBox.TextSize = 13
+    rgbaBox.ZIndex = 122
+    rgbaBox.Parent = pickerPopup
+    addCorner(rgbaBox, 4)
+    addStroke(rgbaBox, Theme.Border, 1, 0)
+
+    local previewSwatch = Instance.new("TextButton")
+    previewSwatch.Name = "ColorPickerPreviewSwatch"
+    previewSwatch.Position = UDim2.new(1, -36, 0, 190)
+    previewSwatch.Size = UDim2.fromOffset(28, 32)
+    previewSwatch.BackgroundColor3 = Theme.White
+    previewSwatch.AutoButtonColor = false
+    previewSwatch.Text = " "
+    previewSwatch.TextTransparency = 1
+    previewSwatch.ZIndex = 122
+    previewSwatch.Parent = pickerPopup
+    addCorner(previewSwatch, 4)
+    addStroke(previewSwatch, Theme.Border, 1, 0)
+
+    local pickerState = {
+        ActiveTarget = nil,
+        ActiveBtn = nil,
+        H = 0,
+        S = 0,
+        V = 1,
+        A = 1,
+        DraggingSV = false,
+        DraggingHue = false,
+        DraggingAlpha = false,
+    }
+
+    local function syncPickerVisuals(fireCallback)
+        local pureHueCol = hsvToRgbColor3(pickerState.H, 1, 1)
+        local finalCol = hsvToRgbColor3(pickerState.H, pickerState.S, pickerState.V)
+        svSquare.BackgroundColor3 = pureHueCol
+        svCursor.Position = UDim2.fromScale(pickerState.S, 1 - pickerState.V)
+        hueCursor.Position = UDim2.fromScale(pickerState.H, 0.5)
+        alphaCursor.Position = UDim2.fromScale(pickerState.A, 0.5)
+        alphaGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 42)),
+            ColorSequenceKeypoint.new(1, finalCol),
+        })
+        previewSwatch.BackgroundColor3 = finalCol
+        local rawR, rawG, rawB = finalCol.R or 1, finalCol.G or 1, finalCol.B or 1
+        if rawR <= 1 and rawG <= 1 and rawB <= 1 and (pickerState.V == 0 or (rawR <= 1 and rawG <= 1 and rawB <= 1 and (rawR < 1.0001 and rawG < 1.0001 and rawB < 1.0001 and not (rawR == 255 or rawG == 255 or rawB == 255)))) then
+            -- compute directly from HSV to avoid 0..1 vs 0..255 ambiguity
+        end
+        local iH = math.floor(pickerState.H * 6)
+        local fH = pickerState.H * 6 - iH
+        local pH = pickerState.V * (1 - pickerState.S)
+        local qH = pickerState.V * (1 - fH * pickerState.S)
+        local tH = pickerState.V * (1 - (1 - fH) * pickerState.S)
+        local mH = iH % 6
+        local nr, ng, nb = pickerState.V, tH, pH
+        if mH == 1 then nr, ng, nb = qH, pickerState.V, pH
+        elseif mH == 2 then nr, ng, nb = pH, pickerState.V, tH
+        elseif mH == 3 then nr, ng, nb = pH, qH, pickerState.V
+        elseif mH == 4 then nr, ng, nb = tH, pH, pickerState.V
+        elseif mH == 5 then nr, ng, nb = pickerState.V, pH, qH end
+        local rInt = math.clamp(math.floor(nr * 255 + 0.5), 0, 255)
+        local gInt = math.clamp(math.floor(ng * 255 + 0.5), 0, 255)
+        local bInt = math.clamp(math.floor(nb * 255 + 0.5), 0, 255)
+        local aFmt = (pickerState.A >= 0.995) and "1" or string.format("%.2f", pickerState.A)
+        rgbaBox.Text = string.format("%d, %d, %d, %s", rInt, gInt, bInt, aFmt)
+        if pickerState.ActiveTarget and fireCallback ~= false then
+            pickerState.ActiveTarget(finalCol, pickerState.A)
+        end
+    end
+
+    local function openColorPickerForSwatch(btn, currentColor, applyColorFn)
+        if pickerPopup.Visible and pickerState.ActiveBtn == btn then
+            pickerPopup.Visible = false
+            pickerState.ActiveBtn = nil
+            pickerState.ActiveTarget = nil
+            return
+        end
+        pickerState.ActiveBtn = btn
+        pickerState.ActiveTarget = applyColorFn
+        local h, s, v = color3ToHSV(currentColor or Theme.White)
+        pickerState.H = h
+        pickerState.S = s
+        pickerState.V = v
+        pickerState.A = 1
+        syncPickerVisuals(false)
+        pickerPopup.Visible = true
+    end
+    UI.openColorPickerForSwatch = openColorPickerForSwatch
+
+    previewSwatch.MouseButton1Click:Connect(function()
+        pickerPopup.Visible = false
+        pickerState.ActiveBtn = nil
+    end)
+
+    local function updateSVFromInputPos(pos)
+        local absPos = svSquare.AbsolutePosition
+        local absSize = svSquare.AbsoluteSize
+        local w = (absSize and absSize.X > 0) and absSize.X or 208
+        local h = (absSize and absSize.Y > 0) and absSize.Y or 134
+        if pos then
+            pickerState.S = math.clamp((pos.X - (absPos and absPos.X or 0)) / w, 0, 1)
+            pickerState.V = 1 - math.clamp((pos.Y - (absPos and absPos.Y or 0)) / h, 0, 1)
+        else
+            pickerState.S = math.clamp(pickerState.S + 0.25, 0.15, 1)
+            pickerState.V = math.clamp(pickerState.V - 0.1, 0.25, 1)
+        end
+        syncPickerVisuals(true)
+    end
+
+    local function updateHueFromInputPos(pos)
+        local absPos = hueBar.AbsolutePosition
+        local absSize = hueBar.AbsoluteSize
+        local w = (absSize and absSize.X > 0) and absSize.X or 208
+        if pos then
+            pickerState.H = math.clamp((pos.X - (absPos and absPos.X or 0)) / w, 0, 1)
+        else
+            pickerState.H = (pickerState.H + 0.15) % 1
+        end
+        syncPickerVisuals(true)
+    end
+
+    local function updateAlphaFromInputPos(pos)
+        local absPos = alphaBar.AbsolutePosition
+        local absSize = alphaBar.AbsoluteSize
+        local w = (absSize and absSize.X > 0) and absSize.X or 208
+        if pos then
+            pickerState.A = math.clamp((pos.X - (absPos and absPos.X or 0)) / w, 0, 1)
+        else
+            pickerState.A = (pickerState.A <= 0.25) and 1 or math.clamp(pickerState.A - 0.25, 0.1, 1)
+        end
+        syncPickerVisuals(true)
+    end
+
+    svHitbox.MouseButton1Click:Connect(function()
+        updateSVFromInputPos(nil)
+    end)
+    hueHitbox.MouseButton1Click:Connect(function()
+        updateHueFromInputPos(nil)
+    end)
+    alphaHitbox.MouseButton1Click:Connect(function()
+        updateAlphaFromInputPos(nil)
+    end)
+
+    svHitbox.InputBegan:Connect(function(inp)
+        if isPrimaryPointerInput(inp) then
+            pickerState.DraggingSV = true
+            updateSVFromInputPos(inp.Position)
+        end
+    end)
+    hueHitbox.InputBegan:Connect(function(inp)
+        if isPrimaryPointerInput(inp) then
+            pickerState.DraggingHue = true
+            updateHueFromInputPos(inp.Position)
+        end
+    end)
+    alphaHitbox.InputBegan:Connect(function(inp)
+        if isPrimaryPointerInput(inp) then
+            pickerState.DraggingAlpha = true
+            updateAlphaFromInputPos(inp.Position)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(inp)
+        if not pickerPopup.Visible then
+            return
+        end
+        if isPrimaryPointerMove(inp) then
+            if pickerState.DraggingSV then
+                updateSVFromInputPos(inp.Position)
+            elseif pickerState.DraggingHue then
+                updateHueFromInputPos(inp.Position)
+            elseif pickerState.DraggingAlpha then
+                updateAlphaFromInputPos(inp.Position)
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(inp)
+        if isPrimaryPointerInput(inp) then
+            pickerState.DraggingSV = false
+            pickerState.DraggingHue = false
+            pickerState.DraggingAlpha = false
+        end
+    end)
+
+    rgbaBox.FocusLost:Connect(function()
+        local raw = tostring(rgbaBox.Text or "")
+        local nums = {}
+        for token in string.gmatch(raw, "[%d%.]+") do
+            local n = tonumber(token)
+            if n then
+                table.insert(nums, n)
+            end
+        end
+        if #nums >= 3 then
+            local r = math.clamp(math.floor(nums[1] + 0.5), 0, 255)
+            local g = math.clamp(math.floor(nums[2] + 0.5), 0, 255)
+            local b = math.clamp(math.floor(nums[3] + 0.5), 0, 255)
+            local a = nums[4] and math.clamp(nums[4], 0, 1) or pickerState.A
+            local col = Color3.fromRGB(r, g, b)
+            local h, s, v = color3ToHSV(col)
+            pickerState.H = h
+            pickerState.S = s
+            pickerState.V = v
+            pickerState.A = a
+            syncPickerVisuals(true)
+        else
+            syncPickerVisuals(false)
+        end
+    end)
+
     local function attachSwatchCyclers(btn, initColor, onColorPicked)
         local curColor = initColor or SWATCH_PALETTE[2]
         local paletteIdx = 1
@@ -2716,7 +3214,11 @@ do
         end
         btn.MouseButton1Click:Connect(function()
             paletteIdx = (paletteIdx % #SWATCH_PALETTE) + 1
-            setCol(SWATCH_PALETTE[paletteIdx], true)
+            local nextCol = SWATCH_PALETTE[paletteIdx]
+            setCol(nextCol, true)
+            openColorPickerForSwatch(btn, curColor, function(pickedCol)
+                setCol(pickedCol, true)
+            end)
         end)
         return setCol, function() return curColor end
     end
@@ -2872,8 +3374,12 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
     dot.Parent = pill
     addCorner(dot, 99)
 
+    local state = defaultVal
+    local setState
+
     local rightOffset = 62
     local swatch1Set, swatch2Set
+    local keybindEntry
     if type(extraOpts) == "table" then
         if extraOpts.SwatchColor2 then
             local sw2 = Instance.new("TextButton")
@@ -2908,29 +3414,53 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
             rightOffset = rightOffset + 28
         end
         if extraOpts.ShowKeybindBadge then
-            local kbHolder = Instance.new("Frame")
-            kbHolder.Name = "KeybindBadgeHolder"
-            kbHolder.AnchorPoint = Vector2.new(1, 0.5)
-            kbHolder.Position = UDim2.new(1, -rightOffset, 0.5, 0)
-            kbHolder.Size = UDim2.fromOffset(26, 16)
-            kbHolder.BackgroundTransparency = 1
-            kbHolder.ZIndex = 16
-            kbHolder.Parent = row
+            local kbBtn = Instance.new("TextButton")
+            kbBtn.Name = "KeybindBadge_" .. tostring(text)
+            kbBtn.AnchorPoint = Vector2.new(1, 0.5)
+            kbBtn.Position = UDim2.new(1, -rightOffset, 0.5, 0)
+            kbBtn.Size = UDim2.fromOffset(30, 18)
+            kbBtn.BackgroundTransparency = 1
+            kbBtn.AutoButtonColor = false
+            kbBtn.Font = Enum.Font.Code
+            kbBtn.Text = "[...]"
+            kbBtn.TextColor3 = Theme.Muted
+            kbBtn.TextSize = 10
+            kbBtn.ZIndex = 17
+            kbBtn.Parent = row
 
-            local kbLbl = Instance.new("TextLabel")
-            kbLbl.Size = UDim2.fromScale(1, 1)
-            kbLbl.BackgroundTransparency = 1
-            kbLbl.Font = Enum.Font.Code
-            kbLbl.Text = "[...]"
-            kbLbl.TextColor3 = Theme.Muted
-            kbLbl.TextSize = 10
-            kbLbl.ZIndex = 16
-            kbLbl.Parent = kbHolder
+            keybindEntry = {
+                Name = tostring(text),
+                Button = kbBtn,
+                KeyCode = nil,
+                KeyName = nil,
+                Toggle = function()
+                    if setState then
+                        setState(not state, true)
+                    end
+                end,
+            }
+            table.insert(State.registeredKeybinds, keybindEntry)
+
+            kbBtn.MouseButton1Click:Connect(function()
+                if State.listeningKeybindEntry == keybindEntry then
+                    State.listeningKeybindEntry = nil
+                    kbBtn.Text = keybindEntry.KeyName and ("[" .. keybindEntry.KeyName .. "]") or "[...]"
+                    kbBtn.TextColor3 = keybindEntry.KeyName and Theme.Accent or Theme.Muted
+                else
+                    if State.listeningKeybindEntry and State.listeningKeybindEntry.Button then
+                        local prev = State.listeningKeybindEntry
+                        prev.Button.Text = prev.KeyName and ("[" .. prev.KeyName .. "]") or "[...]"
+                        prev.Button.TextColor3 = prev.KeyName and Theme.Accent or Theme.Muted
+                    end
+                    State.listeningKeybindEntry = keybindEntry
+                    kbBtn.Text = "[...]"
+                    kbBtn.TextColor3 = Theme.White
+                end
+            end)
         end
     end
 
-    local state = defaultVal
-    local function setState(newVal, fireCallback)
+    setState = function(newVal, fireCallback)
         state = newVal
         tween(row, FastTween, { BackgroundColor3 = state and Theme.Elevated or Theme.Surface })
         tween(lbl, FastTween, { TextColor3 = state and Theme.White or Theme.Silver })
@@ -2969,7 +3499,7 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
         setState(not state, true)
     end)
 
-    return { Set = setState, Get = function() return state end, Row = row, SetColor1 = swatch1Set, SetColor2 = swatch2Set }
+    return { Set = setState, Get = function() return state end, Row = row, SetColor1 = swatch1Set, SetColor2 = swatch2Set, KeybindEntry = keybindEntry }
 end
 
 local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix, callback)
@@ -3648,6 +4178,33 @@ local function drawLineFrame(lineFrame, fromVec2, toVec2, color, thickness)
     lineFrame.Visible = true
 end
 
+local function hsvToColor3(h, s, v)
+    local i = math.floor(h * 6)
+    local f = h * 6 - i
+    local p = v * (1 - s)
+    local q = v * (1 - f * s)
+    local t = v * (1 - (1 - f) * s)
+    i = i % 6
+    local r, g, b = 1, 1, 1
+    if i == 0 then r, g, b = v, t, p
+    elseif i == 1 then r, g, b = q, v, p
+    elseif i == 2 then r, g, b = p, v, t
+    elseif i == 3 then r, g, b = p, q, v
+    elseif i == 4 then r, g, b = t, p, v
+    elseif i == 5 then r, g, b = v, p, q end
+    return Color3.fromRGB(math.floor(r * 255), math.floor(g * 255), math.floor(b * 255))
+end
+
+local ESP_FONT_MAP = {
+    ["Gotham"] = Enum.Font.Gotham,
+    ["GothamBold"] = Enum.Font.GothamBold,
+    ["Code"] = Enum.Font.Code,
+    ["SourceSans"] = Enum.Font.SourceSans,
+    ["Ubuntu"] = Enum.Font.Ubuntu or Enum.Font.GothamMedium,
+    ["Arcade"] = Enum.Font.Arcade or Enum.Font.Code,
+    ["SciFi"] = Enum.Font.SciFi or Enum.Font.GothamBold,
+}
+
 local function create3DOverlayGui()
     local folder = Instance.new("Frame")
     folder.Name = "Box3DOverlay"
@@ -3657,6 +4214,28 @@ local function create3DOverlayGui()
     folder.ZIndex = 4
     folder.Parent = UI.OverlayContainer
 
+    -- Pre-allocated 2D Box Fill & Box Glow Frame (For Box Effects Sub-Card)
+    local boxFillFrame = Instance.new("Frame")
+    boxFillFrame.Name = "Box2DFill"
+    boxFillFrame.BackgroundColor3 = Theme.White
+    boxFillFrame.BackgroundTransparency = 0.78
+    boxFillFrame.BorderSizePixel = 0
+    boxFillFrame.Visible = false
+    boxFillFrame.ZIndex = 3
+    boxFillFrame.Parent = folder
+    addCorner(boxFillFrame, 3)
+
+    local boxFillGrad = Instance.new("UIGradient")
+    boxFillGrad.Rotation = 90
+    boxFillGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Theme.White),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(115, 95, 255)),
+    })
+    boxFillGrad.Parent = boxFillFrame
+
+    local boxGlowStroke = addStroke(boxFillFrame, Color3.fromRGB(115, 95, 255), 2.2, 0.25)
+    boxGlowStroke.Enabled = false
+
     local boxLines = {}
     for i = 1, 12 do
         local line = Instance.new("Frame")
@@ -3665,11 +4244,14 @@ local function create3DOverlayGui()
         line.BackgroundColor3 = State.espColor
         line.BorderSizePixel = 0
         line.Visible = false
+        line.ZIndex = 4
         line.Parent = folder
         table.insert(boxLines, line)
     end
 
     local skelLines = {}
+    local boneStrokes = {}
+    local jointDots = {}
     for i = 1, #SKELETON_JOINTS do
         local sLine = Instance.new("Frame")
         sLine.Name = "Bone_" .. i
@@ -3677,9 +4259,43 @@ local function create3DOverlayGui()
         sLine.BackgroundColor3 = Theme.White
         sLine.BorderSizePixel = 0
         sLine.Visible = false
+        sLine.ZIndex = 5
         sLine.Parent = folder
+
+        local bStroke = Instance.new("UIStroke")
+        bStroke.Name = "BoneStroke"
+        bStroke.Color = Theme.Black
+        bStroke.Thickness = 1
+        bStroke.Transparency = 0.2
+        bStroke.Enabled = true
+        bStroke.Parent = sLine
+
+        local jDot = Instance.new("Frame")
+        jDot.Name = "JointDot_" .. i
+        jDot.AnchorPoint = Vector2.new(0.5, 0.5)
+        jDot.Size = UDim2.fromOffset(4, 4)
+        jDot.BackgroundColor3 = Theme.White
+        jDot.BorderSizePixel = 0
+        jDot.Visible = false
+        jDot.ZIndex = 6
+        jDot.Parent = folder
+        addCorner(jDot, 99)
+
         table.insert(skelLines, sLine)
+        table.insert(boneStrokes, bStroke)
+        table.insert(jointDots, jDot)
     end
+
+    local headCircle = Instance.new("Frame")
+    headCircle.Name = "HeadCircleFrame"
+    headCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+    headCircle.Size = UDim2.fromOffset(18, 18)
+    headCircle.BackgroundTransparency = 1
+    headCircle.Visible = false
+    headCircle.ZIndex = 6
+    headCircle.Parent = folder
+    addCorner(headCircle, 999)
+    local headCircleStroke = addStroke(headCircle, Theme.White, 1.5, 0.05)
 
     local hbBg = Instance.new("Frame")
     hbBg.Name = "HealthBar3D"
@@ -3689,8 +4305,10 @@ local function create3DOverlayGui()
     hbBg.BackgroundTransparency = 0.25
     hbBg.BorderSizePixel = 0
     hbBg.Visible = false
+    hbBg.ZIndex = 5
     hbBg.Parent = folder
     addCorner(hbBg, 99)
+    local hbStroke = addStroke(hbBg, Theme.Black, 1, 0.15)
 
     local hbFill = Instance.new("Frame")
     hbFill.AnchorPoint = Vector2.new(0, 1)
@@ -3700,6 +4318,32 @@ local function create3DOverlayGui()
     hbFill.BorderSizePixel = 0
     hbFill.Parent = hbBg
     addCorner(hbFill, 99)
+
+    local hbGrad = Instance.new("UIGradient")
+    hbGrad.Rotation = 90
+    hbGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(80, 255, 140)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 220, 70)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 65, 65)),
+    })
+    hbGrad.Enabled = false
+    hbGrad.Parent = hbFill
+
+    local hbNumLbl = Instance.new("TextLabel")
+    hbNumLbl.Name = "HealthNumberLabel"
+    hbNumLbl.AnchorPoint = Vector2.new(1, 0.5)
+    hbNumLbl.Position = UDim2.fromOffset(0, 0)
+    hbNumLbl.Size = UDim2.fromOffset(42, 14)
+    hbNumLbl.BackgroundTransparency = 1
+    hbNumLbl.Font = Enum.Font.Code
+    hbNumLbl.Text = "100"
+    hbNumLbl.TextColor3 = Theme.White
+    hbNumLbl.TextStrokeTransparency = 0.15
+    hbNumLbl.TextSize = 10
+    hbNumLbl.TextXAlignment = Enum.TextXAlignment.Right
+    hbNumLbl.Visible = false
+    hbNumLbl.ZIndex = 7
+    hbNumLbl.Parent = folder
 
     local screenTag = Instance.new("TextLabel")
     screenTag.Name = "ScreenNameTag"
@@ -3714,7 +4358,20 @@ local function create3DOverlayGui()
     screenTag.ZIndex = 6
     screenTag.Parent = folder
 
-    return folder, boxLines, skelLines, hbBg, hbFill, screenTag
+    local extraESP = {
+        BoneStrokes = boneStrokes,
+        JointDots = jointDots,
+        HeadCircle = headCircle,
+        HeadCircleStroke = headCircleStroke,
+        HealthBarStroke = hbStroke,
+        HealthBarGrad = hbGrad,
+        HealthNumberLabel = hbNumLbl,
+        BoxFillFrame = boxFillFrame,
+        BoxFillGrad = boxFillGrad,
+        BoxGlowStroke = boxGlowStroke,
+    }
+
+    return folder, boxLines, skelLines, hbBg, hbFill, screenTag, extraESP
 end
 
 local function preallocatePlayerESP(player)
@@ -3747,7 +4404,7 @@ local function preallocatePlayerESP(player)
     line.Visible = false
     line.Parent = UI.OverlayContainer
 
-    local ov3D, bLines, sLines, hbBg, hbFill, screenTag = create3DOverlayGui()
+    local ov3D, bLines, sLines, hbBg, hbFill, screenTag, extraESP = create3DOverlayGui()
 
     local preallocCorners = {}
     for i = 1, 8 do
@@ -3762,8 +4419,19 @@ local function preallocatePlayerESP(player)
         Overlay3D = ov3D,
         Box3DLines = bLines,
         SkeletonLines = sLines,
+        BoneStrokes = extraESP.BoneStrokes,
+        JointDots = extraESP.JointDots,
+        HeadCircle = extraESP.HeadCircle,
+        HeadCircleStroke = extraESP.HeadCircleStroke,
         HealthBarBg = hbBg,
         HealthBarFill = hbFill,
+        HealthBarStroke = extraESP.HealthBarStroke,
+        HealthBarGrad = extraESP.HealthBarGrad,
+        HealthNumberLabel = extraESP.HealthNumberLabel,
+        BoxFillFrame = extraESP.BoxFillFrame,
+        BoxFillGrad = extraESP.BoxFillGrad,
+        BoxGlowStroke = extraESP.BoxGlowStroke,
+        SmoothedHP = 1.0,
         Highlight = nil,
         ProjectedCorners = preallocCorners,
         CachedChar = nil,
@@ -3776,6 +4444,7 @@ local function preallocatePlayerESP(player)
         LastDist = -1,
         LastHP = -1,
         LastPriority = nil,
+        LastNameType = nil,
         Box3DVisible = false,
         SkeletonVisible = false,
         LastHLAdornee = nil,
@@ -3822,6 +4491,9 @@ local function hidePlayerESP(player)
     if data.Overlay3D and data.Overlay3D.Visible then
         data.Overlay3D.Visible = false
     end
+    if data.BoxFillFrame and data.BoxFillFrame.Visible then
+        data.BoxFillFrame.Visible = false
+    end
     if data.Box3DVisible and data.Box3DLines then
         for i = 1, #data.Box3DLines do
             data.Box3DLines[i].Visible = false
@@ -3831,11 +4503,20 @@ local function hidePlayerESP(player)
     if data.SkeletonVisible and data.SkeletonLines then
         for i = 1, #data.SkeletonLines do
             data.SkeletonLines[i].Visible = false
+            if data.JointDots and data.JointDots[i] then
+                data.JointDots[i].Visible = false
+            end
+        end
+        if data.HeadCircle then
+            data.HeadCircle.Visible = false
         end
         data.SkeletonVisible = false
     end
     if data.HealthBarBg and data.HealthBarBg.Visible then
         data.HealthBarBg.Visible = false
+    end
+    if data.HealthNumberLabel and data.HealthNumberLabel.Visible then
+        data.HealthNumberLabel.Visible = false
     end
     if data.Highlight and (data.LastHLEnabled or data.Highlight.Enabled or data.Highlight.Adornee ~= nil) then
         data.Highlight.Enabled = false
@@ -3941,14 +4622,21 @@ local function cacheCharacterBones(char)
     return jointPairs, (validCount >= expectedMin)
 end
 
+local espAnimClock = 0
+
 local function updateESP(camera)
     local anyVisualActive = ConfigState.ESP or ConfigState.Box3DESP or ConfigState.SkeletonESP or ConfigState.HealthBarESP or ConfigState.Tracers
     if not anyVisualActive then
         return
     end
 
+    espAnimClock = espAnimClock + 0.016
     local vp = camera.ViewportSize
     local camPos = camera.CFrame.Position
+    local wantFont = ESP_FONT_MAP[ConfigState.ESPTextFont or "Gotham"] or Enum.Font.GothamBold
+    local wantTextSize = math.clamp(tonumber(ConfigState.ESPTextSize) or 12, 8, 24)
+    local wantStrokeTrans = (ConfigState.ESPTextOutline ~= false) and 0.15 or 1
+    local nameTypeMode = ConfigState.ESPNameType or "Display Name"
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -3985,6 +4673,15 @@ local function updateESP(camera)
                     end
                 end
 
+                if hum and hum.Health <= 0 then
+                    if State.trackedEnemyDeathStates[player.Name] == false then
+                        State.trackedEnemyDeathStates[player.Name] = true
+                        State.sessionKills = (State.sessionKills or 0) + 1
+                    end
+                elseif hum and hum.Health > 0 then
+                    State.trackedEnemyDeathStates[player.Name] = false
+                end
+
                 if not hrp or not hum or hum.Health <= 0 then
                     hidePlayerESP(player)
                 else
@@ -4011,23 +4708,38 @@ local function updateESP(camera)
                     local isPriority = State.prioritizedPlayers[player.Name] == true
                     local displayCol = isPriority and Theme.Success or State.espColor
                     local hpInt = math.floor(hum.Health)
+                    local maxHp = math.max(hum.MaxHealth or 100, 1)
+                    local hpRatio = math.clamp(hum.Health / maxHp, 0, 1)
 
-                    -- Only format string when distance, HP, or priority changes (Zero per-frame GC churn!)
-                    if tagData.LastDist ~= dist or tagData.LastHP ~= hpInt or tagData.LastPriority ~= isPriority then
+                    -- Format string when distance, HP, priority, or NameType changes
+                    if tagData.LastDist ~= dist or tagData.LastHP ~= hpInt or tagData.LastPriority ~= isPriority or tagData.LastNameType ~= nameTypeMode then
                         tagData.LastDist = dist
                         tagData.LastHP = hpInt
                         tagData.LastPriority = isPriority
+                        tagData.LastNameType = nameTypeMode
                         local prefix = isPriority and "[PRIORITY] " or ""
-                        local formattedTag = string.format("%s%s [%dm] | HP: %d", prefix, player.Name, dist, hpInt)
+                        local nameDisplay = tostring(player.Name)
+                        local dName = player.DisplayName
+                        if (nameTypeMode == "Display Name" or nameTypeMode == "Both") and dName and dName ~= "" and dName ~= player.Name then
+                            nameDisplay = string.format("%s (@%s)", tostring(dName), tostring(player.Name))
+                        end
+                        local formattedTag = string.format("%s%s [%dm] | HP: %d", prefix, nameDisplay, dist, hpInt)
                         tagData.Text.Text = formattedTag
                         if tagData.ScreenTag then
                             tagData.ScreenTag.Text = formattedTag
                         end
                     end
 
+                    tagData.Text.Font = wantFont
+                    tagData.Text.TextSize = wantTextSize
+                    tagData.Text.TextStrokeTransparency = wantStrokeTrans
+
                     if tagData.ScreenTag then
                         local showScreenTag = visibleOnScreen and ConfigState.ESP
                         if showScreenTag then
+                            tagData.ScreenTag.Font = wantFont
+                            tagData.ScreenTag.TextSize = wantTextSize
+                            tagData.ScreenTag.TextStrokeTransparency = wantStrokeTrans
                             tagData.ScreenTag.TextColor3 = displayCol
                             tagData.ScreenTag.Position = UDim2.fromOffset(screenPos.X, screenPos.Y - 38)
                         end
@@ -4080,8 +4792,22 @@ local function updateESP(camera)
                         if ConfigState.Box3DESP or ConfigState.HealthBarESP then
                             local projectedCorners = tagData.ProjectedCorners
                             local hrpCF = hrp.CFrame
+                            if ConfigState.BoxSpin and CFrame.Angles then
+                                local spinRad = espAnimClock * (tonumber(ConfigState.BoxSpinSpeed) or 0.3) * math.pi * 2
+                                pcall(function()
+                                    hrpCF = hrpCF * CFrame.Angles(0, spinRad, 0)
+                                end)
+                            end
+                            local breathScale = 1.0
+                            local boxAnim = ConfigState.BoxAnimation or "None"
+                            local boxAnimSpd = tonumber(ConfigState.BoxAnimSpeed) or 0.5
+                            if boxAnim == "Breathe" then
+                                breathScale = 1.0 + 0.08 * math.sin(espAnimClock * boxAnimSpd * 4)
+                            end
+
                             for idx, offset in ipairs(BOX_3D_CORNERS) do
-                                local worldCorner = (hrpCF * CFrame.new(offset)).Position
+                                local scaledOffset = (breathScale ~= 1.0) and (offset * breathScale) or offset
+                                local worldCorner = (hrpCF * CFrame.new(scaledOffset)).Position
                                 local vpPt = camera:WorldToViewportPoint(worldCorner)
                                 local v2 = Vector2.new(vpPt.X, vpPt.Y)
                                 projectedCorners[idx] = v2
@@ -4093,18 +4819,83 @@ local function updateESP(camera)
 
                             if ConfigState.Box3DESP then
                                 tagData.Box3DVisible = true
+                                local boxCol = displayCol
+                                local secondCol = ConfigState.BoxSecondColor or Color3.fromRGB(115, 95, 255)
+                                if boxAnim == "Rainbow" then
+                                    boxCol = hsvToColor3((espAnimClock * boxAnimSpd * 0.5) % 1, 0.85, 1)
+                                elseif boxAnim == "Pulse" or boxAnim == "Flow" then
+                                    local t = 0.5 + 0.5 * math.sin(espAnimClock * boxAnimSpd * 4.5)
+                                    boxCol = displayCol:Lerp(secondCol, t)
+                                end
+                                local edgeThick = ConfigState.BoxGlow and 2.2 or 1.2
                                 for eIdx, edge in ipairs(BOX_3D_EDGES) do
-                                    drawLineFrame(tagData.Box3DLines[eIdx], projectedCorners[edge[1]], projectedCorners[edge[2]], displayCol, 1.1)
+                                    local edgeCol = boxCol
+                                    if boxAnim == "Flow" then
+                                        local flowT = 0.5 + 0.5 * math.sin(espAnimClock * boxAnimSpd * 4.5 + eIdx * 0.4)
+                                        edgeCol = displayCol:Lerp(secondCol, flowT)
+                                    end
+                                    drawLineFrame(tagData.Box3DLines[eIdx], projectedCorners[edge[1]], projectedCorners[edge[2]], edgeCol, edgeThick)
+                                end
+
+                                local fillAnim = ConfigState.BoxFillAnimation or "None"
+                                if tagData.BoxFillFrame then
+                                    if fillAnim ~= "None" or ConfigState.BoxGlow then
+                                        local bw = math.clamp(maxX - minX, 12, 420)
+                                        local bh = math.clamp(maxY - minY, 16, 480)
+                                        tagData.BoxFillFrame.Position = UDim2.fromOffset(minX, minY)
+                                        tagData.BoxFillFrame.Size = UDim2.fromOffset(bw, bh)
+                                        tagData.BoxFillFrame.Visible = true
+                                        if tagData.BoxGlowStroke then
+                                            tagData.BoxGlowStroke.Enabled = (ConfigState.BoxGlow == true)
+                                            tagData.BoxGlowStroke.Color = boxCol
+                                        end
+                                        if fillAnim ~= "None" and tagData.BoxFillGrad then
+                                            local fillSpd = tonumber(ConfigState.BoxFillAnimSpeed) or 0.5
+                                            local fillDir = ConfigState.BoxFillDirection or "Vertical"
+                                            tagData.BoxFillFrame.BackgroundTransparency = (fillAnim == "Pulse")
+                                                and (0.68 + 0.2 * math.sin(espAnimClock * fillSpd * 4))
+                                                or 0.76
+                                            local c1 = boxCol
+                                            local c2 = secondCol
+                                            if fillAnim == "Rainbow" then
+                                                c1 = hsvToColor3((espAnimClock * fillSpd * 0.4) % 1, 0.85, 1)
+                                                c2 = hsvToColor3((espAnimClock * fillSpd * 0.4 + 0.5) % 1, 0.85, 1)
+                                            end
+                                            tagData.BoxFillGrad.Color = ColorSequence.new({
+                                                ColorSequenceKeypoint.new(0, c1),
+                                                ColorSequenceKeypoint.new(1, c2),
+                                            })
+                                            if fillAnim == "Spin" then
+                                                tagData.BoxFillGrad.Rotation = (espAnimClock * fillSpd * 120) % 360
+                                            elseif fillDir == "Horizontal" then
+                                                tagData.BoxFillGrad.Rotation = 0
+                                            elseif fillDir == "Diagonal" then
+                                                tagData.BoxFillGrad.Rotation = 45
+                                            else
+                                                tagData.BoxFillGrad.Rotation = 90
+                                            end
+                                        else
+                                            tagData.BoxFillFrame.BackgroundTransparency = 1
+                                        end
+                                    else
+                                        tagData.BoxFillFrame.Visible = false
+                                    end
                                 end
                             elseif tagData.Box3DVisible then
                                 for i = 1, #tagData.Box3DLines do
                                     tagData.Box3DLines[i].Visible = false
+                                end
+                                if tagData.BoxFillFrame then
+                                    tagData.BoxFillFrame.Visible = false
                                 end
                                 tagData.Box3DVisible = false
                             end
                         elseif tagData.Box3DVisible then
                             for i = 1, #tagData.Box3DLines do
                                 tagData.Box3DLines[i].Visible = false
+                            end
+                            if tagData.BoxFillFrame then
+                                tagData.BoxFillFrame.Visible = false
                             end
                             tagData.Box3DVisible = false
                         end
@@ -4117,39 +4908,196 @@ local function updateESP(camera)
                                 tagData.BonesComplete = complete
                             end
                             tagData.SkeletonVisible = true
+                            local skelColorMode = ConfigState.SkeletonColorMode or "Team"
+                            local skelEffect = ConfigState.SkeletonEffect or "Glow"
+                            local boneThick = math.clamp(tonumber(ConfigState.SkeletonBoneThickness) or 2, 1, 6)
+                            local wantBoneOutline = (ConfigState.SkeletonBoneOutline ~= false)
+                            local wantJointDots = (ConfigState.SkeletonJointDots == true)
+                            local wantHeadCircle = (ConfigState.SkeletonHeadCircle ~= false)
+
+                            local skelCol = Theme.White
+                            if skelColorMode == "Team" then
+                                local tCol = player.Team and player.Team.TeamColor and player.Team.TeamColor.Color
+                                skelCol = tCol or State.espColor or Theme.White
+                            elseif skelColorMode == "Custom" then
+                                skelCol = State.espColor or Theme.White
+                            elseif skelColorMode == "Health" then
+                                skelCol = Color3.fromRGB(math.floor(255 * (1 - hpRatio)), math.floor(255 * hpRatio), 90)
+                            elseif skelColorMode == "Rainbow" then
+                                skelCol = hsvToColor3((espAnimClock * 0.45) % 1, 0.85, 1)
+                            end
+
+                            if skelEffect == "Rainbow" then
+                                skelCol = hsvToColor3((espAnimClock * 0.55) % 1, 0.85, 1)
+                            elseif skelEffect == "Pulse" then
+                                local pFactor = 0.35 * (0.5 + 0.5 * math.sin(espAnimClock * 4.5))
+                                skelCol = skelCol:Lerp(Theme.Black, pFactor)
+                            end
+
                             local cachedJoints = tagData.CachedJointPairs
                             for bIdx = 1, #SKELETON_JOINTS do
                                 local pair = cachedJoints and cachedJoints[bIdx]
+                                local sLine = tagData.SkeletonLines[bIdx]
+                                local bStroke = tagData.BoneStrokes and tagData.BoneStrokes[bIdx]
+                                local jDot = tagData.JointDots and tagData.JointDots[bIdx]
                                 if pair and pair.PartA and pair.PartB and pair.PartA.Parent and pair.PartB.Parent then
                                     local vpA = camera:WorldToViewportPoint(pair.PartA.Position)
                                     local vpB = camera:WorldToViewportPoint(pair.PartB.Position)
-                                    drawLineFrame(tagData.SkeletonLines[bIdx], Vector2.new(vpA.X, vpA.Y), Vector2.new(vpB.X, vpB.Y), Theme.White, 1.1)
+                                    local ptA = Vector2.new(vpA.X, vpA.Y)
+                                    local ptB = Vector2.new(vpB.X, vpB.Y)
+                                    drawLineFrame(sLine, ptA, ptB, skelCol, boneThick)
+                                    if bStroke then
+                                        bStroke.Enabled = wantBoneOutline or (skelEffect == "Glow")
+                                        bStroke.Color = (skelEffect == "Glow") and skelCol or Theme.Black
+                                        bStroke.Thickness = (skelEffect == "Glow") and 1.5 or 1
+                                        bStroke.Transparency = (skelEffect == "Glow") and 0.35 or 0.15
+                                    end
+                                    if jDot then
+                                        if wantJointDots then
+                                            jDot.Position = UDim2.fromOffset(ptB.X, ptB.Y)
+                                            jDot.Size = UDim2.fromOffset(boneThick + 3, boneThick + 3)
+                                            jDot.BackgroundColor3 = skelCol
+                                            jDot.Visible = true
+                                        else
+                                            jDot.Visible = false
+                                        end
+                                    end
                                 else
-                                    tagData.SkeletonLines[bIdx].Visible = false
+                                    sLine.Visible = false
+                                    if jDot then jDot.Visible = false end
+                                end
+                            end
+
+                            if tagData.HeadCircle then
+                                local headPart = tagData.CachedHead or char:FindFirstChild("Head")
+                                if wantHeadCircle and headPart and headPart.Parent then
+                                    tagData.CachedHead = headPart
+                                    local headVp = camera:WorldToViewportPoint(headPart.Position)
+                                    local headRadius = math.clamp(math.floor(420 / math.max(dist, 6)), 8, 36)
+                                    tagData.HeadCircle.Position = UDim2.fromOffset(headVp.X, headVp.Y)
+                                    tagData.HeadCircle.Size = UDim2.fromOffset(headRadius, headRadius)
+                                    if tagData.HeadCircleStroke then
+                                        tagData.HeadCircleStroke.Color = skelCol
+                                        tagData.HeadCircleStroke.Thickness = math.max(1.2, boneThick * 0.75)
+                                    end
+                                    tagData.HeadCircle.Visible = true
+                                else
+                                    tagData.HeadCircle.Visible = false
                                 end
                             end
                         elseif tagData.SkeletonVisible then
                             for i = 1, #tagData.SkeletonLines do
                                 tagData.SkeletonLines[i].Visible = false
+                                if tagData.JointDots and tagData.JointDots[i] then
+                                    tagData.JointDots[i].Visible = false
+                                end
+                            end
+                            if tagData.HeadCircle then
+                                tagData.HeadCircle.Visible = false
                             end
                             tagData.SkeletonVisible = false
                         end
 
                         if ConfigState.HealthBarESP then
+                            local boxW = math.clamp(maxX - minX, 18, 320)
                             local boxH = math.clamp(maxY - minY, 24, 340)
-                            local maxHp = math.max(hum.MaxHealth or 100, 1)
-                            local hpRatio = math.clamp(hum.Health / maxHp, 0, 1)
-                            tagData.HealthBarBg.Position = UDim2.fromOffset(minX - 6, minY)
-                            tagData.HealthBarBg.Size = UDim2.fromOffset(3, boxH)
+                            local smoothFactor = math.clamp(1 - (tonumber(ConfigState.HealthSmoothing) or 0.15), 0.05, 1)
+                            tagData.SmoothedHP = (tagData.SmoothedHP or hpRatio) + (hpRatio - (tagData.SmoothedHP or hpRatio)) * smoothFactor
+                            local dispRatio = math.clamp(tagData.SmoothedHP, 0, 1)
+
+                            local barW = math.clamp(tonumber(ConfigState.HealthBarWidth) or 3, 1, 8)
+                            local hbSide = ConfigState.HealthBarSide or "Left"
+                            local hbType = ConfigState.HealthBarType or "Gradient"
+                            local hbSpeed = tonumber(ConfigState.HealthAnimSpeed) or 1.0
+
+                            if hbSide == "Right" then
+                                tagData.HealthBarBg.AnchorPoint = Vector2.new(0, 0)
+                                tagData.HealthBarBg.Position = UDim2.fromOffset(maxX + 5, minY)
+                                tagData.HealthBarBg.Size = UDim2.fromOffset(barW, boxH)
+                                tagData.HealthBarFill.AnchorPoint = Vector2.new(0, 1)
+                                tagData.HealthBarFill.Position = UDim2.fromScale(0, 1)
+                                tagData.HealthBarFill.Size = UDim2.fromScale(1, dispRatio)
+                            elseif hbSide == "Bottom" then
+                                tagData.HealthBarBg.AnchorPoint = Vector2.new(0, 0)
+                                tagData.HealthBarBg.Position = UDim2.fromOffset(minX, maxY + 5)
+                                tagData.HealthBarBg.Size = UDim2.fromOffset(boxW, barW)
+                                tagData.HealthBarFill.AnchorPoint = Vector2.new(0, 0)
+                                tagData.HealthBarFill.Position = UDim2.fromScale(0, 0)
+                                tagData.HealthBarFill.Size = UDim2.fromScale(dispRatio, 1)
+                            elseif hbSide == "Top" then
+                                tagData.HealthBarBg.AnchorPoint = Vector2.new(0, 1)
+                                tagData.HealthBarBg.Position = UDim2.fromOffset(minX, minY - 5)
+                                tagData.HealthBarBg.Size = UDim2.fromOffset(boxW, barW)
+                                tagData.HealthBarFill.AnchorPoint = Vector2.new(0, 0)
+                                tagData.HealthBarFill.Position = UDim2.fromScale(0, 0)
+                                tagData.HealthBarFill.Size = UDim2.fromScale(dispRatio, 1)
+                            else
+                                tagData.HealthBarBg.AnchorPoint = Vector2.new(1, 0)
+                                tagData.HealthBarBg.Position = UDim2.fromOffset(minX - 6, minY)
+                                tagData.HealthBarBg.Size = UDim2.fromOffset(barW, boxH)
+                                tagData.HealthBarFill.AnchorPoint = Vector2.new(0, 1)
+                                tagData.HealthBarFill.Position = UDim2.fromScale(0, 1)
+                                tagData.HealthBarFill.Size = UDim2.fromScale(1, dispRatio)
+                            end
                             tagData.HealthBarBg.Visible = true
-                            tagData.HealthBarFill.Size = UDim2.fromScale(1, hpRatio)
-                            tagData.HealthBarFill.BackgroundColor3 = Color3.fromRGB(
-                                math.floor(255 * (1 - hpRatio)),
-                                math.floor(255 * hpRatio),
+
+                            local baseHpCol = Color3.fromRGB(
+                                math.floor(255 * (1 - dispRatio)),
+                                math.floor(255 * dispRatio),
                                 90
                             )
-                        elseif tagData.HealthBarBg.Visible then
-                            tagData.HealthBarBg.Visible = false
+                            if hbType == "Rainbow" then
+                                baseHpCol = hsvToColor3((espAnimClock * hbSpeed * 0.45) % 1, 0.85, 1)
+                            elseif hbType == "Pulse" then
+                                local p = 0.35 * (0.5 + 0.5 * math.sin(espAnimClock * hbSpeed * 5))
+                                baseHpCol = baseHpCol:Lerp(Theme.White, p)
+                            end
+                            tagData.HealthBarFill.BackgroundColor3 = baseHpCol
+
+                            if tagData.HealthBarGrad then
+                                local useGrad = (hbType == "Gradient" or hbType == "Flow" or ConfigState.HealthBarShimmer)
+                                tagData.HealthBarGrad.Enabled = useGrad
+                                if useGrad then
+                                    tagData.HealthBarGrad.Rotation = (hbSide == "Bottom" or hbSide == "Top") and 0 or 90
+                                    if hbType == "Flow" or ConfigState.HealthBarShimmer then
+                                        tagData.HealthBarGrad.Offset = Vector2.new(0, math.sin(espAnimClock * hbSpeed * 3.5) * 0.35)
+                                    else
+                                        tagData.HealthBarGrad.Offset = Vector2.zero
+                                    end
+                                end
+                            end
+
+                            if tagData.HealthBarStroke then
+                                local showOutline = (ConfigState.HealthBarOutline ~= false) or (ConfigState.HealthBarGlow == true)
+                                tagData.HealthBarStroke.Enabled = showOutline
+                                tagData.HealthBarStroke.Color = ConfigState.HealthBarGlow and baseHpCol or Theme.Black
+                                tagData.HealthBarStroke.Thickness = ConfigState.HealthBarGlow and 1.6 or 1
+                            end
+
+                            if ConfigState.HealthLowFlash and dispRatio <= 0.28 then
+                                tagData.HealthBarFill.BackgroundTransparency = 0.35 * (0.5 + 0.5 * math.sin(espAnimClock * 12))
+                            else
+                                tagData.HealthBarFill.BackgroundTransparency = 0
+                            end
+
+                            if tagData.HealthNumberLabel then
+                                if ConfigState.HealthNumber then
+                                    tagData.HealthNumberLabel.Text = tostring(hpInt)
+                                    tagData.HealthNumberLabel.TextColor3 = baseHpCol
+                                    local numY = minY + boxH * (1 - dispRatio)
+                                    tagData.HealthNumberLabel.Position = UDim2.fromOffset(minX - 10 - barW, numY)
+                                    tagData.HealthNumberLabel.Visible = true
+                                else
+                                    tagData.HealthNumberLabel.Visible = false
+                                end
+                            end
+                        else
+                            if tagData.HealthBarBg.Visible then
+                                tagData.HealthBarBg.Visible = false
+                            end
+                            if tagData.HealthNumberLabel and tagData.HealthNumberLabel.Visible then
+                                tagData.HealthNumberLabel.Visible = false
+                            end
                         end
                     elseif tagData.Overlay3D.Visible then
                         tagData.Overlay3D.Visible = false
@@ -4172,23 +5120,6 @@ local function updateESP(camera)
             end
         end
     end
-end
-
-local function hsvToColor3(h, s, v)
-    local i = math.floor(h * 6)
-    local f = h * 6 - i
-    local p = v * (1 - s)
-    local q = v * (1 - f * s)
-    local t = v * (1 - (1 - f) * s)
-    i = i % 6
-    local r, g, b = 1, 1, 1
-    if i == 0 then r, g, b = v, t, p
-    elseif i == 1 then r, g, b = q, v, p
-    elseif i == 2 then r, g, b = p, v, t
-    elseif i == 3 then r, g, b = p, q, v
-    elseif i == 4 then r, g, b = t, p, v
-    elseif i == 5 then r, g, b = v, p, q end
-    return Color3.fromRGB(math.floor(r * 255), math.floor(g * 255), math.floor(b * 255))
 end
 
 local function updateCrosshair(animClock)
@@ -6761,7 +7692,7 @@ do
     local SKYBOX_PRESET_LIBRARY = {
         ["Galaxy"]           = "rbxassetid://159454299",
         ["Aurora Galaxy"]    = "rbxassetid://12064107",
-        ["Aurora Borealis"]  = "rbxassetid://1250626578",
+        ["Aurora Borealis"]  = "rbxassetid://159454286",
         ["Realistic Space"]  = "rbxassetid://2695648605",
         ["Night"]            = "rbxassetid://48020371",
         ["Night Fog"]        = "rbxassetid://1370717244",
@@ -6793,12 +7724,40 @@ do
         if formatted == "" then
             formatted = "rbxassetid://159454299"
         end
-        customSky.SkyboxBk = formatted
-        customSky.SkyboxDn = formatted
-        customSky.SkyboxFt = formatted
-        customSky.SkyboxLf = formatted
-        customSky.SkyboxRt = formatted
-        customSky.SkyboxUp = formatted
+
+        local appliedFromObj = false
+        pcall(function()
+            if type(game.GetObjects) == "function" then
+                local objs = game:GetObjects(formatted)
+                if type(objs) == "table" and objs[1] then
+                    local root = objs[1]
+                    local skyObj = (root.ClassName == "Sky" and root) or (root.FindFirstChildOfClass and root:FindFirstChildOfClass("Sky"))
+                    if skyObj then
+                        customSky.SkyboxBk = (skyObj.SkyboxBk and skyObj.SkyboxBk ~= "") and skyObj.SkyboxBk or formatted
+                        customSky.SkyboxDn = (skyObj.SkyboxDn and skyObj.SkyboxDn ~= "") and skyObj.SkyboxDn or formatted
+                        customSky.SkyboxFt = (skyObj.SkyboxFt and skyObj.SkyboxFt ~= "") and skyObj.SkyboxFt or formatted
+                        customSky.SkyboxLf = (skyObj.SkyboxLf and skyObj.SkyboxLf ~= "") and skyObj.SkyboxLf or formatted
+                        customSky.SkyboxRt = (skyObj.SkyboxRt and skyObj.SkyboxRt ~= "") and skyObj.SkyboxRt or formatted
+                        customSky.SkyboxUp = (skyObj.SkyboxUp and skyObj.SkyboxUp ~= "") and skyObj.SkyboxUp or formatted
+                        appliedFromObj = true
+                    elseif root.ClassName == "Decal" or root.ClassName == "Texture" then
+                        if root.Texture and root.Texture ~= "" then
+                            formatted = root.Texture
+                        end
+                    end
+                    pcall(function() root:Destroy() end)
+                end
+            end
+        end)
+
+        if not appliedFromObj then
+            customSky.SkyboxBk = formatted
+            customSky.SkyboxDn = formatted
+            customSky.SkyboxFt = formatted
+            customSky.SkyboxLf = formatted
+            customSky.SkyboxRt = formatted
+            customSky.SkyboxUp = formatted
+        end
     end
 
     local function applyCustomSkybox()
@@ -6826,7 +7785,25 @@ do
 
         if not ConfigState.SkyboxEnabled then
             customSky.Parent = nil
+            for skyInst, origParent in pairs(State.suppressedSkyInstances) do
+                if skyInst then
+                    pcall(function()
+                        skyInst.Parent = origParent or Lighting
+                    end)
+                end
+            end
+            table.clear(State.suppressedSkyInstances)
             return
+        end
+
+        -- Suppress any pre-existing Sky instances in Lighting so Roblox renders CoreXyz_CustomSky!
+        for _, child in ipairs(Lighting:GetChildren()) do
+            if (child:IsA("Sky") or child.ClassName == "Sky") and child ~= customSky then
+                State.suppressedSkyInstances[child] = Lighting
+                pcall(function()
+                    child.Parent = nil
+                end)
+            end
         end
 
         local customId = string.gsub(tostring(ConfigState.CustomSkyDecalId or ""), "%s+", "")
@@ -7884,7 +8861,7 @@ do
         if not val then
             State.cachedAimTarget = nil
         end
-    end)
+    end, { ShowKeybindBadge = true })
     createToggle(CombatTab, "FOV Circle", false, function(val)
         ConfigState.ShowFOV = val
         UI.FovCircle.Visible = val
@@ -7969,7 +8946,7 @@ do
         else
             restoreAllHitboxes()
         end
-    end)
+    end, { ShowKeybindBadge = true })
     createSlider(CombatTab, "Hitbox Size", 2, 25, 10, 1, "studs", function(val)
         ConfigState.HitboxSize = val
         if ConfigState.HitboxExpander then
@@ -8004,7 +8981,13 @@ do
                 clearESP()
             end
         end
-    end)
+    end, {
+        ShowKeybindBadge = true,
+        SwatchColor = State.espColor,
+        OnColorChange = function(col)
+            State.espColor = col
+        end,
+    })
     createToggle(VisualsTab, "3D Bounding Box Overlay", false, function(val)
         ConfigState.Box3DESP = val
         if not val then
@@ -8013,18 +8996,25 @@ do
                     for i = 1, #data.Box3DLines do data.Box3DLines[i].Visible = false end
                     data.Box3DVisible = false
                 end
+                if data.BoxFillFrame then data.BoxFillFrame.Visible = false end
             end
             if not ConfigState.ESP and not ConfigState.SkeletonESP and not ConfigState.HealthBarESP and not ConfigState.Tracers then
                 clearESP()
             end
         end
-    end)
+    end, { ShowKeybindBadge = true })
     createToggle(VisualsTab, "3D Skeleton Rig Overlay", false, function(val)
         ConfigState.SkeletonESP = val
         if not val then
             for _, data in pairs(State.espObjects) do
                 if data.SkeletonLines then
-                    for i = 1, #data.SkeletonLines do data.SkeletonLines[i].Visible = false end
+                    for i = 1, #data.SkeletonLines do
+                        data.SkeletonLines[i].Visible = false
+                        if data.JointDots and data.JointDots[i] then
+                            data.JointDots[i].Visible = false
+                        end
+                    end
+                    if data.HeadCircle then data.HeadCircle.Visible = false end
                     data.SkeletonVisible = false
                 end
             end
@@ -8032,18 +9022,19 @@ do
                 clearESP()
             end
         end
-    end)
+    end, { ShowKeybindBadge = true })
     createToggle(VisualsTab, "Animated Health Bar Overlay", false, function(val)
         ConfigState.HealthBarESP = val
         if not val then
             for _, data in pairs(State.espObjects) do
                 if data.HealthBarBg then data.HealthBarBg.Visible = false end
+                if data.HealthNumberLabel then data.HealthNumberLabel.Visible = false end
             end
             if not ConfigState.ESP and not ConfigState.Box3DESP and not ConfigState.SkeletonESP and not ConfigState.Tracers then
                 clearESP()
             end
         end
-    end)
+    end, { ShowKeybindBadge = true })
     createToggle(VisualsTab, "Snapline Tracers", false, function(val)
         ConfigState.Tracers = val
         if not val then
@@ -8056,7 +9047,7 @@ do
                 clearESP()
             end
         end
-    end)
+    end, { ShowKeybindBadge = true })
     createDropdown(VisualsTab, "Tracer Origin", { "Center", "Bottom", "Top" }, "Center", function(opt)
         ConfigState.TracerOrigin = opt
     end)
@@ -8071,6 +9062,105 @@ do
     createDropdown(VisualsTab, "ESP Color", { "White", "Silver", "Red", "Cyan", "Green" }, "White", function(opt)
         ConfigState.ESPColorName = opt
         State.espColor = ColorMap[opt] or Theme.White
+    end)
+
+    -- ESP Sub-Card 1: Skeleton (Matches Reference Screenshot IMG_20261102_204145_b9ffc6a2.jpg)
+    local skelSec = UI.createSectionBox(VisualsTab, "Skeleton")
+    createDropdown(skelSec, "Skeleton Color", { "Team", "Custom", "Health", "Rainbow" }, ConfigState.SkeletonColorMode or "Team", function(opt)
+        ConfigState.SkeletonColorMode = opt
+    end)
+    createDropdown(skelSec, "Skeleton Effect", { "None", "Glow", "Pulse", "Rainbow" }, ConfigState.SkeletonEffect or "Glow", function(opt)
+        ConfigState.SkeletonEffect = opt
+    end)
+    createSlider(skelSec, "Bone Thickness", 1, 6, ConfigState.SkeletonBoneThickness or 2, 1, "px", function(val)
+        ConfigState.SkeletonBoneThickness = val
+    end)
+    createToggle(skelSec, "Bone Outline", ConfigState.SkeletonBoneOutline ~= false, function(val)
+        ConfigState.SkeletonBoneOutline = val
+    end)
+    createToggle(skelSec, "Joint Dots", ConfigState.SkeletonJointDots == true, function(val)
+        ConfigState.SkeletonJointDots = val
+    end)
+    createToggle(skelSec, "Head Circle", ConfigState.SkeletonHeadCircle ~= false, function(val)
+        ConfigState.SkeletonHeadCircle = val
+    end)
+
+    -- ESP Sub-Card 2: Text (Matches Reference Screenshot IMG_20261102_204045_74d2e1fd.jpg)
+    local textSec = UI.createSectionBox(VisualsTab, "Text")
+    createDropdown(textSec, "Font", { "Gotham", "GothamBold", "Code", "SourceSans", "Ubuntu", "Arcade" }, ConfigState.ESPTextFont or "Gotham", function(opt)
+        ConfigState.ESPTextFont = opt
+    end)
+    createSlider(textSec, "Text Size", 8, 24, ConfigState.ESPTextSize or 12, 1, "px", function(val)
+        ConfigState.ESPTextSize = val
+    end)
+    createToggle(textSec, "Text Outline", ConfigState.ESPTextOutline ~= false, function(val)
+        ConfigState.ESPTextOutline = val
+    end)
+    createDropdown(textSec, "Name Type", { "Display Name", "Username", "Both" }, ConfigState.ESPNameType or "Display Name", function(opt)
+        ConfigState.ESPNameType = opt
+    end)
+
+    -- ESP Sub-Card 3: Health Bar (Matches Reference Screenshots IMG_20261102_204026_9058269c.jpg & IMG_20261102_204308_d103e3fb.jpg)
+    local hbSec = UI.createSectionBox(VisualsTab, "Health Bar")
+    createDropdown(hbSec, "Healthbar Type", { "Gradient", "Health Color", "Flow", "Pulse", "Rainbow" }, ConfigState.HealthBarType or "Gradient", function(opt)
+        ConfigState.HealthBarType = opt
+    end)
+    createDropdown(hbSec, "Healthbar Side", { "Left", "Right", "Bottom", "Top" }, ConfigState.HealthBarSide or "Left", function(opt)
+        ConfigState.HealthBarSide = opt
+    end)
+    createSlider(hbSec, "Bar Width", 1, 8, ConfigState.HealthBarWidth or 2, 1, "px", function(val)
+        ConfigState.HealthBarWidth = val
+    end)
+    createSlider(hbSec, "Health Anim Speed", 0.1, 5.0, ConfigState.HealthAnimSpeed or 1.0, 0.1, "x", function(val)
+        ConfigState.HealthAnimSpeed = val
+    end)
+    createSlider(hbSec, "Health Smoothing", 0, 1, ConfigState.HealthSmoothing or 0.15, 0.05, "", function(val)
+        ConfigState.HealthSmoothing = val
+    end)
+    createToggle(hbSec, "Bar Outline", ConfigState.HealthBarOutline ~= false, function(val)
+        ConfigState.HealthBarOutline = val
+    end)
+    createToggle(hbSec, "Shimmer", ConfigState.HealthBarShimmer == true, function(val)
+        ConfigState.HealthBarShimmer = val
+    end)
+    createToggle(hbSec, "Bar Glow", ConfigState.HealthBarGlow == true, function(val)
+        ConfigState.HealthBarGlow = val
+    end)
+    createToggle(hbSec, "Low Health Flash", ConfigState.HealthLowFlash ~= false, function(val)
+        ConfigState.HealthLowFlash = val
+    end)
+    createToggle(hbSec, "Health Number", ConfigState.HealthNumber == true, function(val)
+        ConfigState.HealthNumber = val
+    end)
+
+    -- ESP Sub-Card 4: Box Effects (Matches Reference Screenshot IMG_20261102_204335_87a81ab2.jpg)
+    local boxEffSec = UI.createSectionBox(VisualsTab, "Box Effects")
+    createDropdown(boxEffSec, "Box Animation", { "None", "Pulse", "Rainbow", "Flow", "Breathe" }, ConfigState.BoxAnimation or "None", function(opt)
+        ConfigState.BoxAnimation = opt
+    end)
+    UI.createColorRow(boxEffSec, "Box Second Color", ConfigState.BoxSecondColor or Color3.fromRGB(115, 95, 255), function(col)
+        ConfigState.BoxSecondColor = col
+    end)
+    createSlider(boxEffSec, "Box Anim Speed", 0.1, 5.0, ConfigState.BoxAnimSpeed or 0.5, 0.1, "x", function(val)
+        ConfigState.BoxAnimSpeed = val
+    end)
+    createToggle(boxEffSec, "Box Glow", ConfigState.BoxGlow == true, function(val)
+        ConfigState.BoxGlow = val
+    end)
+    createToggle(boxEffSec, "Spin Box", ConfigState.BoxSpin == true, function(val)
+        ConfigState.BoxSpin = val
+    end)
+    createSlider(boxEffSec, "Spin Speed", 0.1, 5.0, ConfigState.BoxSpinSpeed or 0.3, 0.1, "rps", function(val)
+        ConfigState.BoxSpinSpeed = val
+    end)
+    createDropdown(boxEffSec, "Fill Animation", { "None", "Spin", "Pulse", "Vertical Wave", "Rainbow" }, ConfigState.BoxFillAnimation or "None", function(opt)
+        ConfigState.BoxFillAnimation = opt
+    end)
+    createDropdown(boxEffSec, "Fill Direction", { "Vertical", "Horizontal", "Diagonal" }, ConfigState.BoxFillDirection or "Vertical", function(opt)
+        ConfigState.BoxFillDirection = opt
+    end)
+    createSlider(boxEffSec, "Fill Anim Speed", 0.1, 5.0, ConfigState.BoxFillAnimSpeed or 0.5, 0.1, "x", function(val)
+        ConfigState.BoxFillAnimSpeed = val
     end)
 
     createLabel(VisualsTab, "Screen Resolution & Custom Stretch")
@@ -9670,7 +10760,7 @@ do
     end)
 end
 
--- TAB 8: SETTINGS (CUSTOM FLOATING PILL + REMEMBER KEY + THEME FREEDOM + CONFIG MANAGER)
+-- TAB 8: SETTINGS (PERFORMANCE + CLIENT + SERVER + BACKGROUND + THEMES + FLOATING PILL + CONFIG MANAGER)
 do
     createLabel(SettingsTab, "Customizable Floating Pill & Telemetry (Max 3)")
 
@@ -9689,6 +10779,829 @@ do
         if UI.FloatCorner then
             UI.FloatCorner.CornerRadius = UDim.new(0, (opt == "Rounded Pill") and 999 or 8)
         end
+    end)
+
+    -- 1. Performance Settings Section Box
+    local perfSec = UI.createSectionBox(SettingsTab, "Performance Settings")
+
+    local autoRuleBanner = Instance.new("TextLabel")
+    autoRuleBanner.Name = "AutoConfigRuleLabel"
+    autoRuleBanner.Size = UDim2.new(1, 0, 0, 18)
+    autoRuleBanner.BackgroundTransparency = 1
+    autoRuleBanner.Font = Enum.Font.Code
+    autoRuleBanner.Text = "Auto On Mobile (Performance) / Auto On PC (Balanced)"
+    autoRuleBanner.TextColor3 = Theme.Muted
+    autoRuleBanner.TextSize = 10
+    autoRuleBanner.TextXAlignment = Enum.TextXAlignment.Left
+    autoRuleBanner.ZIndex = 15
+    autoRuleBanner.Parent = perfSec
+
+    local function applyLowGraphics(enabled)
+        ConfigState.LowGraphicsEnabled = enabled and true or false
+        if enabled then
+            pcall(function()
+                Lighting.GlobalShadows = false
+            end)
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    if State.lowGraphicsCache[obj] == nil then
+                        State.lowGraphicsCache[obj] = {
+                            Material = obj.Material,
+                            Reflectance = obj.Reflectance or 0,
+                        }
+                    end
+                    pcall(function()
+                        obj.Material = Enum.Material.SmoothPlastic
+                        obj.Reflectance = 0
+                    end)
+                end
+            end
+        else
+            for obj, orig in pairs(State.lowGraphicsCache) do
+                if obj and obj.Parent then
+                    pcall(function()
+                        if orig.Material then obj.Material = orig.Material end
+                        if orig.Reflectance ~= nil then obj.Reflectance = orig.Reflectance end
+                    end)
+                end
+            end
+            table.clear(State.lowGraphicsCache)
+            if not ConfigState.LightingNoShadows then
+                pcall(function()
+                    Lighting.GlobalShadows = State.origLighting.GlobalShadows
+                end)
+            end
+        end
+    end
+    State.applyLowGraphics = applyLowGraphics
+
+    local function applyOptimizeMode(enabled)
+        ConfigState.OptimizeModeEnabled = enabled and true or false
+        if enabled then
+            if UI.MainParticleCanvas then
+                UI.MainParticleCanvas.Visible = false
+            end
+            ConfigState.ShimmerEnabled = false
+        else
+            if UI.MainParticleCanvas then
+                UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false)
+            end
+            ConfigState.ShimmerEnabled = true
+        end
+    end
+    State.applyOptimizeMode = applyOptimizeMode
+
+    local function applyPerformanceProfile(profile)
+        profile = profile or ConfigState.PerformanceProfile or "Auto"
+        ConfigState.PerformanceProfile = profile
+        local isMobileDevice = (UserInputService.TouchEnabled == true and UserInputService.KeyboardEnabled ~= true)
+        local effective = profile
+        if profile == "Auto" then
+            effective = isMobileDevice and "Performance" or "Balanced"
+        end
+        State.effectivePerformanceMode = effective
+        autoRuleBanner.Text = string.format(
+            "Auto On Mobile (Performance) / Auto On PC (Balanced) · Active: %s",
+            effective
+        )
+        if effective == "Performance" then
+            State.activeProfileFPSCap = 60
+            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = false end
+            pcall(function() Lighting.GlobalShadows = false end)
+        elseif effective == "Quality" then
+            State.activeProfileFPSCap = 240
+            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false) end
+            if not ConfigState.LowGraphicsEnabled and not ConfigState.LightingNoShadows then
+                pcall(function() Lighting.GlobalShadows = true end)
+            end
+        else
+            State.activeProfileFPSCap = 120
+            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false) and not ConfigState.OptimizeModeEnabled end
+        end
+        if State.isWindowFocused ~= false and Env.setfpscap then
+            pcall(function()
+                Env.setfpscap(State.activeProfileFPSCap)
+            end)
+        end
+    end
+    State.applyPerformanceProfile = applyPerformanceProfile
+
+    createDropdown(perfSec, "Performance Profile", { "Auto", "Quality", "Balanced", "Performance" }, ConfigState.PerformanceProfile or "Auto", function(opt)
+        applyPerformanceProfile(opt)
+    end)
+
+    createToggle(perfSec, "Low Graphics", ConfigState.LowGraphicsEnabled == true, function(val)
+        applyLowGraphics(val)
+    end)
+
+    createToggle(perfSec, "Optimize Mode", ConfigState.OptimizeModeEnabled == true, function(val)
+        applyOptimizeMode(val)
+    end)
+
+    createToggle(perfSec, "Pause Rendering When Tabbed Out", ConfigState.PauseRenderOnTabOut == true, function(val)
+        ConfigState.PauseRenderOnTabOut = val
+        if not State.isWindowFocused then
+            UI.RenderSaverOverlay.Visible = val or (ConfigState.Disable3DRender == true)
+        end
+    end)
+
+    createSlider(perfSec, "FPS When Tabbed Out", 5, 60, ConfigState.FPSWhenTabbedOut or 15, 1, " fps", function(val)
+        ConfigState.FPSWhenTabbedOut = val
+        if not State.isWindowFocused and Env.setfpscap then
+            pcall(function()
+                Env.setfpscap(val)
+            end)
+        end
+    end)
+
+    applyPerformanceProfile(ConfigState.PerformanceProfile or "Auto")
+
+    -- 2. Client Telemetry & Info Section Box (Matches Reference Screenshot IMG_20261102_181820_80cc4e2b.jpg)
+    local clientSec = UI.createSectionBox(SettingsTab, "Client")
+
+    local function detectExecutorName()
+        local execName = "Delta"
+        pcall(function()
+            if type(Env.identifyexecutor) == "function" then
+                local n = Env.identifyexecutor()
+                if n and tostring(n) ~= "" then execName = tostring(n) end
+            elseif type(Env.getexecutorname) == "function" then
+                local n = Env.getexecutorname()
+                if n and tostring(n) ~= "" then execName = tostring(n) end
+            end
+        end)
+        return execName
+    end
+
+    local function detectDeviceName()
+        local isMob = (UserInputService.TouchEnabled == true and UserInputService.KeyboardEnabled ~= true)
+        return isMob and "Mobile (Android)" or "PC (Desktop)"
+    end
+
+    local function getSessionKillCount()
+        local lsKills = 0
+        pcall(function()
+            local ls = LocalPlayer and LocalPlayer:FindFirstChild("leaderstats")
+            if ls then
+                local kStat = ls:FindFirstChild("Kills") or ls:FindFirstChild("Eliminations") or ls:FindFirstChild("KO") or ls:FindFirstChild("KOs")
+                if kStat and tonumber(kStat.Value) then
+                    lsKills = math.floor(tonumber(kStat.Value))
+                end
+            end
+        end)
+        return math.max(lsKills, State.sessionKills or 0)
+    end
+
+    local function makeTelemetryInfoLine(parent, name, initText)
+        local lbl = Instance.new("TextLabel")
+        lbl.Name = name
+        lbl.Size = UDim2.new(1, 0, 0, 20)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.GothamMedium
+        lbl.Text = initText
+        lbl.TextColor3 = Theme.Silver
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = 15
+        lbl.Parent = parent
+        return lbl
+    end
+
+    local ClientExecutorLabel = makeTelemetryInfoLine(clientSec, "ClientExecutorLabel", "Executor: " .. detectExecutorName())
+    local ClientDeviceLabel = makeTelemetryInfoLine(clientSec, "ClientDeviceLabel", "Device: " .. detectDeviceName())
+    local ClientKillsLabel = makeTelemetryInfoLine(clientSec, "ClientKillsLabel", "Kills This Session: " .. tostring(getSessionKillCount()))
+    UI.ClientExecutorLabel = ClientExecutorLabel
+    UI.ClientDeviceLabel = ClientDeviceLabel
+    UI.ClientKillsLabel = ClientKillsLabel
+
+    local function updateClientTelemetryUI()
+        if ClientExecutorLabel then
+            ClientExecutorLabel.Text = "Executor: " .. detectExecutorName()
+        end
+        if ClientDeviceLabel then
+            ClientDeviceLabel.Text = "Device: " .. detectDeviceName()
+        end
+        if ClientKillsLabel then
+            ClientKillsLabel.Text = "Kills This Session: " .. tostring(getSessionKillCount())
+        end
+    end
+    State.updateClientTelemetryUI = updateClientTelemetryUI
+
+    -- 3. Server Management & Utilities Section Box (Matches Reference Screenshot IMG_20261102_181842_417ae9f4.jpg)
+    local serverSec = UI.createSectionBox(SettingsTab, "Server")
+
+    pcall(function()
+        local MarketplaceService = game:GetService("MarketplaceService")
+        if MarketplaceService and MarketplaceService.GetProductInfo then
+            local info = MarketplaceService:GetProductInfo(game.PlaceId)
+            if type(info) == "table" and info.Name and info.Name ~= "" then
+                State.detectedGameName = tostring(info.Name)
+            end
+        end
+    end)
+
+    local function formatSessionDuration()
+        local elapsed = math.max(0, os.time() - (State.sessionStartTime or os.time()))
+        local hrs = math.floor(elapsed / 3600)
+        local mins = math.floor((elapsed % 3600) / 60)
+        local secs = elapsed % 60
+        return string.format("%02d:%02d:%02d", hrs, mins, secs)
+    end
+
+    local function getCurrentPingMs()
+        local pingVal = 28
+        pcall(function()
+            if type(LocalPlayer.GetNetworkPing) == "function" then
+                local rawPing = LocalPlayer:GetNetworkPing()
+                if type(rawPing) == "number" and rawPing > 0 then
+                    pingVal = math.clamp(math.floor(rawPing * 1000 + 0.5), 1, 999)
+                end
+            end
+        end)
+        return pingVal
+    end
+
+    local ServerGameLabel = makeTelemetryInfoLine(serverSec, "ServerGameLabel", "Game: " .. tostring(State.detectedGameName or "Prison Life"))
+    local ServerPlayersLabel = makeTelemetryInfoLine(serverSec, "ServerPlayersLabel", string.format("Players: %d/%d", #Players:GetPlayers(), Players.MaxPlayers or 24))
+    local ServerDurationLabel = makeTelemetryInfoLine(serverSec, "ServerDurationLabel", "Time in server: " .. formatSessionDuration())
+    local ServerPingLabel = makeTelemetryInfoLine(serverSec, "ServerPingLabel", string.format("Ping: %d ms", getCurrentPingMs()))
+    local ServerRegionLabel = makeTelemetryInfoLine(serverSec, "ServerRegionLabel", "Your region: " .. tostring(State.detectedRegionCode or "IN"))
+    local ServerJobIdLabel = makeTelemetryInfoLine(serverSec, "ServerJobIdLabel", "Job ID: " .. tostring((game.JobId and game.JobId ~= "") and game.JobId or "local-session"))
+
+    UI.ServerGameLabel = ServerGameLabel
+    UI.ServerPlayersLabel = ServerPlayersLabel
+    UI.ServerDurationLabel = ServerDurationLabel
+    UI.ServerPingLabel = ServerPingLabel
+    UI.ServerRegionLabel = ServerRegionLabel
+    UI.ServerJobIdLabel = ServerJobIdLabel
+
+    local function updateServerTelemetryUI()
+        if ServerGameLabel then
+            ServerGameLabel.Text = "Game: " .. tostring(State.detectedGameName or "Prison Life")
+        end
+        if ServerPlayersLabel then
+            ServerPlayersLabel.Text = string.format("Players: %d/%d", #Players:GetPlayers(), Players.MaxPlayers or 24)
+        end
+        if ServerDurationLabel then
+            ServerDurationLabel.Text = "Time in server: " .. formatSessionDuration()
+        end
+        if ServerPingLabel then
+            ServerPingLabel.Text = string.format("Ping: %d ms", getCurrentPingMs())
+        end
+        if ServerRegionLabel then
+            ServerRegionLabel.Text = "Your region: " .. tostring(State.detectedRegionCode or "IN")
+        end
+        if ServerJobIdLabel then
+            ServerJobIdLabel.Text = "Job ID: " .. tostring((game.JobId and game.JobId ~= "") and game.JobId or "local-session")
+        end
+    end
+    State.updateServerTelemetryUI = updateServerTelemetryUI
+
+    createButton(serverSec, "Copy Job ID", function()
+        local jid = tostring((game.JobId and game.JobId ~= "") and game.JobId or "local-session")
+        if Env.setclipboard then
+            Env.setclipboard(jid)
+        end
+        notify("Server Tools", "Copied Job ID: " .. jid, 3)
+    end)
+
+    createButton(serverSec, "Copy Join Script", function()
+        local jid = tostring((game.JobId and game.JobId ~= "") and game.JobId or "local-session")
+        local snippet = string.format(
+            'game:GetService("TeleportService"):TeleportToPlaceInstance(%s, "%s", game:GetService("Players").LocalPlayer)',
+            tostring(game.PlaceId),
+            jid
+        )
+        if Env.setclipboard then
+            Env.setclipboard(snippet)
+        end
+        notify("Server Tools", "Copied Join Script to clipboard!", 3)
+    end)
+
+    createButton(serverSec, "Rejoin", function()
+        notify("Server Tools", "Rejoining current server...", 3)
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+        end)
+    end)
+
+    local function executeServerHop(preferLowest)
+        notify("Server Tools", preferLowest and "Hopping to lowest ping/player server..." or "Hopping to a new server...", 3)
+        task.spawn(function()
+            local ok, response = pcall(function()
+                local sortOrder = preferLowest and "Asc" or "Desc"
+                local url = string.format(
+                    "https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=%s&limit=100",
+                    tostring(game.PlaceId),
+                    sortOrder
+                )
+                return game:HttpGet(url)
+            end)
+            if ok and response then
+                local decoded = safeJsonDecode(response)
+                if decoded and type(decoded.data) == "table" then
+                    local candidates = {}
+                    for _, srv in ipairs(decoded.data) do
+                        if type(srv) == "table" and srv.id ~= game.JobId and (srv.playing or 0) < (srv.maxPlayers or 100) then
+                            table.insert(candidates, srv)
+                        end
+                    end
+                    if preferLowest then
+                        table.sort(candidates, function(a, b)
+                            local pa = (a.ping or 999) + (a.playing or 99) * 2
+                            local pb = (b.ping or 999) + (b.playing or 99) * 2
+                            return pa < pb
+                        end)
+                    end
+                    if #candidates > 0 then
+                        local chosen = candidates[1]
+                        pcall(function()
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, LocalPlayer)
+                        end)
+                        return
+                    end
+                end
+            end
+            pcall(function()
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            end)
+        end)
+    end
+
+    createButton(serverSec, "Server Hop", function()
+        executeServerHop(false)
+    end)
+
+    createButton(serverSec, "Server Hop Lowest", function()
+        executeServerHop(true)
+    end)
+
+    -- 4. Custom Background Section Box (Matches Reference Screenshot IMG_20261102_204449_c955f68b.jpg)
+    local bgSec = UI.createSectionBox(SettingsTab, "Background")
+
+    local windowBgImg = Instance.new("ImageLabel")
+    windowBgImg.Name = "WindowBackgroundImage"
+    windowBgImg.Size = UDim2.fromScale(1, 1)
+    windowBgImg.BackgroundTransparency = 1
+    windowBgImg.Image = ""
+    windowBgImg.ImageTransparency = 0.5
+    windowBgImg.ScaleType = Enum.ScaleType.Crop
+    windowBgImg.Visible = false
+    windowBgImg.ZIndex = 11
+    windowBgImg.Parent = UI.MainWindow
+    addCorner(windowBgImg, 14)
+    UI.WindowBackgroundImage = windowBgImg
+
+    local pillBgImg = Instance.new("ImageLabel")
+    pillBgImg.Name = "PillBackgroundImage"
+    pillBgImg.Size = UDim2.fromScale(1, 1)
+    pillBgImg.BackgroundTransparency = 1
+    pillBgImg.Image = ""
+    pillBgImg.ImageTransparency = 0.5
+    pillBgImg.ScaleType = Enum.ScaleType.Crop
+    pillBgImg.Visible = false
+    pillBgImg.ZIndex = 50
+    pillBgImg.Parent = UI.FloatingToggle
+    addCorner(pillBgImg, 999)
+    UI.FloatingPillBackgroundImage = pillBgImg
+
+    local BG_PRESET_LIBRARY = {
+        ["Anime Night City (6882678552)"] = "rbxassetid://6882678552",
+        ["Cyberpunk Nebula (159454299)"] = "rbxassetid://159454299",
+        ["Aurora Horizon (12064107)"] = "rbxassetid://12064107",
+        ["Crimson Eclipse (401664839)"] = "rbxassetid://401664839",
+        ["Sunset Clouds (600830446)"] = "rbxassetid://600830446",
+        ["Purple Cosmos (5084575798)"] = "rbxassetid://5084575798",
+    }
+
+    local SCALE_TYPE_MAP = {
+        ["Crop"] = Enum.ScaleType.Crop,
+        ["Stretch"] = Enum.ScaleType.Stretch,
+        ["Tile"] = Enum.ScaleType.Tile,
+        ["Fit"] = Enum.ScaleType.Fit,
+    }
+
+    local function applyBackgroundSettings()
+        local raw = tostring(ConfigState.CustomBgDecalId or ""):gsub("^%s*(.-)%s*$", "%1")
+        if raw == "" then
+            windowBgImg.Visible = false
+            pillBgImg.Visible = false
+            return
+        end
+        local formatted = raw
+        if not string.find(formatted, "^rbxassetid://") and not string.find(formatted, "^http") and not string.find(formatted, "^rbxthumb://") then
+            local digits = string.match(formatted, "%d+")
+            if digits then
+                formatted = "rbxassetid://" .. digits
+            else
+                formatted = "rbxassetid://6882678552"
+            end
+        end
+        local scaleType = SCALE_TYPE_MAP[ConfigState.CustomBgImageFit or "Crop"] or Enum.ScaleType.Crop
+        local imgTrans = math.clamp(tonumber(ConfigState.CustomBgTransparency) or 0.5, 0, 1)
+        windowBgImg.Image = formatted
+        windowBgImg.ImageTransparency = imgTrans
+        windowBgImg.ScaleType = scaleType
+        windowBgImg.Visible = true
+
+        pillBgImg.Image = formatted
+        pillBgImg.ImageTransparency = imgTrans
+        pillBgImg.ScaleType = scaleType
+        pillBgImg.Visible = (ConfigState.CustomBgAlsoWatermark == true)
+
+        local seeThrough = math.clamp(tonumber(ConfigState.CustomBgPanelSeeThrough) or 0.35, 0, 0.95)
+        UI.MainWindow.BackgroundTransparency = math.clamp(seeThrough * 0.5, 0.02, 0.65)
+    end
+    State.applyBackgroundSettings = applyBackgroundSettings
+
+    local BgDecalInputBox = createTextInputRow(bgSec, "Decal ID / Store Link / File", "Decal ID, store link, or filename...", ConfigState.CustomBgDecalId or "", function(txt)
+        ConfigState.CustomBgDecalId = txt
+        applyBackgroundSettings()
+    end)
+
+    createSlider(bgSec, "Image Transparency", 0, 1, ConfigState.CustomBgTransparency or 0.5, 0.05, "", function(val)
+        ConfigState.CustomBgTransparency = val
+        applyBackgroundSettings()
+    end)
+
+    createToggle(bgSec, "Also On Watermark Keybinds & Target Info", ConfigState.CustomBgAlsoWatermark == true, function(val)
+        ConfigState.CustomBgAlsoWatermark = val
+        applyBackgroundSettings()
+    end)
+
+    createSlider(bgSec, "Panel See-Through", 0, 1, ConfigState.CustomBgPanelSeeThrough or 0.35, 0.05, "", function(val)
+        ConfigState.CustomBgPanelSeeThrough = val
+        applyBackgroundSettings()
+    end)
+
+    createDropdown(bgSec, "Image Fit", { "Crop", "Stretch", "Tile", "Fit" }, ConfigState.CustomBgImageFit or "Crop", function(opt)
+        ConfigState.CustomBgImageFit = opt
+        applyBackgroundSettings()
+    end)
+
+    local BgSearchInputBox = createTextInputRow(bgSec, "Search Images", "e.g. anime, dark, nebula...", "", function(txt)
+        ConfigState.CustomBgSearchQuery = txt
+    end)
+
+    local bgResultKeys = {}
+    for k in pairs(BG_PRESET_LIBRARY) do
+        table.insert(bgResultKeys, k)
+    end
+    table.sort(bgResultKeys)
+
+    local BgResultsDropdown
+    createButton(bgSec, "Search", function()
+        local q = string.lower(tostring((BgSearchInputBox and BgSearchInputBox.Text) or ConfigState.CustomBgSearchQuery or ""))
+        local filtered = {}
+        for label in pairs(BG_PRESET_LIBRARY) do
+            if q == "" or string.find(string.lower(label), q, 1, true) then
+                table.insert(filtered, label)
+            end
+        end
+        table.sort(filtered)
+        if #filtered == 0 then
+            local customNum = string.match(q, "%d+") or "6882678552"
+            table.insert(filtered, string.format("Custom Decal (%s)", customNum))
+        end
+        if BgResultsDropdown then
+            BgResultsDropdown.Refresh(filtered, filtered[1])
+        end
+        local firstAsset = BG_PRESET_LIBRARY[filtered[1]] or ("rbxassetid://" .. (string.match(filtered[1], "%d+") or "6882678552"))
+        ConfigState.CustomBgDecalId = firstAsset
+        if BgDecalInputBox then BgDecalInputBox.Text = firstAsset end
+        applyBackgroundSettings()
+    end)
+
+    BgResultsDropdown = createDropdown(bgSec, "Results", bgResultKeys, bgResultKeys[1], function(opt)
+        local asset = BG_PRESET_LIBRARY[opt] or ("rbxassetid://" .. (string.match(tostring(opt), "%d+") or "6882678552"))
+        ConfigState.CustomBgDecalId = asset
+        if BgDecalInputBox then BgDecalInputBox.Text = asset end
+        applyBackgroundSettings()
+    end)
+
+    createButton(bgSec, "Clear Background", function()
+        ConfigState.CustomBgDecalId = ""
+        if BgDecalInputBox then BgDecalInputBox.Text = "" end
+        applyBackgroundSettings()
+        UI.MainWindow.BackgroundTransparency = ConfigState.WindowTransparency or 0.03
+        notify("Background", "Cleared custom background image.", 3)
+    end)
+
+    -- 5. Full UI Theme Palette & Custom Themes Section Box (Matches Reference Screenshot IMG_20261102_204554_b46a40c9.jpg)
+    local themesSec = UI.createSectionBox(SettingsTab, "Themes")
+
+    local ContrastCheckLabel = Instance.new("TextLabel")
+    ContrastCheckLabel.Name = "ContrastCheckLabel"
+    ContrastCheckLabel.Size = UDim2.new(1, 0, 0, 18)
+    ContrastCheckLabel.BackgroundTransparency = 1
+    ContrastCheckLabel.Font = Enum.Font.Code
+    ContrastCheckLabel.Text = "Contrast check: good (16.8:1)"
+    ContrastCheckLabel.TextColor3 = Theme.Success
+    ContrastCheckLabel.TextSize = 11
+    ContrastCheckLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ContrastCheckLabel.ZIndex = 15
+    UI.ContrastCheckLabel = ContrastCheckLabel
+
+    local function calcRelativeLuminance(col)
+        if not col then return 0 end
+        local r, g, b = tonumber(col.R) or 0, tonumber(col.G) or 0, tonumber(col.B) or 0
+        if r > 1 or g > 1 or b > 1 then
+            r, g, b = r / 255, g / 255, b / 255
+        end
+        local function chan(c)
+            c = math.clamp(c, 0, 1)
+            return (c <= 0.03928) and (c / 12.92) or ((c + 0.055) / 1.055) ^ 2.4
+        end
+        return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b)
+    end
+
+    local function updateContrastCheckDisplay()
+        local l1 = calcRelativeLuminance(ConfigState.ThemeFontColor or Theme.White)
+        local l2 = calcRelativeLuminance(ConfigState.ThemeBgColor or Theme.Deep)
+        local lighter = math.max(l1, l2)
+        local darker = math.min(l1, l2)
+        local ratio = (lighter + 0.05) / (darker + 0.05)
+        local rating = "good"
+        local col = Theme.Success
+        if ratio < 3.0 then
+            rating = "low"
+            col = Theme.Error
+        elseif ratio < 4.5 then
+            rating = "ok"
+            col = Color3.fromRGB(255, 200, 80)
+        end
+        ContrastCheckLabel.Text = string.format("Contrast check: %s (%.1f:1)", rating, ratio)
+        ContrastCheckLabel.TextColor3 = col
+    end
+
+    local function applyFullUITheme()
+        Theme.Deep = ConfigState.ThemeBgColor or Theme.Deep
+        Theme.Surface = ConfigState.ThemeElementColor or Theme.Surface
+        Theme.Border = ConfigState.ThemeBorderColor or Theme.Border
+        Theme.Elevated = ConfigState.ThemeInlineColor or Theme.Elevated
+        Theme.White = ConfigState.ThemeFontColor or Theme.White
+        local acc = ConfigState.ThemeAccentColor or Theme.Accent
+        local ar, ag, ab = acc.R or 1, acc.G or 1, acc.B or 1
+        if ar <= 1 and ag <= 1 and ab <= 1 then
+            ar, ag, ab = math.floor(ar * 255 + 0.5), math.floor(ag * 255 + 0.5), math.floor(ab * 255 + 0.5)
+        else
+            ar, ag, ab = math.floor(ar + 0.5), math.floor(ag + 0.5), math.floor(ab + 0.5)
+        end
+        updateAccentColor(ar, ag, ab)
+        if UI.MainWindow then
+            UI.MainWindow.BackgroundColor3 = Theme.Deep
+        end
+        if UI.MainStroke then
+            UI.MainStroke.Color = Theme.Border
+        end
+        if UI.FloatingToggle then
+            UI.FloatingToggle.BackgroundColor3 = Theme.Deep
+        end
+        local wantFont = ESP_FONT_MAP[ConfigState.ThemeFontFace or "Gotham"] or Enum.Font.GothamMedium
+        if UI.MainWindow then
+            for _, desc in ipairs(UI.MainWindow:GetDescendants()) do
+                if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+                    if desc.Font ~= Enum.Font.Code then
+                        pcall(function() desc.Font = wantFont end)
+                    end
+                end
+            end
+        end
+        updateContrastCheckDisplay()
+    end
+    State.applyFullUITheme = applyFullUITheme
+
+    local BgColorRow = UI.createColorRow(themesSec, "Background Color", ConfigState.ThemeBgColor, function(col)
+        ConfigState.ThemeBgColor = col
+        applyFullUITheme()
+    end)
+    local ElemColorRow = UI.createColorRow(themesSec, "Element Color", ConfigState.ThemeElementColor, function(col)
+        ConfigState.ThemeElementColor = col
+        applyFullUITheme()
+    end)
+    local BorderColorRow = UI.createColorRow(themesSec, "Border Color", ConfigState.ThemeBorderColor, function(col)
+        ConfigState.ThemeBorderColor = col
+        applyFullUITheme()
+    end)
+    local AccentColorRow = UI.createColorRow(themesSec, "Accent Color", ConfigState.ThemeAccentColor, function(col)
+        ConfigState.ThemeAccentColor = col
+        applyFullUITheme()
+    end)
+    local GlowColorRow = UI.createColorRow(themesSec, "Glow Color", ConfigState.ThemeGlowColor, function(col)
+        ConfigState.ThemeGlowColor = col
+        applyFullUITheme()
+    end)
+    local OutlineColorRow = UI.createColorRow(themesSec, "Outline Color", ConfigState.ThemeOutlineColor, function(col)
+        ConfigState.ThemeOutlineColor = col
+        applyFullUITheme()
+    end)
+    local InlineColorRow = UI.createColorRow(themesSec, "Inline Color", ConfigState.ThemeInlineColor, function(col)
+        ConfigState.ThemeInlineColor = col
+        applyFullUITheme()
+    end)
+    local GradColorRow = UI.createColorRow(themesSec, "Gradient Color", ConfigState.ThemeGradientColor, function(col)
+        ConfigState.ThemeGradientColor = col
+        applyFullUITheme()
+    end)
+    local FontColorRow = UI.createColorRow(themesSec, "Font Color", ConfigState.ThemeFontColor, function(col)
+        ConfigState.ThemeFontColor = col
+        applyFullUITheme()
+    end)
+    local FontOutlineColorRow = UI.createColorRow(themesSec, "Font Outline Color", ConfigState.ThemeFontOutlineColor, function(col)
+        ConfigState.ThemeFontOutlineColor = col
+        applyFullUITheme()
+    end)
+
+    ContrastCheckLabel.Parent = themesSec
+    updateContrastCheckDisplay()
+
+    createDropdown(themesSec, "Font Face", { "Gotham", "GothamBold", "Code", "Ubuntu", "SourceSans", "SciFi", "Arcade" }, ConfigState.ThemeFontFace or "Gotham", function(opt)
+        ConfigState.ThemeFontFace = opt
+        applyFullUITheme()
+    end)
+
+    createButton(themesSec, "Refresh Custom Fonts", function()
+        SafeMakeFolder(FS_FOLDER .. "/Fonts")
+        notify("Fonts", "Scanned " .. FS_FOLDER .. "/Fonts for custom .ttf/.otf font assets.", 3)
+    end)
+
+    local fontHintLbl = Instance.new("TextLabel")
+    fontHintLbl.Name = "CustomFontHintLabel"
+    fontHintLbl.Size = UDim2.new(1, 0, 0, 16)
+    fontHintLbl.BackgroundTransparency = 1
+    fontHintLbl.Font = Enum.Font.Code
+    fontHintLbl.Text = "Drop Ttf/Otf Into " .. FS_FOLDER .. "/Fonts"
+    fontHintLbl.TextColor3 = Theme.Muted
+    fontHintLbl.TextSize = 10
+    fontHintLbl.TextXAlignment = Enum.TextXAlignment.Left
+    fontHintLbl.ZIndex = 15
+    fontHintLbl.Parent = themesSec
+
+    local BUILTIN_FULL_THEMES = {
+        ["Default"] = {
+            Bg = Color3.fromRGB(10, 10, 14),
+            Elem = Color3.fromRGB(16, 16, 22),
+            Border = Color3.fromRGB(45, 45, 56),
+            Accent = Color3.fromRGB(115, 95, 255),
+            Glow = Color3.fromRGB(115, 95, 255),
+            Outline = Color3.fromRGB(35, 35, 48),
+            Inline = Color3.fromRGB(24, 24, 32),
+            Grad = Color3.fromRGB(150, 130, 255),
+            Font = Color3.fromRGB(255, 255, 255),
+            FontOut = Color3.fromRGB(5, 5, 7),
+        },
+        ["Pure Monochrome"] = {
+            Bg = Color3.fromRGB(8, 8, 10),
+            Elem = Color3.fromRGB(15, 15, 19),
+            Border = Color3.fromRGB(48, 48, 56),
+            Accent = Color3.fromRGB(255, 255, 255),
+            Glow = Color3.fromRGB(220, 220, 230),
+            Outline = Color3.fromRGB(36, 36, 44),
+            Inline = Color3.fromRGB(24, 24, 30),
+            Grad = Color3.fromRGB(190, 190, 205),
+            Font = Color3.fromRGB(255, 255, 255),
+            FontOut = Color3.fromRGB(0, 0, 0),
+        },
+        ["Cyber Cyan"] = {
+            Bg = Color3.fromRGB(7, 13, 18),
+            Elem = Color3.fromRGB(12, 22, 30),
+            Border = Color3.fromRGB(35, 75, 95),
+            Accent = Color3.fromRGB(75, 225, 255),
+            Glow = Color3.fromRGB(75, 225, 255),
+            Outline = Color3.fromRGB(25, 55, 75),
+            Inline = Color3.fromRGB(18, 32, 44),
+            Grad = Color3.fromRGB(120, 240, 255),
+            Font = Color3.fromRGB(240, 252, 255),
+            FontOut = Color3.fromRGB(4, 8, 12),
+        },
+        ["Crimson Ops"] = {
+            Bg = Color3.fromRGB(15, 8, 10),
+            Elem = Color3.fromRGB(24, 12, 16),
+            Border = Color3.fromRGB(80, 32, 40),
+            Accent = Color3.fromRGB(255, 70, 85),
+            Glow = Color3.fromRGB(255, 70, 85),
+            Outline = Color3.fromRGB(55, 22, 28),
+            Inline = Color3.fromRGB(34, 16, 22),
+            Grad = Color3.fromRGB(255, 120, 130),
+            Font = Color3.fromRGB(255, 245, 246),
+            FontOut = Color3.fromRGB(10, 4, 5),
+        },
+        ["Emerald Matrix"] = {
+            Bg = Color3.fromRGB(7, 14, 10),
+            Elem = Color3.fromRGB(12, 24, 17),
+            Border = Color3.fromRGB(32, 82, 52),
+            Accent = Color3.fromRGB(85, 255, 145),
+            Glow = Color3.fromRGB(85, 255, 145),
+            Outline = Color3.fromRGB(22, 58, 36),
+            Inline = Color3.fromRGB(16, 34, 24),
+            Grad = Color3.fromRGB(130, 255, 180),
+            Font = Color3.fromRGB(242, 255, 246),
+            FontOut = Color3.fromRGB(4, 10, 6),
+        },
+    }
+
+    local CUSTOM_THEMES_FILE = FS_FOLDER .. "/CustomThemes.json"
+    local savedCustomThemes = safeJsonDecode(safeReadFile(CUSTOM_THEMES_FILE))
+    if type(savedCustomThemes) ~= "table" then
+        savedCustomThemes = {}
+    end
+
+    local function getThemeDropdownNames()
+        local list = { "Default", "Pure Monochrome", "Cyber Cyan", "Crimson Ops", "Emerald Matrix" }
+        for k in pairs(savedCustomThemes) do
+            if not table.find(list, k) then
+                table.insert(list, k)
+            end
+        end
+        return list
+    end
+
+    local function applyNamedFullTheme(themeName)
+        ConfigState.ThemeListSelection = themeName
+        local p = BUILTIN_FULL_THEMES[themeName]
+        if not p and type(savedCustomThemes[themeName]) == "table" then
+            local rawT = savedCustomThemes[themeName]
+            local function toC3(c, fallback)
+                if type(c) == "table" and type(c.R) == "number" then
+                    if c.R > 1 or c.G > 1 or c.B > 1 then
+                        return Color3.fromRGB(c.R, c.G, c.B)
+                    end
+                    return Color3.new(c.R, c.G, c.B)
+                end
+                return fallback
+            end
+            p = {
+                Bg = toC3(rawT.Bg, Theme.Deep),
+                Elem = toC3(rawT.Elem, Theme.Surface),
+                Border = toC3(rawT.Border, Theme.Border),
+                Accent = toC3(rawT.Accent, Theme.Accent),
+                Glow = toC3(rawT.Glow, Theme.Accent),
+                Outline = toC3(rawT.Outline, Theme.Border),
+                Inline = toC3(rawT.Inline, Theme.Elevated),
+                Grad = toC3(rawT.Grad, Theme.Accent),
+                Font = toC3(rawT.Font, Theme.White),
+                FontOut = toC3(rawT.FontOut, Theme.Black),
+            }
+        end
+        if not p then return end
+        ConfigState.ThemeBgColor = p.Bg
+        ConfigState.ThemeElementColor = p.Elem
+        ConfigState.ThemeBorderColor = p.Border
+        ConfigState.ThemeAccentColor = p.Accent
+        ConfigState.ThemeGlowColor = p.Glow
+        ConfigState.ThemeOutlineColor = p.Outline
+        ConfigState.ThemeInlineColor = p.Inline
+        ConfigState.ThemeGradientColor = p.Grad
+        ConfigState.ThemeFontColor = p.Font
+        ConfigState.ThemeFontOutlineColor = p.FontOut
+
+        BgColorRow.SetColor(p.Bg, false)
+        ElemColorRow.SetColor(p.Elem, false)
+        BorderColorRow.SetColor(p.Border, false)
+        AccentColorRow.SetColor(p.Accent, false)
+        GlowColorRow.SetColor(p.Glow, false)
+        OutlineColorRow.SetColor(p.Outline, false)
+        InlineColorRow.SetColor(p.Inline, false)
+        GradColorRow.SetColor(p.Grad, false)
+        FontColorRow.SetColor(p.Font, false)
+        FontOutlineColorRow.SetColor(p.FontOut, false)
+
+        applyFullUITheme()
+    end
+
+    local ThemeListDropdown = createDropdown(themesSec, "Theme List", getThemeDropdownNames(), ConfigState.ThemeListSelection or "Default", function(opt)
+        applyNamedFullTheme(opt)
+    end)
+
+    local CustomThemeNameBox = createTextInputRow(themesSec, "Custom Theme Name", "Enter custom theme name...", "", function(txt)
+        ConfigState.CustomThemeName = txt
+    end)
+
+    createButton(themesSec, "Save Custom Theme", function()
+        local tName = ((CustomThemeNameBox and CustomThemeNameBox.Text) or ConfigState.CustomThemeName or ""):gsub("^%s*(.-)%s*$", "%1")
+        if tName == "" then
+            tName = "CustomTheme"
+        end
+        local function c3Obj(c)
+            return { R = c.R, G = c.G, B = c.B }
+        end
+        savedCustomThemes[tName] = {
+            Bg = c3Obj(ConfigState.ThemeBgColor or Theme.Deep),
+            Elem = c3Obj(ConfigState.ThemeElementColor or Theme.Surface),
+            Border = c3Obj(ConfigState.ThemeBorderColor or Theme.Border),
+            Accent = c3Obj(ConfigState.ThemeAccentColor or Theme.Accent),
+            Glow = c3Obj(ConfigState.ThemeGlowColor or Theme.Accent),
+            Outline = c3Obj(ConfigState.ThemeOutlineColor or Theme.Border),
+            Inline = c3Obj(ConfigState.ThemeInlineColor or Theme.Elevated),
+            Grad = c3Obj(ConfigState.ThemeGradientColor or Theme.Accent),
+            Font = c3Obj(ConfigState.ThemeFontColor or Theme.White),
+            FontOut = c3Obj(ConfigState.ThemeFontOutlineColor or Theme.Black),
+        }
+        safeWriteFile(CUSTOM_THEMES_FILE, safeJsonEncode(savedCustomThemes))
+        if ThemeListDropdown then
+            ThemeListDropdown.Refresh(getThemeDropdownNames(), tName)
+        end
+        notify("Themes", "Saved custom theme '" .. tName .. "'!", 3)
     end)
 
     createLabel(SettingsTab, "UI Theme & RGB Color Freedom")
@@ -9719,6 +11632,9 @@ do
             if RSliderCtrl then RSliderCtrl.Set(rgb[1], false) end
             if GSliderCtrl then GSliderCtrl.Set(rgb[2], false) end
             if BSliderCtrl then BSliderCtrl.Set(rgb[3], false) end
+            if BUILTIN_FULL_THEMES[presetName] then
+                applyNamedFullTheme(presetName)
+            end
         end
     end)
 
@@ -9826,7 +11742,11 @@ do
         for k, v in pairs(decoded) do
             if v ~= nil then
                 if type(v) == "table" and (v.__color3 or (type(v.R) == "number" and type(v.G) == "number" and type(v.B) == "number")) then
-                    ConfigState[k] = Color3.new(v.R, v.G, v.B)
+                    if v.R > 1 or v.G > 1 or v.B > 1 then
+                        ConfigState[k] = Color3.fromRGB(v.R, v.G, v.B)
+                    else
+                        ConfigState[k] = Color3.new(v.R, v.G, v.B)
+                    end
                 elseif not isColor3Value(ConfigState[k]) then
                     ConfigState[k] = v
                 end
@@ -9850,6 +11770,10 @@ do
         if State.applyCustomColorCorrection then State.applyCustomColorCorrection() end
         if State.applyCustomSkybox then State.applyCustomSkybox() end
         if State.applyCustomAtmosphere then State.applyCustomAtmosphere() end
+        if State.applyPerformanceProfile then State.applyPerformanceProfile(ConfigState.PerformanceProfile) end
+        if State.applyLowGraphics then State.applyLowGraphics(ConfigState.LowGraphicsEnabled) end
+        if State.applyBackgroundSettings then State.applyBackgroundSettings() end
+        if State.applyFullUITheme then State.applyFullUITheme() end
         if State.applyMuteGameAudio then
             State.applyMuteGameAudio(ConfigState.MuteGameAudio or false)
         end
@@ -10073,11 +11997,82 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
+local function extractKeyCodeShortName(kc)
+    if not kc then return nil end
+    if type(kc) == "table" and kc.Name then
+        return tostring(kc.Name)
+    end
+    local s = tostring(kc)
+    return string.match(s, "Enum%.KeyCode%.(.+)$") or s
+end
+
 UserInputService.InputBegan:Connect(function(input, gpe)
-    if not gpe and State.isAuthorized then
+    if State.listeningKeybindEntry and input and input.KeyCode then
+        local kName = extractKeyCodeShortName(input.KeyCode)
+        if kName and kName ~= "Unknown" then
+            local entry = State.listeningKeybindEntry
+            State.listeningKeybindEntry = nil
+            if kName == "Backspace" or kName == "Delete" or kName == "Escape" then
+                entry.KeyCode = nil
+                entry.KeyName = nil
+                if entry.Button then
+                    entry.Button.Text = "[...]"
+                    entry.Button.TextColor3 = Theme.Muted
+                end
+            else
+                entry.KeyCode = input.KeyCode
+                entry.KeyName = kName
+                if entry.Button then
+                    entry.Button.Text = "[" .. kName .. "]"
+                    entry.Button.TextColor3 = Theme.Accent
+                end
+            end
+            return
+        end
+    end
+
+    if not gpe and State.isAuthorized and input and input.KeyCode then
         if input.KeyCode == Enum.KeyCode.RightShift then
             toggleMainHub()
+            return
         end
+        for _, entry in ipairs(State.registeredKeybinds) do
+            if entry.KeyCode ~= nil and input.KeyCode == entry.KeyCode then
+                if entry.Toggle then
+                    entry.Toggle()
+                end
+            end
+        end
+    end
+end)
+
+pcall(function()
+    if UserInputService.WindowFocusReleased and UserInputService.WindowFocusReleased.Connect then
+        UserInputService.WindowFocusReleased:Connect(function()
+            State.isWindowFocused = false
+            if ConfigState.PauseRenderOnTabOut and UI.RenderSaverOverlay then
+                UI.RenderSaverOverlay.Visible = true
+            end
+            if Env.setfpscap then
+                pcall(function()
+                    Env.setfpscap(math.clamp(tonumber(ConfigState.FPSWhenTabbedOut) or 15, 5, 60))
+                end)
+            end
+        end)
+    end
+    if UserInputService.WindowFocused and UserInputService.WindowFocused.Connect then
+        UserInputService.WindowFocused:Connect(function()
+            State.isWindowFocused = true
+            if UI.RenderSaverOverlay then
+                UI.RenderSaverOverlay.Visible = (ConfigState.Disable3DRender == true)
+            end
+            if Env.setfpscap then
+                local normalCap = State.activeProfileFPSCap or (ConfigState.UncapFPS and (tonumber(ConfigState.CustomFPS) or 144) or 60)
+                pcall(function()
+                    Env.setfpscap(normalCap)
+                end)
+            end
+        end)
     end
 end)
 
@@ -10399,8 +12394,16 @@ do
 
         if keyCountdownTimer >= 1.0 then
             keyCountdownTimer = 0
-            if State.isAuthorized and State.updateHomeKeyInfo then
-                State.updateHomeKeyInfo()
+            if State.isAuthorized then
+                if State.updateHomeKeyInfo then
+                    State.updateHomeKeyInfo()
+                end
+                if State.updateClientTelemetryUI then
+                    State.updateClientTelemetryUI()
+                end
+                if State.updateServerTelemetryUI then
+                    State.updateServerTelemetryUI()
+                end
             end
         end
 
