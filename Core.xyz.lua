@@ -912,116 +912,84 @@ local ConfigState = {
     -- Self Chams Suite
     SelfChams = false,
     SelfChamsMaterial = "Lava",
-    SelfChamsFillTransparency = 0.55,
-    SelfChamsOutlineTransparency = 0,
+    SelfChamsFillColor = Color3.fromRGB(115, 95, 255),
+    SelfChamsOutlineColor = Color3.fromRGB(255, 255, 255),
+    SelfChamsCustomColor = false,
+    SelfChamsFillTrans = 0.55,
+    SelfChamsOutlineTrans = 0,
     SelfChamsRainbow = false,
     SelfChamsPulse = false,
-    SelfChamsGlowRim = true,
-    SelfChamsColor1R = 255,
-    SelfChamsColor1G = 255,
-    SelfChamsColor1B = 255,
-    SelfChamsColor2R = 105,
-    SelfChamsColor2G = 85,
-    SelfChamsColor2B = 255,
+    SelfChamsGlowRim = false,
     -- Leg Trail Suite
-    LegTrail = false,
-    LeftTrailStartR = 98,
-    LeftTrailStartG = 84,
-    LeftTrailStartB = 255,
-    LeftTrailEndR = 75,
-    LeftTrailEndG = 205,
-    LeftTrailEndB = 255,
-    TrailSameColors = false,
-    RightTrailStartR = 255,
-    RightTrailStartG = 85,
-    RightTrailStartB = 195,
-    RightTrailEndR = 255,
-    RightTrailEndG = 195,
-    RightTrailEndB = 75,
-    TrailWidth = 0.25,
-    TrailLength = 0.5,
-    RainbowTrail = false,
+    LegTrailEnabled = false,
+    LeftLegTrailStart = Color3.fromRGB(105, 85, 255),
+    LeftLegTrailEnd = Color3.fromRGB(70, 205, 255),
+    LegTrailSameColors = false,
+    RightLegTrailStart = Color3.fromRGB(255, 85, 195),
+    RightLegTrailEnd = Color3.fromRGB(255, 190, 75),
+    LegTrailWidth = 0.25,
+    LegTrailLength = 0.5,
+    LegTrailRainbow = false,
     -- Tool Visuals Suite
     ToolVisuals = false,
-    ToolColorR = 105,
-    ToolColorG = 85,
-    ToolColorB = 255,
+    ToolColor = Color3.fromRGB(115, 95, 255),
     ToolMaterial = "SmoothPlastic",
     ToolTransparency = 0,
     RainbowTool = false,
     ToolSkinTexture = "None",
     ToolChams = false,
-    ToolChamsColorR = 255,
-    ToolChamsColorG = 255,
-    ToolChamsColorB = 255,
+    ToolChamsColor = Color3.fromRGB(255, 255, 255),
     ToolChamsStyle = "Outline",
     ToolGlow = false,
     ToolGlowBrightness = 3,
     -- Bloom & Sun Rays Suite
-    CustomBloom = false,
+    BloomEnabled = false,
     BloomIntensity = 0.6,
     BloomSize = 26,
     BloomThreshold = 0.4,
-    CustomSunRays = false,
+    SunRaysEnabled = false,
     SunRaysIntensity = 0.25,
-    SunRaysSpread = 1,
+    SunRaysSpread = 1.0,
     -- Color Correction Suite
-    CustomColorCorrection = false,
-    ColorCorrectionTintR = 255,
-    ColorCorrectionTintG = 255,
-    ColorCorrectionTintB = 255,
-    CCSaturation = 0,
-    CCContrast = 0,
-    CCBrightness = 0,
+    ColorCorrectionEnabled = false,
+    ColorCorrectionTint = Color3.fromRGB(255, 255, 255),
+    ColorCorrectionSaturation = 0,
+    ColorCorrectionContrast = 0,
+    ColorCorrectionBrightness = 0,
     -- Skybox & Catalog Search Suite
-    CustomSkybox = false,
-    SkyboxPreset = "Aurora Galaxy",
-    SkyboxClearAtmosphere = false,
-    CustomSkyboxId = "",
-    SkyboxSearchQuery = "",
-    SkyboxSearchResult = "Aurora Galaxy",
+    SkyboxEnabled = false,
+    SkyboxPreset = "Galaxy",
+    SkyboxClearAtmos = false,
+    CustomSkyDecalId = "",
+    SkySearchQuery = "",
     -- Lighting Controller Suite
     LightingAmbientEnabled = false,
-    LightingAmbientR = 135,
-    LightingAmbientG = 125,
-    LightingAmbientB = 255,
-    LightingOutdoorAmbientEnabled = false,
-    LightingOutdoorAmbientR = 155,
-    LightingOutdoorAmbientG = 145,
-    LightingOutdoorAmbientB = 255,
-    LightingColorShiftBottomEnabled = false,
-    LightingColorShiftBottomR = 98,
-    LightingColorShiftBottomG = 84,
-    LightingColorShiftBottomB = 255,
-    LightingColorShiftTopEnabled = false,
-    LightingColorShiftTopR = 145,
-    LightingColorShiftTopG = 185,
-    LightingColorShiftTopB = 255,
+    LightingAmbientColor = Color3.fromRGB(115, 95, 255),
+    LightingOutdoorEnabled = false,
+    LightingOutdoorColor = Color3.fromRGB(115, 95, 255),
+    LightingShiftBottomEnabled = false,
+    LightingShiftBottomColor = Color3.fromRGB(115, 95, 255),
+    LightingShiftTopEnabled = false,
+    LightingShiftTopColor = Color3.fromRGB(115, 95, 255),
     LightingFogColorEnabled = false,
-    LightingFogColorR = 110,
-    LightingFogColorG = 120,
-    LightingFogColorB = 165,
+    LightingFogColor = Color3.fromRGB(115, 95, 255),
     LightingFogEndEnabled = false,
-    LightingFogEnd = 1400,
+    LightingFogEnd = 1000,
     LightingFogStartEnabled = false,
-    LightingFogStart = 500,
+    LightingFogStart = 0,
     LightingExposureEnabled = false,
     LightingExposure = 0,
     LightingBrightnessEnabled = false,
     LightingBrightness = 1,
     LightingClockTimeEnabled = false,
-    LightingClockTime = 17.3,
+    LightingClockTime = 12,
     LightingNoShadows = false,
     -- Atmosphere Controller Suite
-    CustomAtmosphere = false,
-    AtmosphereColorR = 195,
-    AtmosphereColorG = 185,
-    AtmosphereColorB = 255,
-    AtmosphereDecayR = 140,
-    AtmosphereDecayG = 125,
-    AtmosphereDecayB = 220,
-    AtmosphereDensity = 0.3,
-    AtmosphereOffset = 0.25,
+    AtmosphereEnabled = false,
+    AtmosphereColor = Color3.fromRGB(200, 195, 225),
+    AtmosphereDecay = Color3.fromRGB(92, 60, 14),
+    AtmosphereDensity = 0.35,
+    AtmosphereOffset = 0,
     AtmosphereHaze = 0,
     AtmosphereGlare = 0,
     -- Movement & Protection
@@ -1129,14 +1097,14 @@ local State = {
     defaultMaxZoom = LocalPlayer.CameraMaxZoomDistance or 128,
     defaultOcclusion = LocalPlayer.DevCameraOcclusionMode,
     origLighting = {
-        Brightness = Lighting.Brightness,
-        ClockTime = Lighting.ClockTime,
-        FogEnd = Lighting.FogEnd,
-        FogStart = Lighting.FogStart,
+        Brightness = Lighting.Brightness or 2,
+        ClockTime = Lighting.ClockTime or 14,
+        FogEnd = Lighting.FogEnd or 10000,
+        FogStart = Lighting.FogStart or 0,
         FogColor = Lighting.FogColor or Color3.fromRGB(192, 192, 192),
-        GlobalShadows = Lighting.GlobalShadows,
-        Ambient = Lighting.Ambient,
-        OutdoorAmbient = Lighting.OutdoorAmbient,
+        GlobalShadows = Lighting.GlobalShadows ~= false,
+        Ambient = Lighting.Ambient or Color3.fromRGB(70, 70, 70),
+        OutdoorAmbient = Lighting.OutdoorAmbient or Color3.fromRGB(128, 128, 128),
         ColorShift_Bottom = Lighting.ColorShift_Bottom or Color3.fromRGB(0, 0, 0),
         ColorShift_Top = Lighting.ColorShift_Top or Color3.fromRGB(0, 0, 0),
         ExposureCompensation = Lighting.ExposureCompensation or 0,
@@ -2920,7 +2888,7 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
             sw2.Parent = row
             addCorner(sw2, 4)
             addStroke(sw2, Theme.Border, 1, 0)
-            swatch2Set = UI.attachSwatchCyclers(sw2, extraOpts.SwatchColor2, extraOpts.OnColor2Change)
+            swatch2Set = UI.attachSwatchCyclers(sw2, extraOpts.SwatchColor2, extraOpts.OnColorChange2 or extraOpts.OnColor2Change)
             rightOffset = rightOffset + 28
         end
         if extraOpts.SwatchColor then
@@ -4590,42 +4558,42 @@ local function updateLightingEnvironment()
     -- Apply Granular Lighting Controller Overrides when individually enabled
     pcall(function()
         if ConfigState.LightingAmbientEnabled then
-            Lighting.Ambient = Color3.fromRGB(ConfigState.LightingAmbientR or 135, ConfigState.LightingAmbientG or 125, ConfigState.LightingAmbientB or 255)
+            Lighting.Ambient = ConfigState.LightingAmbientColor or Color3.fromRGB(115, 95, 255)
         end
-        if ConfigState.LightingOutdoorAmbientEnabled then
-            Lighting.OutdoorAmbient = Color3.fromRGB(ConfigState.LightingOutdoorAmbientR or 155, ConfigState.LightingOutdoorAmbientG or 145, ConfigState.LightingOutdoorAmbientB or 255)
+        if ConfigState.LightingOutdoorEnabled then
+            Lighting.OutdoorAmbient = ConfigState.LightingOutdoorColor or Color3.fromRGB(115, 95, 255)
         end
-        if ConfigState.LightingColorShiftBottomEnabled then
-            Lighting.ColorShift_Bottom = Color3.fromRGB(ConfigState.LightingColorShiftBottomR or 98, ConfigState.LightingColorShiftBottomG or 84, ConfigState.LightingColorShiftBottomB or 255)
+        if ConfigState.LightingShiftBottomEnabled then
+            Lighting.ColorShift_Bottom = ConfigState.LightingShiftBottomColor or Color3.fromRGB(115, 95, 255)
         else
-            Lighting.ColorShift_Bottom = State.origLighting.ColorShift_Bottom
+            Lighting.ColorShift_Bottom = State.origLighting.ColorShift_Bottom or Color3.fromRGB(0, 0, 0)
         end
-        if ConfigState.LightingColorShiftTopEnabled then
-            Lighting.ColorShift_Top = Color3.fromRGB(ConfigState.LightingColorShiftTopR or 145, ConfigState.LightingColorShiftTopG or 185, ConfigState.LightingColorShiftTopB or 255)
+        if ConfigState.LightingShiftTopEnabled then
+            Lighting.ColorShift_Top = ConfigState.LightingShiftTopColor or Color3.fromRGB(115, 95, 255)
         else
-            Lighting.ColorShift_Top = State.origLighting.ColorShift_Top
+            Lighting.ColorShift_Top = State.origLighting.ColorShift_Top or Color3.fromRGB(0, 0, 0)
         end
         if ConfigState.LightingFogColorEnabled then
-            Lighting.FogColor = Color3.fromRGB(ConfigState.LightingFogColorR or 110, ConfigState.LightingFogColorG or 120, ConfigState.LightingFogColorB or 165)
+            Lighting.FogColor = ConfigState.LightingFogColor or Color3.fromRGB(115, 95, 255)
         else
-            Lighting.FogColor = State.origLighting.FogColor
+            Lighting.FogColor = State.origLighting.FogColor or Color3.fromRGB(192, 192, 192)
         end
         if ConfigState.LightingFogEndEnabled and not ConfigState.NoFog then
-            Lighting.FogEnd = ConfigState.LightingFogEnd or 1400
+            Lighting.FogEnd = ConfigState.LightingFogEnd or 1000
         end
         if ConfigState.LightingFogStartEnabled and not ConfigState.NoFog then
-            Lighting.FogStart = ConfigState.LightingFogStart or 500
+            Lighting.FogStart = ConfigState.LightingFogStart or 0
         end
         if ConfigState.LightingExposureEnabled then
             Lighting.ExposureCompensation = ConfigState.LightingExposure or 0
         else
-            Lighting.ExposureCompensation = State.origLighting.ExposureCompensation
+            Lighting.ExposureCompensation = State.origLighting.ExposureCompensation or 0
         end
         if ConfigState.LightingBrightnessEnabled and not ConfigState.Fullbright then
             Lighting.Brightness = ConfigState.LightingBrightness or 1
         end
         if ConfigState.LightingClockTimeEnabled then
-            Lighting.ClockTime = ConfigState.LightingClockTime or 17.3
+            Lighting.ClockTime = ConfigState.LightingClockTime or 12
         end
         if ConfigState.LightingNoShadows or ConfigState.Fullbright then
             Lighting.GlobalShadows = false
@@ -6389,10 +6357,10 @@ do
     local selfChamsHighlight = Instance.new("Highlight")
     selfChamsHighlight.Name = "CoreXyz_SelfChamsHighlight"
     selfChamsHighlight.Enabled = false
-    selfChamsHighlight.FillColor = ConfigState.SelfChamsFillColor
-    selfChamsHighlight.OutlineColor = ConfigState.SelfChamsOutlineColor
-    selfChamsHighlight.FillTransparency = ConfigState.SelfChamsFillTrans
-    selfChamsHighlight.OutlineTransparency = ConfigState.SelfChamsOutlineTrans
+    selfChamsHighlight.FillColor = ConfigState.SelfChamsFillColor or Color3.fromRGB(115, 95, 255)
+    selfChamsHighlight.OutlineColor = ConfigState.SelfChamsOutlineColor or Color3.fromRGB(255, 255, 255)
+    selfChamsHighlight.FillTransparency = ConfigState.SelfChamsFillTrans or 0.55
+    selfChamsHighlight.OutlineTransparency = ConfigState.SelfChamsOutlineTrans or 0
     selfChamsHighlight.Parent = UI.HighlightContainer
     UI.SelfChamsHighlight = selfChamsHighlight
 
@@ -6445,7 +6413,7 @@ do
         local matName = ConfigState.SelfChamsMaterial or "Lava"
         local preset = CHAMS_MATERIAL_PRESETS[matName] or CHAMS_MATERIAL_PRESETS["Lava"]
         local fillCol = overrideColor or ConfigState.SelfChamsFillColor or Color3.fromRGB(115, 95, 255)
-        if not overrideColor and preset and preset.Tint and fillCol == Color3.fromRGB(115, 95, 255) then
+        if not overrideColor and not ConfigState.SelfChamsCustomColor and preset and preset.Tint then
             fillCol = preset.Tint
         end
         local outCol = overrideColor or ConfigState.SelfChamsOutlineColor or Color3.fromRGB(255, 255, 255)
@@ -6614,8 +6582,12 @@ do
                     if orig.Material ~= nil then inst.Material = orig.Material end
                     if orig.Color ~= nil then inst.Color = orig.Color end
                     if orig.Transparency ~= nil then inst.Transparency = orig.Transparency end
-                    if orig.TextureID ~= nil then inst.TextureID = orig.TextureID end
-                    if orig.TextureId ~= nil then inst.TextureId = orig.TextureId end
+                    if orig.TextureID ~= nil and inst:IsA("MeshPart") then
+                        pcall(function() inst.TextureID = orig.TextureID end)
+                    end
+                    if orig.TextureId ~= nil then
+                        pcall(function() inst.TextureId = orig.TextureId end)
+                    end
                 end)
             end
         end
@@ -6660,26 +6632,32 @@ do
                 end
                 if ConfigState.ToolVisuals then
                     if State.toolVisualsCache[desc] == nil then
+                        local cachedTexId = nil
+                        if desc:IsA("MeshPart") then
+                            pcall(function() cachedTexId = desc.TextureID end)
+                        end
                         State.toolVisualsCache[desc] = {
                             Material = desc.Material,
                             Color = desc.Color,
                             Transparency = desc.Transparency,
-                            TextureID = desc.TextureID,
+                            TextureID = cachedTexId,
                         }
                     end
                     pcall(function()
                         desc.Material = targetMat
                         desc.Color = toolCol
                         desc.Transparency = targetTrans
-                        if skinTex ~= "" then
-                            desc.TextureID = skinTex
+                        if skinTex ~= "" and desc:IsA("MeshPart") then
+                            pcall(function() desc.TextureID = skinTex end)
                         end
                     end)
                 end
             elseif (desc:IsA("SpecialMesh") or desc.ClassName == "SpecialMesh") and ConfigState.ToolVisuals then
                 if State.toolVisualsCache[desc] == nil then
+                    local cachedMeshTex = nil
+                    pcall(function() cachedMeshTex = desc.TextureId end)
                     State.toolVisualsCache[desc] = {
-                        TextureId = desc.TextureId,
+                        TextureId = cachedMeshTex,
                     }
                 end
                 if skinTex ~= "" then
@@ -6918,18 +6896,33 @@ do
         local rainbowCol1 = Color3.fromHSV(hue1, 0.85, 1)
         local rainbowCol2 = Color3.fromHSV(hue2, 0.85, 1)
 
-        if ConfigState.SelfChams and (ConfigState.SelfChamsRainbow or ConfigState.SelfChamsPulse or ConfigState.SelfChamsMaterial == "Rainbow") then
-            local useRainbow = (ConfigState.SelfChamsRainbow or ConfigState.SelfChamsMaterial == "Rainbow") and rainbowCol1 or nil
-            local pulseWave = ConfigState.SelfChamsPulse and (math.sin(animClock * 4.0) * 0.22) or 0
-            applySelfChams(useRainbow, pulseWave)
+        if ConfigState.SelfChams then
+            if ConfigState.SelfChamsRainbow or ConfigState.SelfChamsPulse or ConfigState.SelfChamsMaterial == "Rainbow" then
+                local useRainbow = (ConfigState.SelfChamsRainbow or ConfigState.SelfChamsMaterial == "Rainbow") and rainbowCol1 or nil
+                local pulseWave = ConfigState.SelfChamsPulse and (math.sin(animClock * 4.0) * 0.22) or 0
+                applySelfChams(useRainbow, pulseWave)
+            elseif selfChamsHighlight.Adornee ~= LocalPlayer.Character then
+                applySelfChams()
+            end
         end
 
-        if ConfigState.LegTrailEnabled and ConfigState.LegTrailRainbow then
-            applyLegTrails(rainbowCol1, rainbowCol2)
+        if ConfigState.LegTrailEnabled then
+            if ConfigState.LegTrailRainbow then
+                applyLegTrails(rainbowCol1, rainbowCol2)
+            elseif not leftLegTrail.Parent or not leftLegTrail.Parent.Parent then
+                applyLegTrails()
+            end
         end
 
-        if (ConfigState.ToolVisuals or ConfigState.ToolChams or ConfigState.ToolGlow) and ConfigState.RainbowTool then
-            applyToolVisuals(rainbowCol1)
+        if ConfigState.ToolVisuals or ConfigState.ToolChams or ConfigState.ToolGlow then
+            if ConfigState.RainbowTool then
+                applyToolVisuals(rainbowCol1)
+            else
+                local activeTool = findActiveCharacterTool()
+                if (ConfigState.ToolChams and toolChamsHighlight.Adornee ~= activeTool) or (not activeTool and (toolChamsHighlight.Enabled or toolPointLight.Enabled)) then
+                    applyToolVisuals()
+                end
+            end
         end
     end
 
@@ -8314,6 +8307,7 @@ do
             SwatchColor2 = Color3.fromRGB(115, 95, 255),
             OnColorChange2 = function(col)
                 ConfigState.SelfChamsFillColor = col
+                ConfigState.SelfChamsCustomColor = true
                 if ConfigState.SelfChams and State.applySelfChams then
                     State.applySelfChams()
                 end
@@ -8344,6 +8338,7 @@ do
             "Glossy",
         }, "Lava", function(opt)
             ConfigState.SelfChamsMaterial = opt
+            ConfigState.SelfChamsCustomColor = false
             if ConfigState.SelfChams and State.applySelfChams then
                 State.applySelfChams()
             end
@@ -9773,6 +9768,25 @@ do
     local selectedConfigToLoad = savedConfigNames[1]
     local ConfigListDropdown
 
+    local function isColor3Value(val)
+        if type(typeof) == "function" and typeof(val) == "Color3" then
+            return true
+        end
+        return type(val) == "table" and type(val.R) == "number" and type(val.G) == "number" and type(val.B) == "number"
+    end
+
+    local function serializeConfigTable(cfg)
+        local out = {}
+        for k, v in pairs(cfg) do
+            if isColor3Value(v) then
+                out[k] = { __color3 = true, R = v.R, G = v.G, B = v.B }
+            elseif type(v) == "string" or type(v) == "number" or type(v) == "boolean" then
+                out[k] = v
+            end
+        end
+        return out
+    end
+
     local function saveConfigByName(cfgName)
         local cleanName = (cfgName or ""):gsub("^%s*(.-)%s*$", "%1")
         if cleanName == "" then
@@ -9780,7 +9794,7 @@ do
             return false
         end
         local path = FS_FOLDER .. "/Config_" .. cleanName .. ".json"
-        safeWriteFile(path, safeJsonEncode(ConfigState))
+        safeWriteFile(path, safeJsonEncode(serializeConfigTable(ConfigState)))
 
         if not table.find(savedConfigNames, cleanName) then
             table.insert(savedConfigNames, cleanName)
@@ -9810,7 +9824,13 @@ do
             return false
         end
         for k, v in pairs(decoded) do
-            ConfigState[k] = v
+            if v ~= nil then
+                if type(v) == "table" and (v.__color3 or (type(v.R) == "number" and type(v.G) == "number" and type(v.B) == "number")) then
+                    ConfigState[k] = Color3.new(v.R, v.G, v.B)
+                elseif not isColor3Value(ConfigState[k]) then
+                    ConfigState[k] = v
+                end
+            end
         end
         updateAccentColor(ConfigState.AccentR or 255, ConfigState.AccentG or 255, ConfigState.AccentB or 255)
         if RSliderCtrl then RSliderCtrl.Set(ConfigState.AccentR or 255, false) end
@@ -9823,6 +9843,13 @@ do
         else
             updateLightingEnvironment()
         end
+        if State.applySelfChams then State.applySelfChams() end
+        if State.applyLegTrails then State.applyLegTrails() end
+        if State.applyToolVisuals then State.applyToolVisuals() end
+        if State.applyCustomBloomAndSunRays then State.applyCustomBloomAndSunRays() end
+        if State.applyCustomColorCorrection then State.applyCustomColorCorrection() end
+        if State.applyCustomSkybox then State.applyCustomSkybox() end
+        if State.applyCustomAtmosphere then State.applyCustomAtmosphere() end
         if State.applyMuteGameAudio then
             State.applyMuteGameAudio(ConfigState.MuteGameAudio or false)
         end
