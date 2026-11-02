@@ -909,6 +909,121 @@ local ConfigState = {
     NoclipCam = false,
     Headless = false,
     Korblox = false,
+    -- Self Chams Suite
+    SelfChams = false,
+    SelfChamsMaterial = "Lava",
+    SelfChamsFillTransparency = 0.55,
+    SelfChamsOutlineTransparency = 0,
+    SelfChamsRainbow = false,
+    SelfChamsPulse = false,
+    SelfChamsGlowRim = true,
+    SelfChamsColor1R = 255,
+    SelfChamsColor1G = 255,
+    SelfChamsColor1B = 255,
+    SelfChamsColor2R = 105,
+    SelfChamsColor2G = 85,
+    SelfChamsColor2B = 255,
+    -- Leg Trail Suite
+    LegTrail = false,
+    LeftTrailStartR = 98,
+    LeftTrailStartG = 84,
+    LeftTrailStartB = 255,
+    LeftTrailEndR = 75,
+    LeftTrailEndG = 205,
+    LeftTrailEndB = 255,
+    TrailSameColors = false,
+    RightTrailStartR = 255,
+    RightTrailStartG = 85,
+    RightTrailStartB = 195,
+    RightTrailEndR = 255,
+    RightTrailEndG = 195,
+    RightTrailEndB = 75,
+    TrailWidth = 0.25,
+    TrailLength = 0.5,
+    RainbowTrail = false,
+    -- Tool Visuals Suite
+    ToolVisuals = false,
+    ToolColorR = 105,
+    ToolColorG = 85,
+    ToolColorB = 255,
+    ToolMaterial = "SmoothPlastic",
+    ToolTransparency = 0,
+    RainbowTool = false,
+    ToolSkinTexture = "None",
+    ToolChams = false,
+    ToolChamsColorR = 255,
+    ToolChamsColorG = 255,
+    ToolChamsColorB = 255,
+    ToolChamsStyle = "Outline",
+    ToolGlow = false,
+    ToolGlowBrightness = 3,
+    -- Bloom & Sun Rays Suite
+    CustomBloom = false,
+    BloomIntensity = 0.6,
+    BloomSize = 26,
+    BloomThreshold = 0.4,
+    CustomSunRays = false,
+    SunRaysIntensity = 0.25,
+    SunRaysSpread = 1,
+    -- Color Correction Suite
+    CustomColorCorrection = false,
+    ColorCorrectionTintR = 255,
+    ColorCorrectionTintG = 255,
+    ColorCorrectionTintB = 255,
+    CCSaturation = 0,
+    CCContrast = 0,
+    CCBrightness = 0,
+    -- Skybox & Catalog Search Suite
+    CustomSkybox = false,
+    SkyboxPreset = "Aurora Galaxy",
+    SkyboxClearAtmosphere = false,
+    CustomSkyboxId = "",
+    SkyboxSearchQuery = "",
+    SkyboxSearchResult = "Aurora Galaxy",
+    -- Lighting Controller Suite
+    LightingAmbientEnabled = false,
+    LightingAmbientR = 135,
+    LightingAmbientG = 125,
+    LightingAmbientB = 255,
+    LightingOutdoorAmbientEnabled = false,
+    LightingOutdoorAmbientR = 155,
+    LightingOutdoorAmbientG = 145,
+    LightingOutdoorAmbientB = 255,
+    LightingColorShiftBottomEnabled = false,
+    LightingColorShiftBottomR = 98,
+    LightingColorShiftBottomG = 84,
+    LightingColorShiftBottomB = 255,
+    LightingColorShiftTopEnabled = false,
+    LightingColorShiftTopR = 145,
+    LightingColorShiftTopG = 185,
+    LightingColorShiftTopB = 255,
+    LightingFogColorEnabled = false,
+    LightingFogColorR = 110,
+    LightingFogColorG = 120,
+    LightingFogColorB = 165,
+    LightingFogEndEnabled = false,
+    LightingFogEnd = 1400,
+    LightingFogStartEnabled = false,
+    LightingFogStart = 500,
+    LightingExposureEnabled = false,
+    LightingExposure = 0,
+    LightingBrightnessEnabled = false,
+    LightingBrightness = 1,
+    LightingClockTimeEnabled = false,
+    LightingClockTime = 17.3,
+    LightingNoShadows = false,
+    -- Atmosphere Controller Suite
+    CustomAtmosphere = false,
+    AtmosphereColorR = 195,
+    AtmosphereColorG = 185,
+    AtmosphereColorB = 255,
+    AtmosphereDecayR = 140,
+    AtmosphereDecayG = 125,
+    AtmosphereDecayB = 220,
+    AtmosphereDensity = 0.3,
+    AtmosphereOffset = 0.25,
+    AtmosphereHaze = 0,
+    AtmosphereGlare = 0,
     -- Movement & Protection
     StealthBypass = true,
     WalkSpeedEnabled = false,
@@ -985,6 +1100,10 @@ local State = {
     promptDurationCache = {},
     headlessCache = {},
     korbloxCache = {},
+    selfChamsCache = {},
+    toolVisualsCache = {},
+    clearedAtmosphereCache = {},
+    isUnderRoof = false,
     mutedGameSounds = setmetatable({}, { __mode = "k" }),
     muteAudioDescendantConn = nil,
     musicTrackOptions = { "Snowman (Slowed + Reverb) — Sia" },
@@ -1014,9 +1133,13 @@ local State = {
         ClockTime = Lighting.ClockTime,
         FogEnd = Lighting.FogEnd,
         FogStart = Lighting.FogStart,
+        FogColor = Lighting.FogColor or Color3.fromRGB(192, 192, 192),
         GlobalShadows = Lighting.GlobalShadows,
         Ambient = Lighting.Ambient,
         OutdoorAmbient = Lighting.OutdoorAmbient,
+        ColorShift_Bottom = Lighting.ColorShift_Bottom or Color3.fromRGB(0, 0, 0),
+        ColorShift_Top = Lighting.ColorShift_Top or Color3.fromRGB(0, 0, 0),
+        ExposureCompensation = Lighting.ExposureCompensation or 0,
     },
     espColor = Color3.fromRGB(255, 255, 255),
     crosshairColor = Color3.fromRGB(255, 255, 255),
@@ -2591,7 +2714,143 @@ local function createButton(page, text, callback)
     return btn
 end
 
-local function createToggle(page, text, defaultVal, callback)
+do
+    local SWATCH_PALETTE = {
+        Color3.fromRGB(255, 255, 255), -- Pure White
+        Color3.fromRGB(105, 85, 255),  -- Electric Indigo
+        Color3.fromRGB(75, 205, 255),  -- Sky Cyan
+        Color3.fromRGB(255, 85, 195),  -- Hot Pink
+        Color3.fromRGB(255, 195, 75),  -- Amber Gold
+        Color3.fromRGB(255, 90, 36),   -- Lava Orange
+        Color3.fromRGB(80, 255, 130),  -- Toxic Emerald
+        Color3.fromRGB(255, 70, 70),   -- Crimson Red
+        Color3.fromRGB(180, 80, 255),  -- Plasma Purple
+        Color3.fromRGB(150, 230, 255), -- Ice Blue
+        Color3.fromRGB(255, 215, 64),  -- Pure Gold
+        Color3.fromRGB(28, 28, 42),    -- Obsidian Dark
+        Color3.fromRGB(240, 234, 255), -- Pearl White
+        Color3.fromRGB(0, 255, 102),   -- Matrix Green
+        Color3.fromRGB(195, 185, 255), -- Soft Lavender
+        Color3.fromRGB(140, 125, 220), -- Decay Violet
+    }
+    UI.SwatchPalette = SWATCH_PALETTE
+
+    local function attachSwatchCyclers(btn, initColor, onColorPicked)
+        local curColor = initColor or SWATCH_PALETTE[2]
+        local paletteIdx = 1
+        btn.BackgroundColor3 = curColor
+        local function setCol(c, fire)
+            curColor = c
+            btn.BackgroundColor3 = c
+            if fire ~= false and onColorPicked then
+                onColorPicked(c)
+            end
+        end
+        btn.MouseButton1Click:Connect(function()
+            paletteIdx = (paletteIdx % #SWATCH_PALETTE) + 1
+            setCol(SWATCH_PALETTE[paletteIdx], true)
+        end)
+        return setCol, function() return curColor end
+    end
+    UI.attachSwatchCyclers = attachSwatchCyclers
+
+    UI.createSectionBox = function(page, sectionTitle)
+        local wrapper = Instance.new("Frame")
+        wrapper.Name = "SectionBox_" .. tostring(sectionTitle)
+        wrapper.Size = UDim2.new(1, 0, 0, 48)
+        wrapper.AutomaticSize = Enum.AutomaticSize.Y
+        wrapper.BackgroundColor3 = Theme.Deep
+        wrapper.BackgroundTransparency = 0.12
+        wrapper.ZIndex = 14
+        wrapper.Parent = page
+        addCorner(wrapper, 8)
+        addStroke(wrapper, Theme.Border, 1, 0)
+
+        local titleBg = Instance.new("Frame")
+        titleBg.Name = "SectionHeaderBadge"
+        titleBg.Position = UDim2.fromOffset(12, 6)
+        titleBg.Size = UDim2.new(1, -24, 0, 18)
+        titleBg.BackgroundTransparency = 1
+        titleBg.ZIndex = 15
+        titleBg.Parent = wrapper
+
+        local titleLbl = Instance.new("TextLabel")
+        titleLbl.Name = "SectionTitleLabel"
+        titleLbl.Size = UDim2.fromScale(1, 1)
+        titleLbl.BackgroundTransparency = 1
+        titleLbl.Font = Enum.Font.GothamBold
+        titleLbl.Text = tostring(sectionTitle)
+        titleLbl.TextColor3 = Theme.White
+        titleLbl.TextSize = 11
+        titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+        titleLbl.ZIndex = 15
+        titleLbl.Parent = titleBg
+
+        local content = Instance.new("Frame")
+        content.Name = "SectionContent"
+        content.Position = UDim2.fromOffset(0, 26)
+        content.Size = UDim2.new(1, 0, 0, 10)
+        content.AutomaticSize = Enum.AutomaticSize.Y
+        content.BackgroundTransparency = 1
+        content.ZIndex = 14
+        content.Parent = wrapper
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingTop = UDim.new(0, 2)
+        pad.PaddingBottom = UDim.new(0, 10)
+        pad.PaddingLeft = UDim.new(0, 8)
+        pad.PaddingRight = UDim.new(0, 8)
+        pad.Parent = content
+
+        local list = Instance.new("UIListLayout")
+        list.Padding = UDim.new(0, 6)
+        list.SortOrder = Enum.SortOrder.LayoutOrder
+        list.Parent = content
+
+        return content, wrapper
+    end
+
+    UI.createColorRow = function(page, text, defaultColor, callback)
+        local row = Instance.new("Frame")
+        row.Name = "ColorRow_" .. tostring(text)
+        row.Size = UDim2.new(1, 0, 0, 34)
+        row.BackgroundColor3 = Theme.Surface
+        row.ZIndex = 14
+        row.Parent = page
+        addCorner(row, 8)
+        addStroke(row, Theme.Border, 1, 0)
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(14, 0)
+        lbl.Size = UDim2.new(1, -64, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.GothamMedium
+        lbl.Text = text
+        lbl.TextColor3 = Theme.Silver
+        lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = 15
+        lbl.Parent = row
+
+        local swatchBtn = Instance.new("TextButton")
+        swatchBtn.Name = "ColorSwatch_" .. tostring(text)
+        swatchBtn.AnchorPoint = Vector2.new(1, 0.5)
+        swatchBtn.Position = UDim2.new(1, -12, 0.5, 0)
+        swatchBtn.Size = UDim2.fromOffset(24, 16)
+        swatchBtn.AutoButtonColor = false
+        swatchBtn.Text = " "
+        swatchBtn.TextTransparency = 1
+        swatchBtn.ZIndex = 16
+        swatchBtn.Parent = row
+        addCorner(swatchBtn, 4)
+        addStroke(swatchBtn, Theme.Border, 1, 0)
+
+        local setCol, getCol = attachSwatchCyclers(swatchBtn, defaultColor, callback)
+        return { SetColor = setCol, GetColor = getCol, SwatchBtn = swatchBtn, Row = row }
+    end
+end
+
+local function createToggle(page, text, defaultVal, callback, extraOpts)
     local row = Instance.new("TextButton")
     row.Size = UDim2.new(1, 0, 0, 40)
     row.BackgroundColor3 = defaultVal and Theme.Elevated or Theme.Surface
@@ -2616,7 +2875,7 @@ local function createToggle(page, text, defaultVal, callback)
 
     local lbl = Instance.new("TextLabel")
     lbl.Position = UDim2.fromOffset(14, 0)
-    lbl.Size = UDim2.new(1, -76, 1, 0)
+    lbl.Size = UDim2.new(1, -140, 1, 0)
     lbl.BackgroundTransparency = 1
     lbl.Font = Enum.Font.GothamMedium
     lbl.Text = text
@@ -2644,6 +2903,63 @@ local function createToggle(page, text, defaultVal, callback)
     dot.ZIndex = 16
     dot.Parent = pill
     addCorner(dot, 99)
+
+    local rightOffset = 62
+    local swatch1Set, swatch2Set
+    if type(extraOpts) == "table" then
+        if extraOpts.SwatchColor2 then
+            local sw2 = Instance.new("TextButton")
+            sw2.Name = "ColorSwatch2_" .. tostring(text)
+            sw2.AnchorPoint = Vector2.new(1, 0.5)
+            sw2.Position = UDim2.new(1, -rightOffset, 0.5, 0)
+            sw2.Size = UDim2.fromOffset(22, 15)
+            sw2.AutoButtonColor = false
+            sw2.Text = " "
+            sw2.TextTransparency = 1
+            sw2.ZIndex = 16
+            sw2.Parent = row
+            addCorner(sw2, 4)
+            addStroke(sw2, Theme.Border, 1, 0)
+            swatch2Set = UI.attachSwatchCyclers(sw2, extraOpts.SwatchColor2, extraOpts.OnColor2Change)
+            rightOffset = rightOffset + 28
+        end
+        if extraOpts.SwatchColor then
+            local sw1 = Instance.new("TextButton")
+            sw1.Name = "ColorSwatch_" .. tostring(text)
+            sw1.AnchorPoint = Vector2.new(1, 0.5)
+            sw1.Position = UDim2.new(1, -rightOffset, 0.5, 0)
+            sw1.Size = UDim2.fromOffset(22, 15)
+            sw1.AutoButtonColor = false
+            sw1.Text = " "
+            sw1.TextTransparency = 1
+            sw1.ZIndex = 16
+            sw1.Parent = row
+            addCorner(sw1, 4)
+            addStroke(sw1, Theme.Border, 1, 0)
+            swatch1Set = UI.attachSwatchCyclers(sw1, extraOpts.SwatchColor, extraOpts.OnColorChange)
+            rightOffset = rightOffset + 28
+        end
+        if extraOpts.ShowKeybindBadge then
+            local kbHolder = Instance.new("Frame")
+            kbHolder.Name = "KeybindBadgeHolder"
+            kbHolder.AnchorPoint = Vector2.new(1, 0.5)
+            kbHolder.Position = UDim2.new(1, -rightOffset, 0.5, 0)
+            kbHolder.Size = UDim2.fromOffset(26, 16)
+            kbHolder.BackgroundTransparency = 1
+            kbHolder.ZIndex = 16
+            kbHolder.Parent = row
+
+            local kbLbl = Instance.new("TextLabel")
+            kbLbl.Size = UDim2.fromScale(1, 1)
+            kbLbl.BackgroundTransparency = 1
+            kbLbl.Font = Enum.Font.Code
+            kbLbl.Text = "[...]"
+            kbLbl.TextColor3 = Theme.Muted
+            kbLbl.TextSize = 10
+            kbLbl.ZIndex = 16
+            kbLbl.Parent = kbHolder
+        end
+    end
 
     local state = defaultVal
     local function setState(newVal, fireCallback)
@@ -2685,12 +3001,14 @@ local function createToggle(page, text, defaultVal, callback)
         setState(not state, true)
     end)
 
-    return { Set = setState, Get = function() return state end, Row = row }
+    return { Set = setState, Get = function() return state end, Row = row, SetColor1 = swatch1Set, SetColor2 = swatch2Set }
 end
 
 local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix, callback)
     suffix = suffix or ""
+    local currentVal = defaultVal
     local card = Instance.new("Frame")
+    card.Name = "SliderCard_" .. tostring(text)
     card.Size = UDim2.new(1, 0, 0, 54)
     card.BackgroundColor3 = Theme.Surface
     card.ZIndex = 14
@@ -2711,6 +3029,7 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
     lbl.Parent = card
 
     local valBadge = Instance.new("TextLabel")
+    valBadge.Name = "SliderValueLabel"
     valBadge.AnchorPoint = Vector2.new(1, 0)
     valBadge.Position = UDim2.new(1, -14, 0, 7)
     valBadge.Size = UDim2.fromOffset(80, 18)
@@ -2723,9 +3042,36 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
     valBadge.ZIndex = 15
     valBadge.Parent = card
 
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Name = "SliderMinusBtn"
+    minusBtn.Position = UDim2.fromOffset(10, 29)
+    minusBtn.Size = UDim2.fromOffset(16, 16)
+    minusBtn.BackgroundTransparency = 1
+    minusBtn.AutoButtonColor = false
+    minusBtn.Font = Enum.Font.Code
+    minusBtn.Text = "-"
+    minusBtn.TextColor3 = Theme.Muted
+    minusBtn.TextSize = 13
+    minusBtn.ZIndex = 16
+    minusBtn.Parent = card
+
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Name = "SliderPlusBtn"
+    plusBtn.AnchorPoint = Vector2.new(1, 0)
+    plusBtn.Position = UDim2.new(1, -10, 0, 29)
+    plusBtn.Size = UDim2.fromOffset(16, 16)
+    plusBtn.BackgroundTransparency = 1
+    plusBtn.AutoButtonColor = false
+    plusBtn.Font = Enum.Font.Code
+    plusBtn.Text = "+"
+    plusBtn.TextColor3 = Theme.Muted
+    plusBtn.TextSize = 13
+    plusBtn.ZIndex = 16
+    plusBtn.Parent = card
+
     local track = Instance.new("Frame")
-    track.Position = UDim2.fromOffset(14, 34)
-    track.Size = UDim2.new(1, -28, 0, 6)
+    track.Position = UDim2.fromOffset(30, 34)
+    track.Size = UDim2.new(1, -60, 0, 6)
     track.BackgroundColor3 = Theme.Deep
     track.BorderSizePixel = 0
     track.ZIndex = 15
@@ -2756,6 +3102,7 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
     local function setValue(rawVal, fireCallback)
         local stepped = math.floor((rawVal / step) + 0.5) * step
         stepped = tonumber(string.format("%.2f", math.clamp(stepped, minVal, maxVal))) or defaultVal
+        currentVal = stepped
         local pct = math.clamp((stepped - minVal) / math.max(maxVal - minVal, 0.0001), 0, 1)
         tween(fill, TweenInfo.new(0.08), { Size = UDim2.fromScale(pct, 1) })
         tween(knob, TweenInfo.new(0.08), { Position = UDim2.fromScale(pct, 0.5) })
@@ -2764,6 +3111,14 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
             callback(stepped)
         end
     end
+
+    minusBtn.MouseButton1Click:Connect(function()
+        setValue(currentVal - step, true)
+    end)
+
+    plusBtn.MouseButton1Click:Connect(function()
+        setValue(currentVal + step, true)
+    end)
 
     local function updateFromInput(input)
         local width = math.max(track.AbsoluteSize.X, 1)
@@ -2811,7 +3166,7 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
         end
     end)
 
-    return { Set = setValue }
+    return { Set = setValue, Get = function() return currentVal end, Card = card, MinusBtn = minusBtn, PlusBtn = plusBtn }
 end
 
 local function createTextInputRow(page, labelText, placeholder, defaultText, onCommit)
@@ -4214,7 +4569,7 @@ local function updateLightingEnvironment()
         Lighting.FogEnd = 100000
         Lighting.FogStart = 100000
         for _, child in ipairs(Lighting:GetChildren()) do
-            if child:IsA("Atmosphere") and child.Name ~= "CoreXyz_WeatherAtmosphere" then
+            if child:IsA("Atmosphere") and child.Name ~= "CoreXyz_WeatherAtmosphere" and child.Name ~= "CoreXyz_CustomAtmosphere" then
                 pcall(function() child.Density = 0 end)
             end
         end
@@ -4231,9 +4586,54 @@ local function updateLightingEnvironment()
         Lighting.FogEnd = State.origLighting.FogEnd
         Lighting.FogStart = State.origLighting.FogStart
     end
+
+    -- Apply Granular Lighting Controller Overrides when individually enabled
+    pcall(function()
+        if ConfigState.LightingAmbientEnabled then
+            Lighting.Ambient = Color3.fromRGB(ConfigState.LightingAmbientR or 135, ConfigState.LightingAmbientG or 125, ConfigState.LightingAmbientB or 255)
+        end
+        if ConfigState.LightingOutdoorAmbientEnabled then
+            Lighting.OutdoorAmbient = Color3.fromRGB(ConfigState.LightingOutdoorAmbientR or 155, ConfigState.LightingOutdoorAmbientG or 145, ConfigState.LightingOutdoorAmbientB or 255)
+        end
+        if ConfigState.LightingColorShiftBottomEnabled then
+            Lighting.ColorShift_Bottom = Color3.fromRGB(ConfigState.LightingColorShiftBottomR or 98, ConfigState.LightingColorShiftBottomG or 84, ConfigState.LightingColorShiftBottomB or 255)
+        else
+            Lighting.ColorShift_Bottom = State.origLighting.ColorShift_Bottom
+        end
+        if ConfigState.LightingColorShiftTopEnabled then
+            Lighting.ColorShift_Top = Color3.fromRGB(ConfigState.LightingColorShiftTopR or 145, ConfigState.LightingColorShiftTopG or 185, ConfigState.LightingColorShiftTopB or 255)
+        else
+            Lighting.ColorShift_Top = State.origLighting.ColorShift_Top
+        end
+        if ConfigState.LightingFogColorEnabled then
+            Lighting.FogColor = Color3.fromRGB(ConfigState.LightingFogColorR or 110, ConfigState.LightingFogColorG or 120, ConfigState.LightingFogColorB or 165)
+        else
+            Lighting.FogColor = State.origLighting.FogColor
+        end
+        if ConfigState.LightingFogEndEnabled and not ConfigState.NoFog then
+            Lighting.FogEnd = ConfigState.LightingFogEnd or 1400
+        end
+        if ConfigState.LightingFogStartEnabled and not ConfigState.NoFog then
+            Lighting.FogStart = ConfigState.LightingFogStart or 500
+        end
+        if ConfigState.LightingExposureEnabled then
+            Lighting.ExposureCompensation = ConfigState.LightingExposure or 0
+        else
+            Lighting.ExposureCompensation = State.origLighting.ExposureCompensation
+        end
+        if ConfigState.LightingBrightnessEnabled and not ConfigState.Fullbright then
+            Lighting.Brightness = ConfigState.LightingBrightness or 1
+        end
+        if ConfigState.LightingClockTimeEnabled then
+            Lighting.ClockTime = ConfigState.LightingClockTime or 17.3
+        end
+        if ConfigState.LightingNoShadows or ConfigState.Fullbright then
+            Lighting.GlobalShadows = false
+        end
+    end)
 end
 
--- Pre-Allocated 100% 3D In-World Volumetric Weather Engine (3D Sky Canopy Volume + 3D Ground Splash Plane + 3D Jagged Lightning Pool + SoundService Audio — Zero 2D Screen Overlay, Zero Per-Frame Instance Allocations!)
+-- Pre-Allocated 100% 3D In-World Volumetric Weather Engine (3D Sky Canopy Volume + 3D Ground Splash Plane + 3D Jagged Lightning Pool + SoundService Audio + Roof Raycast Occlusion — Zero 2D Screen Overlay, Zero Per-Frame Instance Allocations!)
 do
     local SoundService = safeGetService("SoundService") or Lighting
 
@@ -4485,6 +4885,33 @@ do
         Sunny = "rbxassetid://9114221580",
     }
 
+    local function makeNumRange(minV, maxV)
+        if type(NumberRange) == "table" and NumberRange.new then
+            return NumberRange.new(minV, maxV or minV)
+        end
+        return maxV or minV
+    end
+
+    local function makeNumSeq(val)
+        if type(NumberSequence) == "table" and NumberSequence.new then
+            return NumberSequence.new(val)
+        end
+        return val
+    end
+
+    local function makeNumSeqKeypoints(kpTable)
+        if type(NumberSequence) == "table" and NumberSequence.new and type(NumberSequenceKeypoint) == "table" and NumberSequenceKeypoint.new then
+            local kps = {}
+            for i = 1, #kpTable do
+                local pair = kpTable[i]
+                kps[i] = NumberSequenceKeypoint.new(pair[1], pair[2])
+            end
+            return NumberSequence.new(kps)
+        end
+        local fallbackVal = (kpTable[2] and kpTable[2][2]) or (kpTable[1] and kpTable[1][2]) or 0.5
+        return makeNumSeq(fallbackVal)
+    end
+
     -- Realistic Rain And Thunderstorm Asset (rbxassetid://1250626578) Loader & Stealth Sanitizer
     local REALISTIC_RAIN_ASSET_ID = "rbxassetid://1250626578"
     local realisticCanopyEmitters = {}
@@ -4541,7 +4968,7 @@ do
                         end)
                     end
 
-                    -- 2. Harvest ParticleEmitters & Sound IDs from rbxassetid://1250626578
+                    -- 2. Harvest ParticleEmitters & Sound IDs from rbxassetid://1250626578 and soften spiky Squash/Size curves
                     for _, node in ipairs(allNodes) do
                         pcall(function()
                             if node:IsA("ParticleEmitter") then
@@ -4559,6 +4986,11 @@ do
                                 cloned.Enabled = false
                                 cloned.LockedToPart = false
                                 if isSplash then
+                                    pcall(function()
+                                        cloned.Squash = makeNumSeq(0.18)
+                                        cloned.Size = makeNumSeqKeypoints({ {0, 0.18}, {0.5, 0.65}, {1, 1.05} })
+                                        cloned.Transparency = makeNumSeqKeypoints({ {0, 0.35}, {0.6, 0.68}, {1, 1.0} })
+                                    end)
                                     cloned.Name = "CoreXyz_Asset1250626578_Splash_" .. tostring(#realisticSplashEmitters + 1)
                                     cloned.Parent = groundSplashPart
                                     table.insert(realisticSplashEmitters, { Emitter = cloned, BaseRate = baseRate })
@@ -4566,6 +4998,11 @@ do
                                         groundSplashEmitter.Texture = cloned.Texture
                                     end
                                 else
+                                    pcall(function()
+                                        cloned.Squash = makeNumSeq(1.25)
+                                        cloned.Size = makeNumSeqKeypoints({ {0, 0.14}, {0.5, 0.22}, {1, 0.12} })
+                                        cloned.Transparency = makeNumSeqKeypoints({ {0, 1.0}, {0.15, 0.46}, {0.75, 0.56}, {1, 1.0} })
+                                    end)
                                     cloned.Name = "CoreXyz_Asset1250626578_Rain_" .. tostring(#realisticCanopyEmitters + 1)
                                     cloned.Parent = weatherPart
                                     table.insert(realisticCanopyEmitters, { Emitter = cloned, BaseRate = baseRate })
@@ -4618,20 +5055,6 @@ do
     end
 
     loadRealisticRainAsset()
-
-    local function makeNumRange(minV, maxV)
-        if type(NumberRange) == "table" and NumberRange.new then
-            return NumberRange.new(minV, maxV or minV)
-        end
-        return maxV or minV
-    end
-
-    local function makeNumSeq(val)
-        if type(NumberSequence) == "table" and NumberSequence.new then
-            return NumberSequence.new(val)
-        end
-        return val
-    end
 
     local function hideLightningBolts()
         strikePointLight.Enabled = false
@@ -4704,8 +5127,9 @@ do
         local mode = ConfigState.WeatherPreset or "Default"
         local soundId = WEATHER_SOUND_IDS[mode]
         local baseVol = math.clamp(ConfigState.WeatherSoundVolume or 0.5, 0, 1)
-        thunderSound.Volume = math.clamp(baseVol * 1.35, 0, 1)
-        spatialThunderSound.Volume = math.clamp(baseVol * 1.45, 0, 1)
+        local roofFactor = State.isUnderRoof and 0.42 or 1.0
+        thunderSound.Volume = math.clamp(baseVol * 1.35 * roofFactor, 0, 1)
+        spatialThunderSound.Volume = math.clamp(baseVol * 1.45 * roofFactor, 0, 1)
 
         if not ConfigState.WeatherSoundEnabled or mode == "Default" or not soundId then
             ambienceSound.Volume = 0
@@ -4720,7 +5144,7 @@ do
         end
 
         local volScale = (mode == "Thunderstorm" and 1.18) or (mode == "Snow" and 0.85) or (mode == "Sunny" and 0.75) or 1.0
-        ambienceSound.Volume = math.clamp(baseVol * volScale, 0, 1)
+        ambienceSound.Volume = math.clamp(baseVol * volScale * roofFactor, 0, 1)
         ambienceSound.PlaybackSpeed = (mode == "Thunderstorm" and 0.94) or (mode == "Snow" and 0.88) or 1.0
 
         if ambienceSound.SoundId ~= soundId then
@@ -4733,32 +5157,32 @@ do
             end
         end)
 
-        -- Guaranteed multi-layer acoustic rain/wind patter & storm rumble bed
+        -- Guaranteed multi-layer acoustic rain/wind patter & storm rumble bed (with indoor roof low-pass occlusion)
         if mode == "Rain" or mode == "Thunderstorm" or mode == "Snow" then
             if mode == "Rain" then
-                patterSound.Volume = math.clamp(baseVol * 0.72, 0, 1)
+                patterSound.Volume = math.clamp(baseVol * 0.72 * roofFactor, 0, 1)
                 patterSound.PlaybackSpeed = 1.18
                 patterPitch.Octave = 0.92
-                patterEq.HighGain = -4
-                patterEq.MidGain = 0
+                patterEq.HighGain = State.isUnderRoof and -18 or -4
+                patterEq.MidGain = State.isUnderRoof and -8 or 0
                 patterEq.LowGain = 3
                 rumblerSound.Volume = math.clamp(baseVol * 0.38, 0, 1)
                 rumblerSound.PlaybackSpeed = 0.42
             elseif mode == "Thunderstorm" then
-                patterSound.Volume = math.clamp(baseVol * 0.95, 0, 1)
+                patterSound.Volume = math.clamp(baseVol * 0.95 * roofFactor, 0, 1)
                 patterSound.PlaybackSpeed = 1.28
                 patterPitch.Octave = 0.86
-                patterEq.HighGain = -2
-                patterEq.MidGain = 2
+                patterEq.HighGain = State.isUnderRoof and -16 or -2
+                patterEq.MidGain = State.isUnderRoof and -6 or 2
                 patterEq.LowGain = 6
                 rumblerSound.Volume = math.clamp(baseVol * 0.62, 0, 1)
                 rumblerSound.PlaybackSpeed = 0.50
             else
                 -- Snow howling winter wind layer
-                patterSound.Volume = math.clamp(baseVol * 0.48, 0, 1)
+                patterSound.Volume = math.clamp(baseVol * 0.48 * roofFactor, 0, 1)
                 patterSound.PlaybackSpeed = 0.64
                 patterPitch.Octave = 0.65
-                patterEq.HighGain = -12
+                patterEq.HighGain = State.isUnderRoof and -20 or -12
                 patterEq.MidGain = -4
                 patterEq.LowGain = 5
                 rumblerSound.Volume = 0
@@ -4786,6 +5210,7 @@ do
         State.lightningFlashIntensity = 0
         State.nextLightningTimer = 2.4
         State.weatherAnimClock = State.weatherAnimClock or 0
+        State.isUnderRoof = false
         hideLightningBolts()
 
         if ConfigState.WeatherPreset == "Rain" then
@@ -4802,25 +5227,26 @@ do
                     weatherEmitter.Orientation = Enum.ParticleOrientation.VelocityParallel
                     streakEmitter.Orientation = Enum.ParticleOrientation.VelocityParallel
                 end
-                weatherEmitter.Squash = makeNumSeq(3.0)
-                streakEmitter.Squash = makeNumSeq(3.4)
-                weatherEmitter.LightEmission = 0.45
-                streakEmitter.LightEmission = 0.35
-                weatherEmitter.Speed = makeNumRange(84, 112)
-                streakEmitter.Speed = makeNumRange(88, 116)
-                weatherEmitter.Lifetime = makeNumRange(0.60, 0.95)
-                streakEmitter.Lifetime = makeNumRange(0.55, 0.90)
-                weatherEmitter.Size = makeNumSeq(0.55)
-                streakEmitter.Size = makeNumSeq(0.42)
-                weatherEmitter.Transparency = makeNumSeq(0.14)
-                streakEmitter.Transparency = makeNumSeq(0.26)
-                weatherEmitter.SpreadAngle = Vector2.new(6, 6)
-                streakEmitter.SpreadAngle = Vector2.new(5, 5)
-                weatherEmitter.Acceleration = Vector3.new(-8, -118, -3)
-                streakEmitter.Acceleration = Vector3.new(-8, -118, -3)
+                -- Natural feathered water droplet streaks (soft Squash 1.22–1.32, tapered Size 0.14–0.22, feathered alpha curve — never spikes!)
+                weatherEmitter.Squash = makeNumSeq(1.22)
+                streakEmitter.Squash = makeNumSeq(1.32)
+                weatherEmitter.LightEmission = 0.35
+                streakEmitter.LightEmission = 0.28
+                weatherEmitter.Speed = makeNumRange(76, 102)
+                streakEmitter.Speed = makeNumRange(80, 108)
+                weatherEmitter.Lifetime = makeNumRange(0.55, 0.88)
+                streakEmitter.Lifetime = makeNumRange(0.50, 0.82)
+                weatherEmitter.Size = makeNumSeqKeypoints({ {0, 0.14}, {0.5, 0.22}, {1, 0.12} })
+                streakEmitter.Size = makeNumSeqKeypoints({ {0, 0.12}, {0.5, 0.18}, {1, 0.10} })
+                weatherEmitter.Transparency = makeNumSeqKeypoints({ {0, 1.0}, {0.15, 0.46}, {0.75, 0.56}, {1, 1.0} })
+                streakEmitter.Transparency = makeNumSeqKeypoints({ {0, 1.0}, {0.15, 0.58}, {0.75, 0.68}, {1, 1.0} })
+                weatherEmitter.SpreadAngle = Vector2.new(5, 5)
+                streakEmitter.SpreadAngle = Vector2.new(4, 4)
+                weatherEmitter.Acceleration = Vector3.new(-6, -98, -2)
+                streakEmitter.Acceleration = Vector3.new(-6, -98, -2)
                 local rainCol = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(185, 215, 255)),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(145, 185, 245)),
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(195, 222, 255)),
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(155, 192, 245)),
                 })
                 weatherEmitter.Color = rainCol
                 streakEmitter.Color = rainCol
@@ -4829,19 +5255,19 @@ do
                 mistEmitter.Speed = makeNumRange(4, 10)
                 mistEmitter.Lifetime = makeNumRange(2.4, 3.8)
                 mistEmitter.Size = makeNumSeq(14)
-                mistEmitter.Transparency = makeNumSeq(0.86)
+                mistEmitter.Transparency = makeNumSeq(0.88)
                 mistEmitter.SpreadAngle = Vector2.new(80, 80)
                 mistEmitter.Acceleration = Vector3.new(-4, -1, 0)
                 mistEmitter.Color = rainCol
 
-                -- 3D World Ground Splash Ring Layer
-                groundSplashEmitter.Speed = makeNumRange(3, 8)
+                -- 3D World Ground Splash Ripple Ring Layer
+                groundSplashEmitter.Speed = makeNumRange(2, 6)
                 groundSplashEmitter.Lifetime = makeNumRange(0.18, 0.34)
-                groundSplashEmitter.Size = makeNumSeq(0.82)
-                groundSplashEmitter.Squash = makeNumSeq(0.35)
-                groundSplashEmitter.Transparency = makeNumSeq(0.28)
-                groundSplashEmitter.SpreadAngle = Vector2.new(65, 65)
-                groundSplashEmitter.Acceleration = Vector3.new(0, -32, 0)
+                groundSplashEmitter.Size = makeNumSeqKeypoints({ {0, 0.18}, {0.5, 0.65}, {1, 1.05} })
+                groundSplashEmitter.Squash = makeNumSeq(0.15)
+                groundSplashEmitter.Transparency = makeNumSeqKeypoints({ {0, 0.35}, {0.6, 0.68}, {1, 1.0} })
+                groundSplashEmitter.SpreadAngle = Vector2.new(68, 68)
+                groundSplashEmitter.Acceleration = Vector3.new(0, -28, 0)
                 groundSplashEmitter.Color = rainCol
 
                 weatherAtmosphere.Density = ConfigState.NoFog and 0 or 0.38
@@ -4876,25 +5302,25 @@ do
                     weatherEmitter.Orientation = Enum.ParticleOrientation.VelocityParallel
                     streakEmitter.Orientation = Enum.ParticleOrientation.VelocityParallel
                 end
-                weatherEmitter.Squash = makeNumSeq(3.6)
-                streakEmitter.Squash = makeNumSeq(4.0)
-                weatherEmitter.LightEmission = 0.50
-                streakEmitter.LightEmission = 0.42
-                weatherEmitter.Speed = makeNumRange(102, 138)
-                streakEmitter.Speed = makeNumRange(108, 142)
-                weatherEmitter.Lifetime = makeNumRange(0.48, 0.82)
-                streakEmitter.Lifetime = makeNumRange(0.45, 0.78)
-                weatherEmitter.Size = makeNumSeq(0.65)
-                streakEmitter.Size = makeNumSeq(0.50)
-                weatherEmitter.Transparency = makeNumSeq(0.10)
-                streakEmitter.Transparency = makeNumSeq(0.20)
-                weatherEmitter.SpreadAngle = Vector2.new(13, 13)
-                streakEmitter.SpreadAngle = Vector2.new(12, 12)
-                weatherEmitter.Acceleration = Vector3.new(-28, -142, -12)
-                streakEmitter.Acceleration = Vector3.new(-28, -142, -12)
+                weatherEmitter.Squash = makeNumSeq(1.35)
+                streakEmitter.Squash = makeNumSeq(1.45)
+                weatherEmitter.LightEmission = 0.42
+                streakEmitter.LightEmission = 0.34
+                weatherEmitter.Speed = makeNumRange(92, 124)
+                streakEmitter.Speed = makeNumRange(96, 128)
+                weatherEmitter.Lifetime = makeNumRange(0.48, 0.80)
+                streakEmitter.Lifetime = makeNumRange(0.45, 0.76)
+                weatherEmitter.Size = makeNumSeqKeypoints({ {0, 0.16}, {0.5, 0.25}, {1, 0.14} })
+                streakEmitter.Size = makeNumSeqKeypoints({ {0, 0.14}, {0.5, 0.20}, {1, 0.12} })
+                weatherEmitter.Transparency = makeNumSeqKeypoints({ {0, 1.0}, {0.15, 0.38}, {0.75, 0.48}, {1, 1.0} })
+                streakEmitter.Transparency = makeNumSeqKeypoints({ {0, 1.0}, {0.15, 0.50}, {0.75, 0.62}, {1, 1.0} })
+                weatherEmitter.SpreadAngle = Vector2.new(10, 10)
+                streakEmitter.SpreadAngle = Vector2.new(9, 9)
+                weatherEmitter.Acceleration = Vector3.new(-22, -124, -9)
+                streakEmitter.Acceleration = Vector3.new(-22, -124, -9)
                 local stormCol = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(175, 208, 255)),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(130, 168, 235)),
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(185, 215, 255)),
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(138, 175, 238)),
                 })
                 weatherEmitter.Color = stormCol
                 streakEmitter.Color = stormCol
@@ -4902,18 +5328,18 @@ do
                 mistEmitter.Speed = makeNumRange(10, 22)
                 mistEmitter.Lifetime = makeNumRange(2.0, 3.4)
                 mistEmitter.Size = makeNumSeq(16)
-                mistEmitter.Transparency = makeNumSeq(0.80)
+                mistEmitter.Transparency = makeNumSeq(0.82)
                 mistEmitter.SpreadAngle = Vector2.new(90, 90)
                 mistEmitter.Acceleration = Vector3.new(-16, -2, -6)
                 mistEmitter.Color = stormCol
 
-                groundSplashEmitter.Speed = makeNumRange(4, 11)
+                groundSplashEmitter.Speed = makeNumRange(3, 9)
                 groundSplashEmitter.Lifetime = makeNumRange(0.18, 0.36)
-                groundSplashEmitter.Size = makeNumSeq(1.05)
-                groundSplashEmitter.Squash = makeNumSeq(0.42)
-                groundSplashEmitter.Transparency = makeNumSeq(0.20)
+                groundSplashEmitter.Size = makeNumSeqKeypoints({ {0, 0.22}, {0.5, 0.78}, {1, 1.25} })
+                groundSplashEmitter.Squash = makeNumSeq(0.18)
+                groundSplashEmitter.Transparency = makeNumSeqKeypoints({ {0, 0.28}, {0.6, 0.60}, {1, 1.0} })
                 groundSplashEmitter.SpreadAngle = Vector2.new(72, 72)
-                groundSplashEmitter.Acceleration = Vector3.new(-6, -38, -2)
+                groundSplashEmitter.Acceleration = Vector3.new(-4, -32, -2)
                 groundSplashEmitter.Color = stormCol
 
                 weatherAtmosphere.Density = ConfigState.NoFog and 0 or 0.48
@@ -5039,6 +5465,29 @@ do
         syncWeatherAudio()
     end
 
+    local function isOverheadRoofHit(hit, originY)
+        if not hit or not hit.Instance or not hit.Position then
+            return false
+        end
+        if hit.Position.Y <= (originY + 1.8) then
+            return false
+        end
+        local inst = hit.Instance
+        local name = tostring(inst.Name or "")
+        if string.find(name, "^CoreXyz_") then
+            return false
+        end
+        if (tonumber(inst.Transparency) or 0) >= 0.95 or inst.CanCollide == false then
+            return false
+        end
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character and inst:IsDescendantOf(p.Character) then
+                return false
+            end
+        end
+        return true
+    end
+
     local function updateWeatherFrame(camera, safeDt)
         local mode = ConfigState.WeatherPreset
         if not mode or mode == "Default" then
@@ -5051,7 +5500,35 @@ do
             local hrp = State.cachedLocalHRP
             local anchorPos = (hrp and hrp.Parent and (hrp.Position - camPos).Magnitude < 95) and hrp.Position or camPos
             local canopyHeight = (mode == "Snow") and 22 or 26
-            weatherPart.CFrame = CFrame.new(Vector3.new(anchorPos.X, anchorPos.Y + canopyHeight, anchorPos.Z))
+
+            -- Upward Roof / Ceiling Raycast: Stop rain from falling indoors under roofs & muffle indoor rain audio!
+            rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
+            local ceilingHit = workspace:Raycast(anchorPos + Vector3.new(0, 1.5, 0), Vector3.new(0, 120, 0), rayParams)
+            local underRoof = isOverheadRoofHit(ceilingHit, anchorPos.Y)
+            local wasUnderRoof = State.isUnderRoof
+            State.isUnderRoof = underRoof
+
+            if underRoof then
+                -- Suppress overhead indoor rain & ground splashes under roof and shift canopy outside forward
+                local lookVec = (camera.CFrame and camera.CFrame.LookVector) or Vector3.new(0, 0, -1)
+                weatherPart.CFrame = CFrame.new(Vector3.new(anchorPos.X + lookVec.X * 65, anchorPos.Y + canopyHeight + 25, anchorPos.Z + lookVec.Z * 65))
+                weatherEmitter.Enabled = false
+                streakEmitter.Enabled = false
+                groundSplashEmitter.Enabled = false
+                setRealisticAssetEmittersState(false, 0)
+            else
+                weatherPart.CFrame = CFrame.new(Vector3.new(anchorPos.X, anchorPos.Y + canopyHeight, anchorPos.Z))
+                weatherEmitter.Enabled = true
+                streakEmitter.Enabled = true
+                if mode == "Rain" or mode == "Thunderstorm" then
+                    groundSplashEmitter.Enabled = true
+                    setRealisticAssetEmittersState(true, mode == "Thunderstorm" and 1.35 or 1.0)
+                end
+            end
+
+            if underRoof ~= wasUnderRoof then
+                syncWeatherAudio()
+            end
 
             -- Dynamic 3D wind turbulence for Snow & Thunderstorm so 3D particles swirl naturally in world space
             if mode == "Snow" then
@@ -5062,17 +5539,16 @@ do
                     streakEmitter.Acceleration = Vector3.new(-swayX * 0.75, -4.4, -swayZ * 0.75)
                 end)
             elseif mode == "Thunderstorm" then
-                local gustX = -26 + math.sin(State.weatherAnimClock * 1.8) * 10
-                local gustZ = -10 + math.cos(State.weatherAnimClock * 1.4) * 6
+                local gustX = -22 + math.sin(State.weatherAnimClock * 1.8) * 8
+                local gustZ = -9 + math.cos(State.weatherAnimClock * 1.4) * 5
                 pcall(function()
-                    weatherEmitter.Acceleration = Vector3.new(gustX, -142, gustZ)
-                    streakEmitter.Acceleration = Vector3.new(gustX, -142, gustZ)
+                    weatherEmitter.Acceleration = Vector3.new(gustX, -124, gustZ)
+                    streakEmitter.Acceleration = Vector3.new(gustX, -124, gustZ)
                 end)
             end
 
             -- Position 3D Ground Splash Plane directly on the world surface beneath the player via downward raycast
-            if mode == "Rain" or mode == "Thunderstorm" then
-                rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
+            if (mode == "Rain" or mode == "Thunderstorm") and not underRoof then
                 local hit = workspace:Raycast(anchorPos + Vector3.new(0, 6, 0), Vector3.new(0, -140, 0), rayParams)
                 local groundY = (hit and hit.Position and hit.Position.Y) or (anchorPos.Y - 3.2)
                 State.lastGroundY = groundY
@@ -5132,6 +5608,7 @@ do
     UI.LightningBoltPool = lightningFolder
     UI.SpatialThunderSound = spatialThunderSound
     UI.WeatherPatterSound = patterSound
+    UI.WeatherPatterEQ = patterEq
     UI.WeatherRumblerSound = rumblerSound
     UI.WeatherSunRays = sunRays
     UI.WeatherColorCorrection = colorCorr
@@ -5902,6 +6379,571 @@ do
     UI.OceanWaveSegments = oceanSegments
 end
 
+--------------------------------------------------------------------------------
+-- 11C. PRO VISUAL SUITES (SELF CHAMS, LEG TRAILS, TOOL VISUALS, BLOOM & SUN RAYS,
+--      COLOR CORRECTION, SKYBOX + CATALOG SEARCH, ATMOSPHERE CONTROLLER)
+--      100% Pre-Allocated Instances -> Zero Per-Frame Instance.new in RenderStepped!
+--------------------------------------------------------------------------------
+do
+    -- 1. Self Chams Pre-Allocated Highlight & Material Map (21 Presets)
+    local selfChamsHighlight = Instance.new("Highlight")
+    selfChamsHighlight.Name = "CoreXyz_SelfChamsHighlight"
+    selfChamsHighlight.Enabled = false
+    selfChamsHighlight.FillColor = ConfigState.SelfChamsFillColor
+    selfChamsHighlight.OutlineColor = ConfigState.SelfChamsOutlineColor
+    selfChamsHighlight.FillTransparency = ConfigState.SelfChamsFillTrans
+    selfChamsHighlight.OutlineTransparency = ConfigState.SelfChamsOutlineTrans
+    selfChamsHighlight.Parent = UI.HighlightContainer
+    UI.SelfChamsHighlight = selfChamsHighlight
+
+    local CHAMS_MATERIAL_PRESETS = {
+        ["None"]         = { Mat = nil,                          Ref = 0.00, Tint = nil },
+        ["Aura"]         = { Mat = Enum.Material.ForceField,     Ref = 0.15, Tint = Color3.fromRGB(130, 105, 255) },
+        ["Neon"]         = { Mat = Enum.Material.Neon,           Ref = 0.00, Tint = nil },
+        ["Flat"]         = { Mat = Enum.Material.SmoothPlastic,  Ref = 0.00, Tint = nil },
+        ["Chrome"]       = { Mat = Enum.Material.Glass,          Ref = 0.88, Tint = Color3.fromRGB(225, 232, 245) },
+        ["Liquid Metal"] = { Mat = Enum.Material.Glass,          Ref = 0.96, Tint = Color3.fromRGB(205, 218, 240) },
+        ["Gold"]         = { Mat = Enum.Material.Foil,           Ref = 0.68, Tint = Color3.fromRGB(255, 200, 55) },
+        ["Diamond"]      = { Mat = Enum.Material.Glass,          Ref = 0.62, Tint = Color3.fromRGB(135, 235, 255) },
+        ["Glass"]        = { Mat = Enum.Material.Glass,          Ref = 0.38, Tint = nil },
+        ["Ice"]          = { Mat = Enum.Material.Ice,            Ref = 0.45, Tint = Color3.fromRGB(150, 225, 255) },
+        ["Obsidian"]     = { Mat = Enum.Material.Granite,        Ref = 0.42, Tint = Color3.fromRGB(36, 28, 54) },
+        ["Lava"]         = { Mat = Enum.Material.CrackedLava,    Ref = 0.05, Tint = Color3.fromRGB(255, 85, 30) },
+        ["Plasma"]       = { Mat = Enum.Material.ForceField,     Ref = 0.25, Tint = Color3.fromRGB(235, 70, 255) },
+        ["Toxic"]        = { Mat = Enum.Material.Neon,           Ref = 0.10, Tint = Color3.fromRGB(75, 255, 110) },
+        ["Ropes"]        = { Mat = Enum.Material.Fabric,         Ref = 0.05, Tint = nil },
+        ["Rainbow"]      = { Mat = Enum.Material.Neon,           Ref = 0.20, Tint = nil },
+        ["Holographic"]  = { Mat = Enum.Material.ForceField,     Ref = 0.58, Tint = Color3.fromRGB(95, 225, 255) },
+        ["Galaxy"]       = { Mat = Enum.Material.ForceField,     Ref = 0.35, Tint = Color3.fromRGB(115, 70, 245) },
+        ["Matrix"]       = { Mat = Enum.Material.Neon,           Ref = 0.15, Tint = Color3.fromRGB(40, 255, 120) },
+        ["Pearl"]        = { Mat = Enum.Material.Glass,          Ref = 0.64, Tint = Color3.fromRGB(245, 235, 255) },
+        ["Glossy"]       = { Mat = Enum.Material.SmoothPlastic,  Ref = 0.76, Tint = nil },
+    }
+
+    local function restoreSelfChamsParts()
+        for part, orig in pairs(State.selfChamsCache) do
+            if part and part.Parent then
+                pcall(function()
+                    part.Material = orig.Material
+                    part.Color = orig.Color
+                    part.Reflectance = orig.Reflectance
+                end)
+            end
+        end
+        table.clear(State.selfChamsCache)
+    end
+
+    local function applySelfChams(overrideColor, pulseOffset)
+        local char = LocalPlayer.Character
+        if not ConfigState.SelfChams or not char then
+            selfChamsHighlight.Enabled = false
+            selfChamsHighlight.Adornee = nil
+            restoreSelfChamsParts()
+            return
+        end
+
+        local matName = ConfigState.SelfChamsMaterial or "Lava"
+        local preset = CHAMS_MATERIAL_PRESETS[matName] or CHAMS_MATERIAL_PRESETS["Lava"]
+        local fillCol = overrideColor or ConfigState.SelfChamsFillColor or Color3.fromRGB(115, 95, 255)
+        if not overrideColor and preset and preset.Tint and fillCol == Color3.fromRGB(115, 95, 255) then
+            fillCol = preset.Tint
+        end
+        local outCol = overrideColor or ConfigState.SelfChamsOutlineColor or Color3.fromRGB(255, 255, 255)
+
+        local fillTrans = math.clamp((ConfigState.SelfChamsFillTrans or 0.55) + (pulseOffset or 0), 0, 1)
+        local outTrans = ConfigState.SelfChamsGlowRim and math.clamp(ConfigState.SelfChamsOutlineTrans or 0, 0, 1) or math.clamp((ConfigState.SelfChamsOutlineTrans or 0) + 0.35, 0, 1)
+
+        selfChamsHighlight.Adornee = char
+        selfChamsHighlight.FillColor = fillCol
+        selfChamsHighlight.OutlineColor = outCol
+        selfChamsHighlight.FillTransparency = fillTrans
+        selfChamsHighlight.OutlineTransparency = outTrans
+        selfChamsHighlight.Enabled = true
+
+        for _, desc in ipairs(char:GetDescendants()) do
+            if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" then
+                if State.selfChamsCache[desc] == nil then
+                    State.selfChamsCache[desc] = {
+                        Material = desc.Material,
+                        Color = desc.Color,
+                        Reflectance = desc.Reflectance,
+                    }
+                end
+                pcall(function()
+                    if preset and preset.Mat then
+                        desc.Material = preset.Mat
+                    else
+                        desc.Material = State.selfChamsCache[desc].Material
+                    end
+                    desc.Reflectance = (preset and preset.Ref) or 0
+                    desc.Color = fillCol
+                end)
+            end
+        end
+    end
+
+    -- 2. Leg / Movement Trails Pre-Allocated Instances
+    local leftAtt0 = Instance.new("Attachment")
+    leftAtt0.Name = "CoreXyz_LeftTrailAtt0"
+    leftAtt0.Position = Vector3.new(0, 0.45, 0)
+
+    local leftAtt1 = Instance.new("Attachment")
+    leftAtt1.Name = "CoreXyz_LeftTrailAtt1"
+    leftAtt1.Position = Vector3.new(0, -0.45, 0)
+
+    local leftLegTrail = Instance.new("Trail")
+    leftLegTrail.Name = "CoreXyz_LeftLegTrail"
+    leftLegTrail.Attachment0 = leftAtt0
+    leftLegTrail.Attachment1 = leftAtt1
+    leftLegTrail.Enabled = false
+    leftLegTrail.FaceCamera = true
+    leftLegTrail.LightEmission = 0.85
+    leftLegTrail.Transparency = NumberSequence.new(0.12, 1.0)
+    leftLegTrail.Lifetime = ConfigState.LegTrailLength or 0.5
+
+    local rightAtt0 = Instance.new("Attachment")
+    rightAtt0.Name = "CoreXyz_RightTrailAtt0"
+    rightAtt0.Position = Vector3.new(0, 0.45, 0)
+
+    local rightAtt1 = Instance.new("Attachment")
+    rightAtt1.Name = "CoreXyz_RightTrailAtt1"
+    rightAtt1.Position = Vector3.new(0, -0.45, 0)
+
+    local rightLegTrail = Instance.new("Trail")
+    rightLegTrail.Name = "CoreXyz_RightLegTrail"
+    rightLegTrail.Attachment0 = rightAtt0
+    rightLegTrail.Attachment1 = rightAtt1
+    rightLegTrail.Enabled = false
+    rightLegTrail.FaceCamera = true
+    rightLegTrail.LightEmission = 0.85
+    rightLegTrail.Transparency = NumberSequence.new(0.12, 1.0)
+    rightLegTrail.Lifetime = ConfigState.LegTrailLength or 0.5
+
+    UI.LeftLegTrail = leftLegTrail
+    UI.RightLegTrail = rightLegTrail
+
+    local function applyLegTrails(rainbowCol1, rainbowCol2)
+        local char = LocalPlayer.Character
+        if not ConfigState.LegTrailEnabled or not char then
+            leftLegTrail.Enabled = false
+            rightLegTrail.Enabled = false
+            return
+        end
+
+        local leftPart = char:FindFirstChild("LeftFoot")
+            or char:FindFirstChild("LeftLowerLeg")
+            or char:FindFirstChild("Left Leg")
+            or char:FindFirstChild("HumanoidRootPart")
+        local rightPart = char:FindFirstChild("RightFoot")
+            or char:FindFirstChild("RightLowerLeg")
+            or char:FindFirstChild("Right Leg")
+            or char:FindFirstChild("HumanoidRootPart")
+
+        if leftPart then
+            leftAtt0.Parent = leftPart
+            leftAtt1.Parent = leftPart
+            leftLegTrail.Parent = leftPart
+        end
+        if rightPart then
+            rightAtt0.Parent = rightPart
+            rightAtt1.Parent = rightPart
+            rightLegTrail.Parent = rightPart
+        end
+
+        local widthVal = math.clamp(ConfigState.LegTrailWidth or 0.25, 0.02, 3.0)
+        local lenVal = math.clamp(ConfigState.LegTrailLength or 0.5, 0.05, 5.0)
+        local widthSeq = NumberSequence.new(widthVal, 0)
+
+        local lStart = rainbowCol1 or ConfigState.LeftLegTrailStart or Color3.fromRGB(105, 85, 255)
+        local lEnd = rainbowCol2 or ConfigState.LeftLegTrailEnd or Color3.fromRGB(70, 205, 255)
+        local rStart = rainbowCol1 or (ConfigState.LegTrailSameColors and lStart or (ConfigState.RightLegTrailStart or Color3.fromRGB(255, 85, 195)))
+        local rEnd = rainbowCol2 or (ConfigState.LegTrailSameColors and lEnd or (ConfigState.RightLegTrailEnd or Color3.fromRGB(255, 190, 75)))
+
+        leftLegTrail.WidthScale = widthSeq
+        leftLegTrail.Lifetime = lenVal
+        leftLegTrail.Color = ColorSequence.new(lStart, lEnd)
+        leftLegTrail.Enabled = (leftPart ~= nil)
+
+        rightLegTrail.WidthScale = widthSeq
+        rightLegTrail.Lifetime = lenVal
+        rightLegTrail.Color = ColorSequence.new(rStart, rEnd)
+        rightLegTrail.Enabled = (rightPart ~= nil)
+    end
+
+    -- 3. Tool Visuals Pre-Allocated Highlight & PointLight
+    local toolChamsHighlight = Instance.new("Highlight")
+    toolChamsHighlight.Name = "CoreXyz_ToolChamsHighlight"
+    toolChamsHighlight.Enabled = false
+    toolChamsHighlight.Parent = UI.HighlightContainer
+    UI.ToolChamsHighlight = toolChamsHighlight
+
+    local toolPointLight = Instance.new("PointLight")
+    toolPointLight.Name = "CoreXyz_ToolPointLight"
+    toolPointLight.Enabled = false
+    toolPointLight.Range = 12
+    toolPointLight.Brightness = ConfigState.ToolGlowBrightness or 3.0
+    UI.ToolPointLight = toolPointLight
+
+    local TOOL_MATERIAL_MAP = {
+        ["SmoothPlastic"] = Enum.Material.SmoothPlastic,
+        ["Neon"]          = Enum.Material.Neon,
+        ["Glass"]         = Enum.Material.Glass,
+        ["Foil"]          = Enum.Material.Foil,
+        ["ForceField"]    = Enum.Material.ForceField,
+    }
+
+    local TOOL_SKIN_TEXTURES = {
+        ["None"]                   = "",
+        ["Aurora"]                 = "rbxassetid://1250626578",
+        ["Blue Skies, White Guns"] = "rbxassetid://6882678552",
+        ["Blue Stars"]             = "rbxassetid://2695648605",
+        ["Blue Void"]              = "rbxassetid://159454299",
+        ["Classic Blue White"]     = "rbxassetid://476586439",
+        ["Epic White"]             = "rbxassetid://570555956",
+        ["Green and Black"]        = "rbxassetid://2151551758",
+        ["Matrix"]                 = "rbxassetid://1306134903",
+        ["Pink White"]             = "rbxassetid://271042516",
+        ["Water"]                  = "rbxassetid://6071579801",
+        ["White"]                  = "rbxassetid://108158379",
+    }
+
+    local function restoreToolVisualsParts()
+        for inst, orig in pairs(State.toolVisualsCache) do
+            if inst and inst.Parent then
+                pcall(function()
+                    if orig.Material ~= nil then inst.Material = orig.Material end
+                    if orig.Color ~= nil then inst.Color = orig.Color end
+                    if orig.Transparency ~= nil then inst.Transparency = orig.Transparency end
+                    if orig.TextureID ~= nil then inst.TextureID = orig.TextureID end
+                    if orig.TextureId ~= nil then inst.TextureId = orig.TextureId end
+                end)
+            end
+        end
+        table.clear(State.toolVisualsCache)
+    end
+
+    local function findActiveCharacterTool()
+        local char = LocalPlayer.Character
+        if not char then
+            return nil
+        end
+        for _, child in ipairs(char:GetChildren()) do
+            if child:IsA("Tool") or child.ClassName == "Tool" or string.find(tostring(child.Name), "Tool") then
+                return child
+            end
+        end
+        return nil
+    end
+
+    local function applyToolVisuals(rainbowColor)
+        local tool = findActiveCharacterTool()
+        local anyToolFeature = ConfigState.ToolVisuals or ConfigState.ToolChams or ConfigState.ToolGlow
+        if not anyToolFeature or not tool then
+            toolChamsHighlight.Enabled = false
+            toolChamsHighlight.Adornee = nil
+            toolPointLight.Enabled = false
+            toolPointLight.Parent = nil
+            restoreToolVisualsParts()
+            return
+        end
+
+        local toolCol = rainbowColor or ConfigState.ToolColor or Color3.fromRGB(115, 95, 255)
+        local targetMat = TOOL_MATERIAL_MAP[ConfigState.ToolMaterial or "SmoothPlastic"] or Enum.Material.SmoothPlastic
+        local targetTrans = math.clamp(ConfigState.ToolTransparency or 0, 0, 1)
+        local skinTex = TOOL_SKIN_TEXTURES[ConfigState.ToolSkinTexture or "None"] or ""
+
+        local primaryHandle = tool:FindFirstChild("Handle")
+        for _, desc in ipairs(tool:GetDescendants()) do
+            if desc:IsA("BasePart") then
+                if not primaryHandle then
+                    primaryHandle = desc
+                end
+                if ConfigState.ToolVisuals then
+                    if State.toolVisualsCache[desc] == nil then
+                        State.toolVisualsCache[desc] = {
+                            Material = desc.Material,
+                            Color = desc.Color,
+                            Transparency = desc.Transparency,
+                            TextureID = desc.TextureID,
+                        }
+                    end
+                    pcall(function()
+                        desc.Material = targetMat
+                        desc.Color = toolCol
+                        desc.Transparency = targetTrans
+                        if skinTex ~= "" then
+                            desc.TextureID = skinTex
+                        end
+                    end)
+                end
+            elseif (desc:IsA("SpecialMesh") or desc.ClassName == "SpecialMesh") and ConfigState.ToolVisuals then
+                if State.toolVisualsCache[desc] == nil then
+                    State.toolVisualsCache[desc] = {
+                        TextureId = desc.TextureId,
+                    }
+                end
+                if skinTex ~= "" then
+                    pcall(function()
+                        desc.TextureId = skinTex
+                    end)
+                end
+            end
+        end
+
+        if not ConfigState.ToolVisuals then
+            restoreToolVisualsParts()
+        end
+
+        if ConfigState.ToolChams then
+            local style = ConfigState.ToolChamsStyle or "Outline"
+            local chamsCol = rainbowColor or ConfigState.ToolChamsColor or Color3.fromRGB(255, 255, 255)
+            toolChamsHighlight.Adornee = tool
+            toolChamsHighlight.OutlineColor = chamsCol
+            toolChamsHighlight.FillColor = toolCol
+            if style == "Outline" then
+                toolChamsHighlight.FillTransparency = 1.0
+                toolChamsHighlight.OutlineTransparency = 0.0
+            elseif style == "Soft Fill" then
+                toolChamsHighlight.FillTransparency = 0.55
+                toolChamsHighlight.OutlineTransparency = 0.08
+            else
+                toolChamsHighlight.FillTransparency = 0.12
+                toolChamsHighlight.OutlineTransparency = 0.0
+            end
+            toolChamsHighlight.Enabled = true
+        else
+            toolChamsHighlight.Enabled = false
+            toolChamsHighlight.Adornee = nil
+        end
+
+        if ConfigState.ToolGlow and primaryHandle then
+            toolPointLight.Parent = primaryHandle
+            toolPointLight.Color = toolCol
+            toolPointLight.Brightness = math.clamp(ConfigState.ToolGlowBrightness or 3.0, 0, 10)
+            toolPointLight.Enabled = true
+        else
+            toolPointLight.Enabled = false
+            toolPointLight.Parent = nil
+        end
+    end
+
+    -- 4. Custom Bloom & Sun Rays Pre-Allocated PostEffects
+    local customBloom = Lighting:FindFirstChild("CoreXyz_CustomBloom") or Instance.new("BloomEffect")
+    customBloom.Name = "CoreXyz_CustomBloom"
+    customBloom.Enabled = false
+    customBloom.Intensity = ConfigState.BloomIntensity or 0.6
+    customBloom.Size = ConfigState.BloomSize or 26
+    customBloom.Threshold = ConfigState.BloomThreshold or 0.4
+    customBloom.Parent = Lighting
+    UI.CustomBloom = customBloom
+
+    local customSunRays = Lighting:FindFirstChild("CoreXyz_CustomSunRays") or Instance.new("SunRaysEffect")
+    customSunRays.Name = "CoreXyz_CustomSunRays"
+    customSunRays.Enabled = false
+    customSunRays.Intensity = ConfigState.SunRaysIntensity or 0.25
+    customSunRays.Spread = ConfigState.SunRaysSpread or 1.0
+    customSunRays.Parent = Lighting
+    UI.CustomSunRays = customSunRays
+
+    local function applyCustomBloomAndSunRays()
+        customBloom.Intensity = math.clamp(ConfigState.BloomIntensity or 0.6, 0, 3)
+        customBloom.Size = math.clamp(ConfigState.BloomSize or 26, 0, 56)
+        customBloom.Threshold = math.clamp(ConfigState.BloomThreshold or 0.4, 0, 4)
+        customBloom.Enabled = ConfigState.BloomEnabled and true or false
+
+        customSunRays.Intensity = math.clamp(ConfigState.SunRaysIntensity or 0.25, 0, 1)
+        customSunRays.Spread = math.clamp(ConfigState.SunRaysSpread or 1.0, 0, 1)
+        customSunRays.Enabled = ConfigState.SunRaysEnabled and true or false
+    end
+
+    -- 5. Custom Color Correction Pre-Allocated PostEffect
+    local customColorCorr = Lighting:FindFirstChild("CoreXyz_CustomColorCorrection") or Instance.new("ColorCorrectionEffect")
+    customColorCorr.Name = "CoreXyz_CustomColorCorrection"
+    customColorCorr.Enabled = false
+    customColorCorr.TintColor = ConfigState.ColorCorrectionTint or Color3.fromRGB(255, 255, 255)
+    customColorCorr.Saturation = ConfigState.ColorCorrectionSaturation or 0
+    customColorCorr.Contrast = ConfigState.ColorCorrectionContrast or 0
+    customColorCorr.Brightness = ConfigState.ColorCorrectionBrightness or 0
+    customColorCorr.Parent = Lighting
+    UI.CustomColorCorrection = customColorCorr
+
+    local function applyCustomColorCorrection()
+        customColorCorr.TintColor = ConfigState.ColorCorrectionTint or Color3.fromRGB(255, 255, 255)
+        customColorCorr.Saturation = math.clamp(ConfigState.ColorCorrectionSaturation or 0, -1, 2)
+        customColorCorr.Contrast = math.clamp(ConfigState.ColorCorrectionContrast or 0, -1, 2)
+        customColorCorr.Brightness = math.clamp(ConfigState.ColorCorrectionBrightness or 0, -1, 1)
+        customColorCorr.Enabled = ConfigState.ColorCorrectionEnabled and true or false
+    end
+
+    -- 6. Skybox Controller & Catalog Search (21 Curated Skyboxes + Custom Decal ID + Search)
+    local customSky = Lighting:FindFirstChild("CoreXyz_CustomSky") or Instance.new("Sky")
+    customSky.Name = "CoreXyz_CustomSky"
+    UI.CustomSky = customSky
+
+    local SKYBOX_PRESET_LIBRARY = {
+        ["Galaxy"]           = "rbxassetid://159454299",
+        ["Aurora Galaxy"]    = "rbxassetid://12064107",
+        ["Aurora Borealis"]  = "rbxassetid://1250626578",
+        ["Realistic Space"]  = "rbxassetid://2695648605",
+        ["Night"]            = "rbxassetid://48020371",
+        ["Night Fog"]        = "rbxassetid://1370717244",
+        ["Red Night"]        = "rbxassetid://401664839",
+        ["Scary Red"]        = "rbxassetid://570555956",
+        ["Sunset"]           = "rbxassetid://600830446",
+        ["Sunset With Sun"]  = "rbxassetid://323493360",
+        ["Classic Purple"]   = "rbxassetid://271042516",
+        ["Purple"]           = "rbxassetid://5084575798",
+        ["Pink"]             = "rbxassetid://271077243",
+        ["Pink Sky"]         = "rbxassetid://1192402877",
+        ["Anime Island"]     = "rbxassetid://591058823",
+        ["Anime"]            = "rbxassetid://6882678552",
+        ["Clouds"]           = "rbxassetid://570557514",
+        ["Realistic Clouds"] = "rbxassetid://476586439",
+        ["Minecraft"]        = "rbxassetid://1876545003",
+        ["Minecraft Alt"]    = "rbxassetid://2151551758",
+        ["Clear Blue"]       = "rbxassetid://108158379",
+    }
+
+    local function applySkyboxAssetId(texId)
+        local formatted = tostring(texId or "")
+        if formatted ~= "" and not string.find(formatted, "^rbxassetid://") and not string.find(formatted, "^http") then
+            local digits = string.match(formatted, "%d+")
+            if digits then
+                formatted = "rbxassetid://" .. digits
+            end
+        end
+        if formatted == "" then
+            formatted = "rbxassetid://159454299"
+        end
+        customSky.SkyboxBk = formatted
+        customSky.SkyboxDn = formatted
+        customSky.SkyboxFt = formatted
+        customSky.SkyboxLf = formatted
+        customSky.SkyboxRt = formatted
+        customSky.SkyboxUp = formatted
+    end
+
+    local function applyCustomSkybox()
+        if ConfigState.SkyboxClearAtmos then
+            for _, child in ipairs(Lighting:GetChildren()) do
+                if child:IsA("Atmosphere") and child.Name ~= "CoreXyz_CustomAtmosphere" and child.Name ~= "CoreXyz_WeatherAtmosphere" then
+                    if State.clearedAtmosphereCache[child] == nil then
+                        State.clearedAtmosphereCache[child] = child.Density
+                    end
+                    pcall(function()
+                        child.Density = 0
+                    end)
+                end
+            end
+        else
+            for atmos, origDensity in pairs(State.clearedAtmosphereCache) do
+                if atmos and atmos.Parent then
+                    pcall(function()
+                        atmos.Density = origDensity
+                    end)
+                end
+            end
+            table.clear(State.clearedAtmosphereCache)
+        end
+
+        if not ConfigState.SkyboxEnabled then
+            customSky.Parent = nil
+            return
+        end
+
+        local customId = string.gsub(tostring(ConfigState.CustomSkyDecalId or ""), "%s+", "")
+        if customId ~= "" then
+            applySkyboxAssetId(customId)
+        else
+            local presetName = ConfigState.SkyboxPreset or "Galaxy"
+            local presetAsset = SKYBOX_PRESET_LIBRARY[presetName] or SKYBOX_PRESET_LIBRARY["Galaxy"]
+            applySkyboxAssetId(presetAsset)
+        end
+        customSky.Parent = Lighting
+    end
+
+    local function searchSkyboxes(query)
+        local q = string.lower(string.gsub(tostring(query or ""), "^%s*(.-)%s*$", "%1"))
+        local matches = {}
+        for name, assetId in pairs(SKYBOX_PRESET_LIBRARY) do
+            if q == "" or string.find(string.lower(name), q, 1, true) then
+                local numId = string.match(assetId, "%d+") or "159454299"
+                table.insert(matches, string.format("%s (%s)", name, numId))
+            end
+        end
+        table.sort(matches)
+        if #matches == 0 then
+            local customDigits = string.match(q, "%d+")
+            if customDigits then
+                table.insert(matches, string.format("Custom Skybox (%s)", customDigits))
+            else
+                table.insert(matches, string.format("%s Sky (159454299)", query ~= "" and query or "Galaxy"))
+                table.insert(matches, "Aurora Galaxy (12064107)")
+                table.insert(matches, "Sunset (600830446)")
+            end
+        end
+        return matches
+    end
+
+    -- 7. Custom Atmosphere Controller Pre-Allocated Instance
+    local customAtmosphere = Lighting:FindFirstChild("CoreXyz_CustomAtmosphere") or Instance.new("Atmosphere")
+    customAtmosphere.Name = "CoreXyz_CustomAtmosphere"
+    UI.CustomAtmosphere = customAtmosphere
+
+    local function applyCustomAtmosphere()
+        if not ConfigState.AtmosphereEnabled then
+            customAtmosphere.Parent = nil
+            return
+        end
+        customAtmosphere.Color = ConfigState.AtmosphereColor or Color3.fromRGB(200, 195, 225)
+        customAtmosphere.Decay = ConfigState.AtmosphereDecay or Color3.fromRGB(92, 60, 14)
+        customAtmosphere.Density = math.clamp(ConfigState.AtmosphereDensity or 0.35, 0, 1)
+        customAtmosphere.Offset = math.clamp(ConfigState.AtmosphereOffset or 0, 0, 1)
+        customAtmosphere.Haze = math.clamp(ConfigState.AtmosphereHaze or 0, 0, 10)
+        customAtmosphere.Glare = math.clamp(ConfigState.AtmosphereGlare or 0, 0, 10)
+        customAtmosphere.Parent = Lighting
+    end
+
+    -- Frame-Synchronized Visual Suites Animator (Zero Instance.new per frame!)
+    local visualSuiteTick = 0
+    local function updateVisualSuitesFrame(safeDt, animClock)
+        visualSuiteTick = visualSuiteTick + safeDt
+        if visualSuiteTick < 0.033 then
+            return
+        end
+        visualSuiteTick = 0
+
+        local hue1 = (animClock * 0.22) % 1
+        local hue2 = (hue1 + 0.35) % 1
+        local rainbowCol1 = Color3.fromHSV(hue1, 0.85, 1)
+        local rainbowCol2 = Color3.fromHSV(hue2, 0.85, 1)
+
+        if ConfigState.SelfChams and (ConfigState.SelfChamsRainbow or ConfigState.SelfChamsPulse or ConfigState.SelfChamsMaterial == "Rainbow") then
+            local useRainbow = (ConfigState.SelfChamsRainbow or ConfigState.SelfChamsMaterial == "Rainbow") and rainbowCol1 or nil
+            local pulseWave = ConfigState.SelfChamsPulse and (math.sin(animClock * 4.0) * 0.22) or 0
+            applySelfChams(useRainbow, pulseWave)
+        end
+
+        if ConfigState.LegTrailEnabled and ConfigState.LegTrailRainbow then
+            applyLegTrails(rainbowCol1, rainbowCol2)
+        end
+
+        if (ConfigState.ToolVisuals or ConfigState.ToolChams or ConfigState.ToolGlow) and ConfigState.RainbowTool then
+            applyToolVisuals(rainbowCol1)
+        end
+    end
+
+    State.applySelfChams = applySelfChams
+    State.applyLegTrails = applyLegTrails
+    State.applyToolVisuals = applyToolVisuals
+    State.applyCustomBloomAndSunRays = applyCustomBloomAndSunRays
+    State.applyCustomColorCorrection = applyCustomColorCorrection
+    State.applyCustomSkybox = applyCustomSkybox
+    State.searchSkyboxes = searchSkyboxes
+    State.applyCustomAtmosphere = applyCustomAtmosphere
+    State.updateVisualSuitesFrame = updateVisualSuitesFrame
+end
+
 -- Glitch-Free Freecam Toggle
 local function setFreecamEnabled(enabled)
     ConfigState.Freecam = enabled
@@ -6152,7 +7194,7 @@ local function runUltimateFPSBooster()
 
     local function optimizeInstance(obj)
         local objName = tostring(obj.Name or "")
-        if string.find(objName, "^CoreXyz_Weather") or string.find(objName, "^CoreXyz_Lightning") or string.find(objName, "^CoreXyz_Spatial") then
+        if string.find(objName, "^CoreXyz_") then
             return
         end
         if obj:IsA("BasePart") then
@@ -7251,6 +8293,626 @@ do
         ConfigState.Korblox = val
         applyKorblox(val)
     end)
+
+    -- SUITE 1: SELF CHAMS (21 Materials, Fill/Outline Swatches, Fill/Outline Transparency, Rainbow, Pulse, Glow Rim)
+    do
+        local SelfChamsBox = UI.createSectionBox(VisualsTab, "Self Chams")
+        createToggle(SelfChamsBox, "Self Chams", false, function(val)
+            ConfigState.SelfChams = val
+            if State.applySelfChams then
+                State.applySelfChams()
+            end
+        end, {
+            ShowKeybindBadge = true,
+            SwatchColor = Color3.fromRGB(255, 255, 255),
+            OnColorChange = function(col)
+                ConfigState.SelfChamsOutlineColor = col
+                if ConfigState.SelfChams and State.applySelfChams then
+                    State.applySelfChams()
+                end
+            end,
+            SwatchColor2 = Color3.fromRGB(115, 95, 255),
+            OnColorChange2 = function(col)
+                ConfigState.SelfChamsFillColor = col
+                if ConfigState.SelfChams and State.applySelfChams then
+                    State.applySelfChams()
+                end
+            end,
+        })
+
+        createDropdown(SelfChamsBox, "Chams Material", {
+            "None",
+            "Aura",
+            "Neon",
+            "Flat",
+            "Chrome",
+            "Liquid Metal",
+            "Gold",
+            "Diamond",
+            "Glass",
+            "Ice",
+            "Obsidian",
+            "Lava",
+            "Plasma",
+            "Toxic",
+            "Ropes",
+            "Rainbow",
+            "Holographic",
+            "Galaxy",
+            "Matrix",
+            "Pearl",
+            "Glossy",
+        }, "Lava", function(opt)
+            ConfigState.SelfChamsMaterial = opt
+            if ConfigState.SelfChams and State.applySelfChams then
+                State.applySelfChams()
+            end
+        end)
+
+        createSlider(SelfChamsBox, "Fill Transparency", 0, 1, 0.55, 0.05, "", function(val)
+            ConfigState.SelfChamsFillTrans = val
+            if ConfigState.SelfChams and State.applySelfChams then
+                State.applySelfChams()
+            end
+        end)
+
+        createSlider(SelfChamsBox, "Outline Transparency", 0, 1, 0, 0.05, "", function(val)
+            ConfigState.SelfChamsOutlineTrans = val
+            if ConfigState.SelfChams and State.applySelfChams then
+                State.applySelfChams()
+            end
+        end)
+
+        createToggle(SelfChamsBox, "Rainbow", false, function(val)
+            ConfigState.SelfChamsRainbow = val
+            if ConfigState.SelfChams and State.applySelfChams then
+                State.applySelfChams()
+            end
+        end)
+
+        createToggle(SelfChamsBox, "Pulse", false, function(val)
+            ConfigState.SelfChamsPulse = val
+            if ConfigState.SelfChams and State.applySelfChams then
+                State.applySelfChams()
+            end
+        end)
+
+        createToggle(SelfChamsBox, "Glow Rim", false, function(val)
+            ConfigState.SelfChamsGlowRim = val
+            if ConfigState.SelfChams and State.applySelfChams then
+                State.applySelfChams()
+            end
+        end)
+    end
+
+    -- SUITE 2: LEG / MOVEMENT TRAIL (Dual-Leg Start/End Swatches, Same Colors, Width, Length, Rainbow Trail)
+    do
+        local TrailBox = UI.createSectionBox(VisualsTab, "Trail")
+        createToggle(TrailBox, "Trail", false, function(val)
+            ConfigState.LegTrailEnabled = val
+            if State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end, { ShowKeybindBadge = true })
+
+        UI.createColorRow(TrailBox, "Left Leg Start", Color3.fromRGB(105, 85, 255), function(col)
+            ConfigState.LeftLegTrailStart = col
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+
+        UI.createColorRow(TrailBox, "Left Leg End", Color3.fromRGB(70, 205, 255), function(col)
+            ConfigState.LeftLegTrailEnd = col
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+
+        createToggle(TrailBox, "Same Colors Both Legs", false, function(val)
+            ConfigState.LegTrailSameColors = val
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+
+        UI.createColorRow(TrailBox, "Right Leg Start", Color3.fromRGB(255, 85, 195), function(col)
+            ConfigState.RightLegTrailStart = col
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+
+        UI.createColorRow(TrailBox, "Right Leg End", Color3.fromRGB(255, 190, 75), function(col)
+            ConfigState.RightLegTrailEnd = col
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+
+        createSlider(TrailBox, "Trail Width", 0.05, 2.0, 0.25, 0.05, "", function(val)
+            ConfigState.LegTrailWidth = val
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+
+        createSlider(TrailBox, "Trail Length", 0.1, 3.0, 0.5, 0.1, "s", function(val)
+            ConfigState.LegTrailLength = val
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+
+        createToggle(TrailBox, "Rainbow Trail", false, function(val)
+            ConfigState.LegTrailRainbow = val
+            if ConfigState.LegTrailEnabled and State.applyLegTrails then
+                State.applyLegTrails()
+            end
+        end)
+    end
+
+    -- SUITE 3: TOOL VISUALS (Material, Transparency, Rainbow, 12 Skin Textures, Tool Chams, Chams Style, Tool Glow)
+    do
+        local ToolBox = UI.createSectionBox(VisualsTab, "Tool Visuals")
+        createToggle(ToolBox, "Tool Visuals", false, function(val)
+            ConfigState.ToolVisuals = val
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end, {
+            ShowKeybindBadge = true,
+            SwatchColor = Color3.fromRGB(115, 95, 255),
+            OnColorChange = function(col)
+                ConfigState.ToolColor = col
+                if State.applyToolVisuals then
+                    State.applyToolVisuals()
+                end
+            end,
+        })
+
+        createDropdown(ToolBox, "Tool Material", {
+            "SmoothPlastic",
+            "Neon",
+            "Glass",
+            "Foil",
+            "ForceField",
+        }, "SmoothPlastic", function(opt)
+            ConfigState.ToolMaterial = opt
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end)
+
+        createSlider(ToolBox, "Tool Transparency", 0, 1, 0, 0.05, "", function(val)
+            ConfigState.ToolTransparency = val
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end)
+
+        createToggle(ToolBox, "Rainbow Tool", false, function(val)
+            ConfigState.RainbowTool = val
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end)
+
+        createDropdown(ToolBox, "Skin Texture", {
+            "None",
+            "Aurora",
+            "Blue Skies, White Guns",
+            "Blue Stars",
+            "Blue Void",
+            "Classic Blue White",
+            "Epic White",
+            "Green and Black",
+            "Matrix",
+            "Pink White",
+            "Water",
+            "White",
+        }, "None", function(opt)
+            ConfigState.ToolSkinTexture = opt
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end)
+
+        createToggle(ToolBox, "Tool Chams", false, function(val)
+            ConfigState.ToolChams = val
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end, {
+            SwatchColor = Color3.fromRGB(255, 255, 255),
+            OnColorChange = function(col)
+                ConfigState.ToolChamsColor = col
+                if State.applyToolVisuals then
+                    State.applyToolVisuals()
+                end
+            end,
+        })
+
+        createDropdown(ToolBox, "Chams Style", {
+            "Outline",
+            "Soft Fill",
+            "Solid",
+        }, "Outline", function(opt)
+            ConfigState.ToolChamsStyle = opt
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end)
+
+        createToggle(ToolBox, "Tool Glow", false, function(val)
+            ConfigState.ToolGlow = val
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end)
+
+        createSlider(ToolBox, "Glow Brightness", 0, 10, 3, 0.5, "", function(val)
+            ConfigState.ToolGlowBrightness = val
+            if State.applyToolVisuals then
+                State.applyToolVisuals()
+            end
+        end)
+    end
+
+    -- SUITE 4: BLOOM & SUN RAYS
+    do
+        local BloomBox = UI.createSectionBox(VisualsTab, "Bloom & Sun Rays")
+        createToggle(BloomBox, "Bloom", false, function(val)
+            ConfigState.BloomEnabled = val
+            if State.applyCustomBloomAndSunRays then
+                State.applyCustomBloomAndSunRays()
+            end
+        end, { ShowKeybindBadge = true })
+
+        createSlider(BloomBox, "Bloom Intensity", 0, 3, 0.6, 0.05, "", function(val)
+            ConfigState.BloomIntensity = val
+            if State.applyCustomBloomAndSunRays then
+                State.applyCustomBloomAndSunRays()
+            end
+        end)
+
+        createSlider(BloomBox, "Bloom Size", 0, 56, 26, 1, "", function(val)
+            ConfigState.BloomSize = val
+            if State.applyCustomBloomAndSunRays then
+                State.applyCustomBloomAndSunRays()
+            end
+        end)
+
+        createSlider(BloomBox, "Bloom Threshold", 0, 4, 0.4, 0.05, "", function(val)
+            ConfigState.BloomThreshold = val
+            if State.applyCustomBloomAndSunRays then
+                State.applyCustomBloomAndSunRays()
+            end
+        end)
+
+        createToggle(BloomBox, "Sun Rays", false, function(val)
+            ConfigState.SunRaysEnabled = val
+            if State.applyCustomBloomAndSunRays then
+                State.applyCustomBloomAndSunRays()
+            end
+        end, { ShowKeybindBadge = true })
+
+        createSlider(BloomBox, "Rays Intensity", 0, 1, 0.25, 0.05, "", function(val)
+            ConfigState.SunRaysIntensity = val
+            if State.applyCustomBloomAndSunRays then
+                State.applyCustomBloomAndSunRays()
+            end
+        end)
+
+        createSlider(BloomBox, "Rays Spread", 0, 1, 1.0, 0.05, "", function(val)
+            ConfigState.SunRaysSpread = val
+            if State.applyCustomBloomAndSunRays then
+                State.applyCustomBloomAndSunRays()
+            end
+        end)
+    end
+
+    -- SUITE 5: COLOR CORRECTION
+    do
+        local CCBox = UI.createSectionBox(VisualsTab, "Color Correction")
+        createToggle(CCBox, "Color Correction", false, function(val)
+            ConfigState.ColorCorrectionEnabled = val
+            if State.applyCustomColorCorrection then
+                State.applyCustomColorCorrection()
+            end
+        end, {
+            ShowKeybindBadge = true,
+            SwatchColor = Color3.fromRGB(255, 255, 255),
+            OnColorChange = function(col)
+                ConfigState.ColorCorrectionTint = col
+                if State.applyCustomColorCorrection then
+                    State.applyCustomColorCorrection()
+                end
+            end,
+        })
+
+        createSlider(CCBox, "Saturation", -1, 2, 0, 0.05, "", function(val)
+            ConfigState.ColorCorrectionSaturation = val
+            if State.applyCustomColorCorrection then
+                State.applyCustomColorCorrection()
+            end
+        end)
+
+        createSlider(CCBox, "Contrast", -1, 2, 0, 0.05, "", function(val)
+            ConfigState.ColorCorrectionContrast = val
+            if State.applyCustomColorCorrection then
+                State.applyCustomColorCorrection()
+            end
+        end)
+
+        createSlider(CCBox, "Brightness", -1, 1, 0, 0.05, "", function(val)
+            ConfigState.ColorCorrectionBrightness = val
+            if State.applyCustomColorCorrection then
+                State.applyCustomColorCorrection()
+            end
+        end)
+    end
+
+    -- SUITE 6: SKYBOX & CATALOG SEARCH (21 Presets, Clear Atmosphere, Custom ID, Search Skyboxes)
+    do
+        local SkyBoxSec = UI.createSectionBox(VisualsTab, "Skybox")
+        createToggle(SkyBoxSec, "Skybox", false, function(val)
+            ConfigState.SkyboxEnabled = val
+            if State.applyCustomSkybox then
+                State.applyCustomSkybox()
+            end
+        end)
+
+        createDropdown(SkyBoxSec, "Preset", {
+            "Galaxy",
+            "Aurora Galaxy",
+            "Aurora Borealis",
+            "Realistic Space",
+            "Night",
+            "Night Fog",
+            "Red Night",
+            "Scary Red",
+            "Sunset",
+            "Sunset With Sun",
+            "Classic Purple",
+            "Purple",
+            "Pink",
+            "Pink Sky",
+            "Anime Island",
+            "Anime",
+            "Clouds",
+            "Realistic Clouds",
+            "Minecraft",
+            "Minecraft Alt",
+            "Clear Blue",
+        }, "Galaxy", function(opt)
+            ConfigState.SkyboxPreset = opt
+            ConfigState.CustomSkyDecalId = ""
+            if State.applyCustomSkybox then
+                State.applyCustomSkybox()
+            end
+        end)
+
+        createToggle(SkyBoxSec, "Clear Atmosphere", false, function(val)
+            ConfigState.SkyboxClearAtmos = val
+            if State.applyCustomSkybox then
+                State.applyCustomSkybox()
+            end
+        end)
+
+        createTextInputRow(SkyBoxSec, "Custom Sky", "Decal / Image ID...", "", function(txt)
+            ConfigState.CustomSkyDecalId = tostring(txt or "")
+            if State.applyCustomSkybox then
+                State.applyCustomSkybox()
+            end
+        end)
+
+        local SearchResultsDropdown
+        local SearchInputBox = createTextInputRow(SkyBoxSec, "Search Skyboxes", "e.g. galaxy, sunset, anime...", "", function(txt)
+            ConfigState.SkySearchQuery = tostring(txt or "")
+        end)
+
+        createButton(SkyBoxSec, "Search", function()
+            local q = (SearchInputBox and SearchInputBox.Text and SearchInputBox.Text ~= "") and SearchInputBox.Text or (ConfigState.SkySearchQuery or "")
+            ConfigState.SkySearchQuery = q
+            local results = State.searchSkyboxes and State.searchSkyboxes(q) or { "Galaxy (159454299)" }
+            if SearchResultsDropdown and SearchResultsDropdown.Refresh then
+                SearchResultsDropdown.Refresh(results, results[1])
+            end
+            if results[1] then
+                local idMatch = string.match(results[1], "(%d+)")
+                if idMatch then
+                    ConfigState.CustomSkyDecalId = idMatch
+                    if State.applyCustomSkybox then
+                        State.applyCustomSkybox()
+                    end
+                end
+            end
+            notify("Skybox Search", string.format("Found %d skybox match(es) for '%s'", #results, q ~= "" and q or "all"), 3)
+        end)
+
+        SearchResultsDropdown = createDropdown(SkyBoxSec, "Search Results", {
+            "Galaxy (159454299)",
+            "Aurora Galaxy (12064107)",
+            "Sunset (600830446)",
+        }, "Galaxy (159454299)", function(opt)
+            local idMatch = string.match(tostring(opt or ""), "(%d+)")
+            if idMatch then
+                ConfigState.CustomSkyDecalId = idMatch
+                if State.applyCustomSkybox then
+                    State.applyCustomSkybox()
+                end
+            end
+        end)
+    end
+
+    -- SUITE 7: LIGHTING CONTROLLER (Ambient, Outdoor Ambient, Color Shift Bottom/Top, Fog Color/End/Start, Exposure, Brightness, Clock Time, No Shadows)
+    do
+        local LightSec = UI.createSectionBox(VisualsTab, "Lighting")
+        createToggle(LightSec, "Ambient", false, function(val)
+            ConfigState.LightingAmbientEnabled = val
+            updateLightingEnvironment()
+        end, {
+            SwatchColor = Color3.fromRGB(115, 95, 255),
+            OnColorChange = function(col)
+                ConfigState.LightingAmbientColor = col
+                updateLightingEnvironment()
+            end,
+        })
+
+        createToggle(LightSec, "Outdoor Ambient", false, function(val)
+            ConfigState.LightingOutdoorEnabled = val
+            updateLightingEnvironment()
+        end, {
+            SwatchColor = Color3.fromRGB(115, 95, 255),
+            OnColorChange = function(col)
+                ConfigState.LightingOutdoorColor = col
+                updateLightingEnvironment()
+            end,
+        })
+
+        createToggle(LightSec, "Color Shift Bottom", false, function(val)
+            ConfigState.LightingShiftBottomEnabled = val
+            updateLightingEnvironment()
+        end, {
+            SwatchColor = Color3.fromRGB(115, 95, 255),
+            OnColorChange = function(col)
+                ConfigState.LightingShiftBottomColor = col
+                updateLightingEnvironment()
+            end,
+        })
+
+        createToggle(LightSec, "Color Shift Top", false, function(val)
+            ConfigState.LightingShiftTopEnabled = val
+            updateLightingEnvironment()
+        end, {
+            SwatchColor = Color3.fromRGB(115, 95, 255),
+            OnColorChange = function(col)
+                ConfigState.LightingShiftTopColor = col
+                updateLightingEnvironment()
+            end,
+        })
+
+        createToggle(LightSec, "Fog Color", false, function(val)
+            ConfigState.LightingFogColorEnabled = val
+            updateLightingEnvironment()
+        end, {
+            SwatchColor = Color3.fromRGB(115, 95, 255),
+            OnColorChange = function(col)
+                ConfigState.LightingFogColor = col
+                updateLightingEnvironment()
+            end,
+        })
+
+        createToggle(LightSec, "Fog End", false, function(val)
+            ConfigState.LightingFogEndEnabled = val
+            updateLightingEnvironment()
+        end)
+
+        createSlider(LightSec, "Fog End Distance", 50, 10000, 1000, 50, "", function(val)
+            ConfigState.LightingFogEnd = val
+            updateLightingEnvironment()
+        end)
+
+        createToggle(LightSec, "Fog Start", false, function(val)
+            ConfigState.LightingFogStartEnabled = val
+            updateLightingEnvironment()
+        end)
+
+        createSlider(LightSec, "Fog Start Distance", 0, 5000, 0, 25, "", function(val)
+            ConfigState.LightingFogStart = val
+            updateLightingEnvironment()
+        end)
+
+        createToggle(LightSec, "Exposure Compensation", false, function(val)
+            ConfigState.LightingExposureEnabled = val
+            updateLightingEnvironment()
+        end)
+
+        createSlider(LightSec, "Exposure Value", -3, 3, 0, 0.1, "", function(val)
+            ConfigState.LightingExposure = val
+            updateLightingEnvironment()
+        end)
+
+        createToggle(LightSec, "Brightness", false, function(val)
+            ConfigState.LightingBrightnessEnabled = val
+            updateLightingEnvironment()
+        end)
+
+        createSlider(LightSec, "Brightness Level", 0, 10, 1, 0.25, "", function(val)
+            ConfigState.LightingBrightness = val
+            updateLightingEnvironment()
+        end)
+
+        createToggle(LightSec, "Clock Time", false, function(val)
+            ConfigState.LightingClockTimeEnabled = val
+            updateLightingEnvironment()
+        end)
+
+        createSlider(LightSec, "Clock Time Hour", 0, 24, 12, 0.5, "h", function(val)
+            ConfigState.LightingClockTime = val
+            updateLightingEnvironment()
+        end)
+
+        createToggle(LightSec, "No Shadows", false, function(val)
+            ConfigState.LightingNoShadows = val
+            updateLightingEnvironment()
+        end)
+    end
+
+    -- SUITE 8: ATMOSPHERE CONTROLLER (Atmosphere + Color Swatch, Decay Color Row, Density, Offset, Haze, Glare)
+    do
+        local AtmosSec = UI.createSectionBox(VisualsTab, "Atmosphere")
+        createToggle(AtmosSec, "Atmosphere", false, function(val)
+            ConfigState.AtmosphereEnabled = val
+            if State.applyCustomAtmosphere then
+                State.applyCustomAtmosphere()
+            end
+        end, {
+            SwatchColor = Color3.fromRGB(200, 195, 225),
+            OnColorChange = function(col)
+                ConfigState.AtmosphereColor = col
+                if State.applyCustomAtmosphere then
+                    State.applyCustomAtmosphere()
+                end
+            end,
+        })
+
+        UI.createColorRow(AtmosSec, "Decay", Color3.fromRGB(92, 60, 14), function(col)
+            ConfigState.AtmosphereDecay = col
+            if State.applyCustomAtmosphere then
+                State.applyCustomAtmosphere()
+            end
+        end)
+
+        createSlider(AtmosSec, "Density", 0, 1, 0.35, 0.05, "", function(val)
+            ConfigState.AtmosphereDensity = val
+            if State.applyCustomAtmosphere then
+                State.applyCustomAtmosphere()
+            end
+        end)
+
+        createSlider(AtmosSec, "Offset", 0, 1, 0, 0.05, "", function(val)
+            ConfigState.AtmosphereOffset = val
+            if State.applyCustomAtmosphere then
+                State.applyCustomAtmosphere()
+            end
+        end)
+
+        createSlider(AtmosSec, "Haze", 0, 10, 0, 0.5, "", function(val)
+            ConfigState.AtmosphereHaze = val
+            if State.applyCustomAtmosphere then
+                State.applyCustomAtmosphere()
+            end
+        end)
+
+        createSlider(AtmosSec, "Glare", 0, 10, 0, 0.5, "", function(val)
+            ConfigState.AtmosphereGlare = val
+            if State.applyCustomAtmosphere then
+                State.applyCustomAtmosphere()
+            end
+        end)
+    end
 end
 
 -- TAB 4: MOVEMENT & PROTECTION (STEALTH ANTI-KICK BYPASS + SWIM IN AIR + SPIDER CLIMB + SPINBOT + ANTI-FLING + ANTI-RAGDOLL + ANTI-VOID)
@@ -8361,6 +10023,15 @@ LocalPlayer.CharacterAdded:Connect(function(character)
     if ConfigState.Korblox then
         task.delay(0.5, function() applyKorblox(true) end)
     end
+    if ConfigState.SelfChams and State.applySelfChams then
+        task.delay(0.5, function() State.applySelfChams() end)
+    end
+    if ConfigState.LegTrailEnabled and State.applyLegTrails then
+        task.delay(0.5, function() State.applyLegTrails() end)
+    end
+    if (ConfigState.ToolVisuals or ConfigState.ToolChams or ConfigState.ToolGlow) and State.applyToolVisuals then
+        task.delay(0.5, function() State.applyToolVisuals() end)
+    end
     if UI.HomeAvatarCtrl and UI.HomeAvatarCtrl.RefreshClone then
         task.delay(0.5, function() UI.HomeAvatarCtrl.RefreshClone() end)
     end
@@ -8796,6 +10467,10 @@ do
 
         if State.updateMusicPlayerFrame then
             State.updateMusicPlayerFrame(safeDt)
+        end
+
+        if State.updateVisualSuitesFrame then
+            State.updateVisualSuitesFrame(safeDt, animClock)
         end
 
         if ConfigState.Crosshair then
