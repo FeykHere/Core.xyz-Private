@@ -862,8 +862,8 @@ local ConfigState = {
     ShowFOV = false,
     FOVRadius = 85,
     Smoothness = 0.9,
-    TeamCheck = true,
-    UseWhitelist = true,
+    TeamCheck = false,
+    UseWhitelist = false,
     TargetPart = "Head",
     HitboxExpander = false,
     HitboxSize = 10,
@@ -9365,13 +9365,13 @@ do
     createToggle(CombatTab, "Wall Check", false, function(val)
         ConfigState.AimbotWallCheck = val
     end)
-    createToggle(CombatTab, "Team Check", true, function(val)
+    createToggle(CombatTab, "Team Check", false, function(val)
         ConfigState.TeamCheck = val
         if ConfigState.HitboxExpander then
             updateHitboxExpander()
         end
     end)
-    createToggle(CombatTab, "Whitelist Check", true, function(val)
+    createToggle(CombatTab, "Whitelist Check", false, function(val)
         ConfigState.UseWhitelist = val
         if ConfigState.HitboxExpander then
             updateHitboxExpander()
