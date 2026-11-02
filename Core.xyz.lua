@@ -1293,6 +1293,21 @@ local function updateAccentColor(r, g, b)
             end)
         end
     end
+    local edgeCol = ConfigState.ThemeBorderColor or Theme.Border
+    local peakCol = ConfigState.ThemeGradientColor or Theme.Accent
+    for _, item in ipairs(State.liveGradients) do
+        if item.Gradient and item.Gradient.Parent then
+            pcall(function()
+                item.Gradient.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0.0, edgeCol),
+                    ColorSequenceKeypoint.new(0.32, edgeCol),
+                    ColorSequenceKeypoint.new(0.5, peakCol),
+                    ColorSequenceKeypoint.new(0.68, edgeCol),
+                    ColorSequenceKeypoint.new(1.0, edgeCol),
+                })
+            end)
+        end
+    end
 end
 
 local function addCorner(parent, radius)
@@ -1324,7 +1339,13 @@ local function addLiveBorder(parent, thickness, speed, initialTransparency)
     })
     grad.Rotation = math.random(0, 360)
     grad.Parent = stroke
-    table.insert(State.liveGradients, { Gradient = grad, Speed = speed or 65, Offset = math.random(0, 360) })
+    table.insert(State.liveGradients, {
+        Gradient = grad,
+        Stroke = stroke,
+        Target = parent,
+        Speed = speed or 65,
+        Offset = math.random(0, 360),
+    })
     return stroke, grad
 end
 
@@ -1891,7 +1912,7 @@ do
     KeyCard.Name = "CoreKeySystem"
     KeyCard.AnchorPoint = Vector2.new(0.5, 0.5)
     KeyCard.Position = UDim2.fromScale(0.5, 0.5)
-    KeyCard.Size = UDim2.fromOffset(440, 298)
+    KeyCard.Size = UDim2.fromOffset(440, 266)
     KeyCard.BackgroundColor3 = Theme.Black
     KeyCard.BackgroundTransparency = 1
     KeyCard.Visible = false
@@ -1900,7 +1921,37 @@ do
     KeyCard.ZIndex = 30
     KeyCard.Parent = UI.ScreenGui
     addCorner(KeyCard, 12)
-    local KeyCardStroke = addLiveBorder(KeyCard, 1.5, 75, 1)
+    local KeyCardStroke, KeyCardStrokeGrad = addLiveBorder(KeyCard, 1.5, 75, 1)
+
+    local KeyCardGrad = Instance.new("UIGradient")
+    KeyCardGrad.Name = "KeyCardGradient"
+    KeyCardGrad.Rotation = 135
+    KeyCardGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 220, 230)),
+        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(185, 185, 200)),
+    })
+    KeyCardGrad.Parent = KeyCard
+
+    local KeyGradientOverlay = Instance.new("Frame")
+    KeyGradientOverlay.Name = "KeyGradientOverlay"
+    KeyGradientOverlay.Size = UDim2.fromScale(1, 1)
+    KeyGradientOverlay.BackgroundColor3 = Theme.White
+    KeyGradientOverlay.BackgroundTransparency = 1
+    KeyGradientOverlay.BorderSizePixel = 0
+    KeyGradientOverlay.ZIndex = 31
+    KeyGradientOverlay.Parent = KeyCard
+    addCorner(KeyGradientOverlay, 12)
+
+    local KeyOverlayGrad = Instance.new("UIGradient")
+    KeyOverlayGrad.Name = "KeyOverlayGradient"
+    KeyOverlayGrad.Rotation = 135
+    KeyOverlayGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 60, 75)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(170, 20, 35)),
+        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(35, 6, 12)),
+    })
+    KeyOverlayGrad.Parent = KeyGradientOverlay
 
     local KeyScale = Instance.new("UIScale")
     KeyScale.Scale = 0.88
@@ -1910,6 +1961,7 @@ do
     makeDraggable(KeyCard, KeyCard)
 
     local KeyTopBar = Instance.new("Frame")
+    KeyTopBar.Name = "KeyTopBar"
     KeyTopBar.Size = UDim2.new(1, 0, 0, 2)
     KeyTopBar.BackgroundColor3 = Theme.White
     KeyTopBar.BorderSizePixel = 0
@@ -1982,31 +2034,8 @@ do
     addCorner(KeyServiceBadge, 6)
     addStroke(KeyServiceBadge, Theme.Border, 1, 0)
 
-    local KeyStepsBar = Instance.new("Frame")
-    KeyStepsBar.Name = "KeyStepsBar"
-    KeyStepsBar.Position = UDim2.fromOffset(24, 56)
-    KeyStepsBar.Size = UDim2.new(1, -48, 0, 26)
-    KeyStepsBar.BackgroundColor3 = Theme.Deep
-    KeyStepsBar.ZIndex = 32
-    KeyStepsBar.Parent = KeyCard
-    addCorner(KeyStepsBar, 6)
-    addStroke(KeyStepsBar, Theme.Border, 1, 0)
-
-    local KeySub = Instance.new("TextLabel")
-    KeySub.Position = UDim2.fromOffset(12, 0)
-    KeySub.Size = UDim2.new(1, -24, 1, 0)
-    KeySub.BackgroundTransparency = 1
-    KeySub.Font = Enum.Font.Code
-    KeySub.Text = "1. Click Get Key   →   2. Complete Link   →   3. Paste & Submit"
-    KeySub.TextColor3 = Theme.Silver
-    KeySub.TextSize = 10
-    KeySub.TextTruncate = Enum.TextTruncate.AtEnd
-    KeySub.TextXAlignment = Enum.TextXAlignment.Center
-    KeySub.ZIndex = 33
-    KeySub.Parent = KeyStepsBar
-
     local KeyInputHolder = Instance.new("Frame")
-    KeyInputHolder.Position = UDim2.fromOffset(24, 92)
+    KeyInputHolder.Position = UDim2.fromOffset(24, 60)
     KeyInputHolder.Size = UDim2.new(1, -48, 0, 44)
     KeyInputHolder.BackgroundColor3 = Theme.Surface
     KeyInputHolder.ZIndex = 32
@@ -2066,7 +2095,7 @@ do
 
     local KeyStatusRow = Instance.new("Frame")
     KeyStatusRow.Name = "KeyStatusRow"
-    KeyStatusRow.Position = UDim2.fromOffset(24, 144)
+    KeyStatusRow.Position = UDim2.fromOffset(24, 112)
     KeyStatusRow.Size = UDim2.new(1, -48, 0, 24)
     KeyStatusRow.BackgroundColor3 = Theme.Deep
     KeyStatusRow.ZIndex = 32
@@ -2100,7 +2129,7 @@ do
 
     local UnlockButton = Instance.new("TextButton")
     UnlockButton.Name = "SubmitKeyButton"
-    UnlockButton.Position = UDim2.fromOffset(24, 178)
+    UnlockButton.Position = UDim2.fromOffset(24, 146)
     UnlockButton.Size = UDim2.new(0.5, -28, 0, 44)
     UnlockButton.BackgroundColor3 = Theme.White
     UnlockButton.AutoButtonColor = false
@@ -2116,7 +2145,7 @@ do
 
     local CopyKeyButton = Instance.new("TextButton")
     CopyKeyButton.Name = "GetKeyButton"
-    CopyKeyButton.Position = UDim2.new(0.5, 4, 0, 178)
+    CopyKeyButton.Position = UDim2.new(0.5, 4, 0, 146)
     CopyKeyButton.Size = UDim2.new(0.5, -28, 0, 44)
     CopyKeyButton.BackgroundColor3 = Theme.Surface
     CopyKeyButton.AutoButtonColor = false
@@ -2149,7 +2178,7 @@ do
     end)
 
     local KeyDivider = Instance.new("Frame")
-    KeyDivider.Position = UDim2.fromOffset(24, 236)
+    KeyDivider.Position = UDim2.fromOffset(24, 204)
     KeyDivider.Size = UDim2.new(1, -48, 0, 1)
     KeyDivider.BackgroundColor3 = Theme.Border
     KeyDivider.BorderSizePixel = 0
@@ -2157,7 +2186,7 @@ do
     KeyDivider.Parent = KeyCard
 
     local KeyFooter = Instance.new("TextLabel")
-    KeyFooter.Position = UDim2.fromOffset(24, 246)
+    KeyFooter.Position = UDim2.fromOffset(24, 214)
     KeyFooter.Size = UDim2.new(1, -48, 0, 16)
     KeyFooter.BackgroundTransparency = 1
     KeyFooter.Font = Enum.Font.Code
@@ -2169,7 +2198,7 @@ do
     KeyFooter.Parent = KeyCard
 
     local KeyFooterSub = Instance.new("TextLabel")
-    KeyFooterSub.Position = UDim2.fromOffset(24, 264)
+    KeyFooterSub.Position = UDim2.fromOffset(24, 232)
     KeyFooterSub.Size = UDim2.new(1, -48, 0, 14)
     KeyFooterSub.BackgroundTransparency = 1
     KeyFooterSub.Font = Enum.Font.Code
@@ -2181,8 +2210,13 @@ do
     KeyFooterSub.Parent = KeyCard
 
     UI.KeyCard = KeyCard
+    UI.KeyCardGrad = KeyCardGrad
+    UI.KeyGradientOverlay = KeyGradientOverlay
+    UI.KeyOverlayGrad = KeyOverlayGrad
     UI.KeyCardStroke = KeyCardStroke
+    UI.KeyCardStrokeGrad = KeyCardStrokeGrad
     UI.KeyScale = KeyScale
+    UI.KeyTopBar = KeyTopBar
     UI.KeyTopGrad = KeyTopGrad
     UI.KeyInputBox = KeyInputBox
     UI.KeyInputStroke = KeyInputStroke
@@ -3721,6 +3755,33 @@ do
     end
 end
 
+local function isPCDevice()
+    local kb = false
+    local touch = false
+    pcall(function()
+        kb = (UserInputService.KeyboardEnabled == true)
+        touch = (UserInputService.TouchEnabled == true)
+    end)
+    if touch and not kb then
+        return false
+    end
+    return true
+end
+State.isPCDevice = isPCDevice
+
+local function syncKeybindBadgesVisibility()
+    local pc = isPCDevice()
+    if not pc then
+        State.listeningKeybindEntry = nil
+    end
+    for _, entry in ipairs(State.registeredKeybinds) do
+        if entry.Button then
+            entry.Button.Visible = pc
+        end
+    end
+end
+State.syncKeybindBadgesVisibility = syncKeybindBadgesVisibility
+
 local function createToggle(page, text, defaultVal, callback, extraOpts)
     local row = Instance.new("TextButton")
     row.Size = UDim2.new(1, 0, 0, 40)
@@ -3826,6 +3887,7 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
             kbBtn.Text = "[...]"
             kbBtn.TextColor3 = Theme.Muted
             kbBtn.TextSize = 10
+            kbBtn.Visible = isPCDevice()
             kbBtn.ZIndex = 17
             kbBtn.Parent = row
 
@@ -3843,6 +3905,10 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
             table.insert(State.registeredKeybinds, keybindEntry)
 
             kbBtn.MouseButton1Click:Connect(function()
+                if not isPCDevice() then
+                    kbBtn.Visible = false
+                    return
+                end
                 if State.listeningKeybindEntry == keybindEntry then
                     State.listeningKeybindEntry = nil
                     kbBtn.Text = keybindEntry.KeyName and ("[" .. keybindEntry.KeyName .. "]") or "[...]"
@@ -11266,7 +11332,10 @@ do
     local function applyPerformanceProfile(profile)
         profile = profile or ConfigState.PerformanceProfile or "Auto"
         ConfigState.PerformanceProfile = profile
-        local isMobileDevice = (UserInputService.TouchEnabled == true and UserInputService.KeyboardEnabled ~= true)
+        local isMobileDevice = not isPCDevice()
+        if State.syncKeybindBadgesVisibility then
+            State.syncKeybindBadgesVisibility()
+        end
         local effective = profile
         if profile == "Auto" then
             effective = isMobileDevice and "Performance" or "Balanced"
@@ -11328,7 +11397,7 @@ do
 
     applyPerformanceProfile(ConfigState.PerformanceProfile or "Auto")
 
-    -- 2. Client Telemetry & Info Section Box (Matches Reference Screenshot IMG_20261102_181820_80cc4e2b.jpg)
+    -- 2. Client Telemetry & Info Section Box (Executor & Device Info Only — Kill Count Removed)
     local clientSec = UI.createSectionBox(SettingsTab, "Client")
 
     local function detectExecutorName()
@@ -11346,22 +11415,8 @@ do
     end
 
     local function detectDeviceName()
-        local isMob = (UserInputService.TouchEnabled == true and UserInputService.KeyboardEnabled ~= true)
+        local isMob = not isPCDevice()
         return isMob and "Mobile (Android)" or "PC (Desktop)"
-    end
-
-    local function getSessionKillCount()
-        local lsKills = 0
-        pcall(function()
-            local ls = LocalPlayer and LocalPlayer:FindFirstChild("leaderstats")
-            if ls then
-                local kStat = ls:FindFirstChild("Kills") or ls:FindFirstChild("Eliminations") or ls:FindFirstChild("KO") or ls:FindFirstChild("KOs")
-                if kStat and tonumber(kStat.Value) then
-                    lsKills = math.floor(tonumber(kStat.Value))
-                end
-            end
-        end)
-        return math.max(lsKills, State.sessionKills or 0)
     end
 
     local function makeTelemetryInfoLine(parent, name, initText)
@@ -11381,20 +11436,18 @@ do
 
     local ClientExecutorLabel = makeTelemetryInfoLine(clientSec, "ClientExecutorLabel", "Executor: " .. detectExecutorName())
     local ClientDeviceLabel = makeTelemetryInfoLine(clientSec, "ClientDeviceLabel", "Device: " .. detectDeviceName())
-    local ClientKillsLabel = makeTelemetryInfoLine(clientSec, "ClientKillsLabel", "Kills This Session: " .. tostring(getSessionKillCount()))
     UI.ClientExecutorLabel = ClientExecutorLabel
     UI.ClientDeviceLabel = ClientDeviceLabel
-    UI.ClientKillsLabel = ClientKillsLabel
 
     local function updateClientTelemetryUI()
+        if State.syncKeybindBadgesVisibility then
+            State.syncKeybindBadgesVisibility()
+        end
         if ClientExecutorLabel then
             ClientExecutorLabel.Text = "Executor: " .. detectExecutorName()
         end
         if ClientDeviceLabel then
             ClientDeviceLabel.Text = "Device: " .. detectDeviceName()
-        end
-        if ClientKillsLabel then
-            ClientKillsLabel.Text = "Kills This Session: " .. tostring(getSessionKillCount())
         end
     end
     State.updateClientTelemetryUI = updateClientTelemetryUI
@@ -11764,7 +11817,7 @@ do
             UI.MainWindow.BackgroundColor3 = Theme.Deep
         end
         if UI.MainStroke then
-            UI.MainStroke.Color = Theme.Border
+            UI.MainStroke.Color = Color3.fromRGB(255, 255, 255)
         end
         if UI.FloatingToggle then
             UI.FloatingToggle.BackgroundColor3 = Theme.Deep
@@ -11776,6 +11829,8 @@ do
                     if desc.Font ~= Enum.Font.Code then
                         pcall(function() desc.Font = wantFont end)
                     end
+                elseif desc:IsA("Frame") and string.find(tostring(desc.Name or ""), "^SectionBox_") then
+                    desc.BackgroundColor3 = Theme.Deep
                 end
             end
         end
@@ -12271,14 +12326,90 @@ local function launchMainHub()
     notify("Core.xyz", "License verified! Key Time Left: " .. formatRemainingKeyTime() .. ".", 5)
 end
 
+local function setKeyCardStateGradient(mode)
+    State.keyCardFlashToken = (State.keyCardFlashToken or 0) + 1
+    local myToken = State.keyCardFlashToken
+    if mode == "error" then
+        UI.KeyCard.BackgroundColor3 = Color3.fromRGB(52, 10, 14)
+        if UI.KeyCardGrad then
+            UI.KeyCardGrad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 70, 85)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(165, 24, 38)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(45, 8, 14)),
+            })
+        end
+        if UI.KeyOverlayGrad then
+            UI.KeyOverlayGrad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 55, 70)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(185, 22, 38)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(50, 8, 14)),
+            })
+        end
+        if UI.KeyGradientOverlay then
+            UI.KeyGradientOverlay.BackgroundColor3 = Theme.Error
+            tween(UI.KeyGradientOverlay, FastTween, { BackgroundTransparency = 0.62 })
+        end
+        tween(UI.KeyCardStroke, FastTween, { Color = Theme.Error, Transparency = 0 })
+        tween(UI.KeyInputStroke, FastTween, { Color = Theme.Error })
+        if UI.KeyTopBar then
+            tween(UI.KeyTopBar, FastTween, { BackgroundColor3 = Theme.Error })
+        end
+        task.delay(1.35, function()
+            if State.keyCardFlashToken == myToken and UI.KeyCard and UI.KeyCard.Visible then
+                tween(UI.KeyCard, SmoothTween, { BackgroundColor3 = Theme.Black })
+                if UI.KeyCardGrad then
+                    UI.KeyCardGrad.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+                        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 220, 230)),
+                        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(185, 185, 200)),
+                    })
+                end
+                if UI.KeyGradientOverlay then
+                    tween(UI.KeyGradientOverlay, SmoothTween, { BackgroundTransparency = 1 })
+                end
+                tween(UI.KeyCardStroke, SmoothTween, { Color = Theme.White, Transparency = 0.08 })
+                tween(UI.KeyInputStroke, SmoothTween, { Color = Theme.Border })
+                if UI.KeyTopBar then
+                    tween(UI.KeyTopBar, SmoothTween, { BackgroundColor3 = Theme.White })
+                end
+            end
+        end)
+    elseif mode == "success" then
+        UI.KeyCard.BackgroundColor3 = Color3.fromRGB(10, 52, 28)
+        if UI.KeyCardGrad then
+            UI.KeyCardGrad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(80, 255, 150)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(24, 165, 88)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(8, 45, 24)),
+            })
+        end
+        if UI.KeyOverlayGrad then
+            UI.KeyOverlayGrad.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(75, 255, 150)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(28, 185, 95)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(10, 55, 28)),
+            })
+        end
+        if UI.KeyGradientOverlay then
+            UI.KeyGradientOverlay.BackgroundColor3 = Theme.Success
+            tween(UI.KeyGradientOverlay, FastTween, { BackgroundTransparency = 0.58 })
+        end
+        tween(UI.KeyCardStroke, FastTween, { Color = Theme.Success, Transparency = 0 })
+        tween(UI.KeyInputStroke, FastTween, { Color = Theme.Success })
+        if UI.KeyTopBar then
+            tween(UI.KeyTopBar, FastTween, { BackgroundColor3 = Theme.Success })
+        end
+    end
+end
+UI.setKeyCardStateGradient = setKeyCardStateGradient
+
 local function shakeKeyCardOnError()
-    tween(UI.KeyInputStroke, FastTween, { Color = Theme.Error })
+    setKeyCardStateGradient("error")
     local origPos = UI.KeyCard.Position
     for _, offset in ipairs({ -9, 9, -6, 6, -3, 0 }) do
         UI.KeyCard.Position = UDim2.new(origPos.X.Scale, origPos.X.Offset + offset, origPos.Y.Scale, origPos.Y.Offset)
         task.wait(0.028)
     end
-    tween(UI.KeyInputStroke, SmoothTween, { Color = Theme.Border })
 end
 
 local function attemptAuthorization()
@@ -12309,8 +12440,13 @@ local function attemptAuthorization()
         UI.KeyFeedback.Text = "Status: Key verified! Launching Core.xyz..."
         UI.KeyFeedback.TextColor3 = Theme.Success
         if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Success end
+        setKeyCardStateGradient("success")
+        task.wait(0.32)
         tween(UI.KeyScale, FastTween, { Scale = 0.9 })
         tween(UI.KeyCard, FastTween, { BackgroundTransparency = 1 })
+        if UI.KeyGradientOverlay then
+            tween(UI.KeyGradientOverlay, FastTween, { BackgroundTransparency = 1 })
+        end
         tween(UI.KeyCardStroke, FastTween, { Transparency = 1 })
         task.wait(0.22)
         UI.KeyCard.Visible = false
@@ -12426,7 +12562,7 @@ local function extractKeyCodeShortName(kc)
 end
 
 UserInputService.InputBegan:Connect(function(input, gpe)
-    if State.listeningKeybindEntry and input and input.KeyCode then
+    if State.listeningKeybindEntry and isPCDevice() and input and input.KeyCode then
         local kName = extractKeyCodeShortName(input.KeyCode)
         if kName and kName ~= "Unknown" then
             local entry = State.listeningKeybindEntry
@@ -12450,7 +12586,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
         end
     end
 
-    if not gpe and State.isAuthorized and input and input.KeyCode then
+    if not gpe and State.isAuthorized and isPCDevice() and input and input.KeyCode then
         if input.KeyCode == Enum.KeyCode.RightShift then
             toggleMainHub()
             return
@@ -12859,15 +12995,18 @@ do
             end
         end
 
-        -- Only animate UI gradients & particles while a main menu card is actually open, throttled to ~30Hz (Zero FPS drop during gameplay!)
+        -- Continuously animate live gradients & rotators at ~30Hz for any visible UI (including Floating Pill & FOV Circle when MainWindow is closed!)
         local menuCardOpen = UI.LoaderCard.Visible or UI.KeyCard.Visible or UI.MainWindow.Visible
-        if menuCardOpen and uiAnimTimer >= 0.033 then
+        if uiAnimTimer >= 0.033 then
             local animDt = uiAnimTimer
             uiAnimTimer = 0
 
-            if ConfigState.ShimmerEnabled then
-                for _, item in ipairs(State.liveGradients) do
-                    if item.Gradient and item.Gradient.Parent then
+            for _, item in ipairs(State.liveGradients) do
+                if item.Gradient and item.Gradient.Parent then
+                    local target = item.Target
+                    local isAlwaysActiveTarget = (target == UI.FloatingToggle or target == UI.FovCircle)
+                    local isTargetVisible = (not target) or (target.Visible ~= false)
+                    if isTargetVisible and (isAlwaysActiveTarget or ConfigState.ShimmerEnabled ~= false) then
                         item.Gradient.Rotation = (item.Offset + animClock * item.Speed) % 360
                     end
                 end
@@ -12879,39 +13018,45 @@ do
                 end
             end
 
-            if ConfigState.ParticlesEnabled then
-                for _, p in ipairs(State.liveParticles) do
-                    if p.Instance and p.Container and p.Container.Visible then
-                        p.Y = p.Y - (p.SpeedY * animDt)
-                        p.X = p.X + math.sin(animClock * 1.5 + p.Phase) * (p.DriftX * animDt)
-                        if p.Y < -0.04 then
-                            p.Y = 1.04
-                            p.X = math.random(5, 95) / 100
-                        end
-                        p.Instance.Position = UDim2.fromScale(p.X, p.Y)
-                    end
-                end
+            if ConfigState.ShowFOV and UI.FovOuterStroke then
+                UI.FovOuterStroke.Thickness = 1.6 + 0.45 * math.sin(animClock * 4.2)
             end
 
-            local pulse = 1 + 0.22 * math.sin(animClock * 4.5)
-            if UI.LoaderCard.Visible then
-                UI.EmblemCore.Size = UDim2.fromOffset(8 * pulse, 8 * pulse)
-                if UI.LoaderTopGrad then
-                    UI.LoaderTopGrad.Offset = Vector2.new(math.sin(animClock * 2.0) * 0.45, 0)
+            if menuCardOpen then
+                if ConfigState.ParticlesEnabled then
+                    for _, p in ipairs(State.liveParticles) do
+                        if p.Instance and p.Container and p.Container.Visible then
+                            p.Y = p.Y - (p.SpeedY * animDt)
+                            p.X = p.X + math.sin(animClock * 1.5 + p.Phase) * (p.DriftX * animDt)
+                            if p.Y < -0.04 then
+                                p.Y = 1.04
+                                p.X = math.random(5, 95) / 100
+                            end
+                            p.Instance.Position = UDim2.fromScale(p.X, p.Y)
+                        end
+                    end
                 end
-            end
-            if UI.KeyCard.Visible then
-                UI.KeyTopGrad.Offset = Vector2.new(math.sin(animClock * 2.2) * 0.45, 0)
-            end
-            if UI.MainWindow.Visible then
-                UI.HeaderLineGrad.Offset = Vector2.new(math.sin(animClock * 1.8) * 0.42, 0)
-                if UI.DiscordWave and State.activeTab and State.activeTab.Name == "Home" then
-                    UI.DiscordWave.Gradient.Offset = Vector2.new(math.sin(animClock * 0.65) * 0.38, math.cos(animClock * 0.45) * 0.15)
-                    UI.DiscordWave.Gradient.Rotation = 14 + math.sin(animClock * 0.5) * 8
-                    UI.DiscordWave.Crest1.Position = UDim2.new(0.5 + math.sin(animClock * 0.75) * 0.22, 0, 0.72 + math.cos(animClock * 0.9) * 0.08, 0)
-                    UI.DiscordWave.Crest1.Rotation = math.sin(animClock * 0.55) * 3.5
-                    UI.DiscordWave.Crest2.Position = UDim2.new(0.5 - math.cos(animClock * 0.62) * 0.24, 0, 0.84 + math.sin(animClock * 0.8) * 0.08, 0)
-                    UI.DiscordWave.Crest2.Rotation = -math.cos(animClock * 0.48) * 3.0
+
+                local pulse = 1 + 0.22 * math.sin(animClock * 4.5)
+                if UI.LoaderCard.Visible then
+                    UI.EmblemCore.Size = UDim2.fromOffset(8 * pulse, 8 * pulse)
+                    if UI.LoaderTopGrad then
+                        UI.LoaderTopGrad.Offset = Vector2.new(math.sin(animClock * 2.0) * 0.45, 0)
+                    end
+                end
+                if UI.KeyCard.Visible then
+                    UI.KeyTopGrad.Offset = Vector2.new(math.sin(animClock * 2.2) * 0.45, 0)
+                end
+                if UI.MainWindow.Visible then
+                    UI.HeaderLineGrad.Offset = Vector2.new(math.sin(animClock * 1.8) * 0.42, 0)
+                    if UI.DiscordWave and State.activeTab and State.activeTab.Name == "Home" then
+                        UI.DiscordWave.Gradient.Offset = Vector2.new(math.sin(animClock * 0.65) * 0.38, math.cos(animClock * 0.45) * 0.15)
+                        UI.DiscordWave.Gradient.Rotation = 14 + math.sin(animClock * 0.5) * 8
+                        UI.DiscordWave.Crest1.Position = UDim2.new(0.5 + math.sin(animClock * 0.75) * 0.22, 0, 0.72 + math.cos(animClock * 0.9) * 0.08, 0)
+                        UI.DiscordWave.Crest1.Rotation = math.sin(animClock * 0.55) * 3.5
+                        UI.DiscordWave.Crest2.Position = UDim2.new(0.5 - math.cos(animClock * 0.62) * 0.24, 0, 0.84 + math.sin(animClock * 0.8) * 0.08, 0)
+                        UI.DiscordWave.Crest2.Rotation = -math.cos(animClock * 0.48) * 3.0
+                    end
                 end
             end
         end
