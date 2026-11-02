@@ -1697,7 +1697,7 @@ do
     LoaderCard.Name = "CoreLoader"
     LoaderCard.AnchorPoint = Vector2.new(0.5, 0.5)
     LoaderCard.Position = UDim2.fromScale(0.5, 0.5)
-    LoaderCard.Size = UDim2.fromOffset(390, 235)
+    LoaderCard.Size = UDim2.fromOffset(408, 256)
     LoaderCard.BackgroundColor3 = Theme.Black
     LoaderCard.BackgroundTransparency = 1
     LoaderCard.ClipsDescendants = true
@@ -1710,11 +1710,44 @@ do
     LoaderScale.Scale = 0.86
     LoaderScale.Parent = LoaderCard
 
-    createParticleCanvas(LoaderCard, 16)
+    createParticleCanvas(LoaderCard, 18)
+
+    local LoaderTopBar = Instance.new("Frame")
+    LoaderTopBar.Name = "LoaderTopBar"
+    LoaderTopBar.Size = UDim2.new(1, 0, 0, 2)
+    LoaderTopBar.BackgroundColor3 = Theme.White
+    LoaderTopBar.BackgroundTransparency = 1
+    LoaderTopBar.BorderSizePixel = 0
+    LoaderTopBar.ZIndex = 32
+    LoaderTopBar.Parent = LoaderCard
+
+    local LoaderTopGrad = Instance.new("UIGradient")
+    LoaderTopGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.0, Theme.Black),
+        ColorSequenceKeypoint.new(0.5, Theme.White),
+        ColorSequenceKeypoint.new(1.0, Theme.Black),
+    })
+    LoaderTopGrad.Parent = LoaderTopBar
+
+    local LoaderStageBadge = Instance.new("TextLabel")
+    LoaderStageBadge.Name = "LoaderStageBadge"
+    LoaderStageBadge.AnchorPoint = Vector2.new(0.5, 0)
+    LoaderStageBadge.Position = UDim2.new(0.5, 0, 0, 14)
+    LoaderStageBadge.Size = UDim2.fromOffset(124, 18)
+    LoaderStageBadge.BackgroundColor3 = Theme.Surface
+    LoaderStageBadge.BackgroundTransparency = 1
+    LoaderStageBadge.Font = Enum.Font.Code
+    LoaderStageBadge.Text = "STAGE 1 / 6  ·  BOOT"
+    LoaderStageBadge.TextColor3 = Theme.Silver
+    LoaderStageBadge.TextTransparency = 1
+    LoaderStageBadge.TextSize = 9
+    LoaderStageBadge.ZIndex = 32
+    LoaderStageBadge.Parent = LoaderCard
+    addCorner(LoaderStageBadge, 99)
 
     local EmblemOuter = Instance.new("Frame")
     EmblemOuter.AnchorPoint = Vector2.new(0.5, 0.5)
-    EmblemOuter.Position = UDim2.new(0.5, 0, 0, 62)
+    EmblemOuter.Position = UDim2.new(0.5, 0, 0, 68)
     EmblemOuter.Size = UDim2.fromOffset(54, 54)
     EmblemOuter.BackgroundTransparency = 1
     EmblemOuter.ZIndex = 32
@@ -1725,7 +1758,7 @@ do
 
     local EmblemInner = Instance.new("Frame")
     EmblemInner.AnchorPoint = Vector2.new(0.5, 0.5)
-    EmblemInner.Position = UDim2.new(0.5, 0, 0, 62)
+    EmblemInner.Position = UDim2.new(0.5, 0, 0, 68)
     EmblemInner.Size = UDim2.fromOffset(34, 34)
     EmblemInner.BackgroundTransparency = 1
     EmblemInner.Rotation = 45
@@ -1737,7 +1770,7 @@ do
 
     local EmblemCore = Instance.new("Frame")
     EmblemCore.AnchorPoint = Vector2.new(0.5, 0.5)
-    EmblemCore.Position = UDim2.new(0.5, 0, 0, 62)
+    EmblemCore.Position = UDim2.new(0.5, 0, 0, 68)
     EmblemCore.Size = UDim2.fromOffset(10, 10)
     EmblemCore.BackgroundColor3 = Theme.White
     EmblemCore.BackgroundTransparency = 1
@@ -1748,7 +1781,7 @@ do
     local LoaderTitle = Instance.new("TextLabel")
     LoaderTitle.AnchorPoint = Vector2.new(0.5, 0)
     LoaderTitle.Position = UDim2.new(0.5, 0, 0, 108)
-    LoaderTitle.Size = UDim2.new(1, -40, 0, 28)
+    LoaderTitle.Size = UDim2.new(1, -40, 0, 26)
     LoaderTitle.BackgroundTransparency = 1
     LoaderTitle.Font = Enum.Font.GothamBlack
     LoaderTitle.Text = "CORE.XYZ"
@@ -1760,7 +1793,7 @@ do
 
     local LoaderStatus = Instance.new("TextLabel")
     LoaderStatus.AnchorPoint = Vector2.new(0.5, 0)
-    LoaderStatus.Position = UDim2.new(0.5, 0, 0, 138)
+    LoaderStatus.Position = UDim2.new(0.5, 0, 0, 136)
     LoaderStatus.Size = UDim2.new(1, -40, 0, 18)
     LoaderStatus.BackgroundTransparency = 1
     LoaderStatus.Font = Enum.Font.Code
@@ -1771,10 +1804,24 @@ do
     LoaderStatus.ZIndex = 32
     LoaderStatus.Parent = LoaderCard
 
+    local LoaderSubDetail = Instance.new("TextLabel")
+    LoaderSubDetail.Name = "LoaderSubDetail"
+    LoaderSubDetail.AnchorPoint = Vector2.new(0.5, 0)
+    LoaderSubDetail.Position = UDim2.new(0.5, 0, 0, 155)
+    LoaderSubDetail.Size = UDim2.new(1, -48, 0, 14)
+    LoaderSubDetail.BackgroundTransparency = 1
+    LoaderSubDetail.Font = Enum.Font.GothamMedium
+    LoaderSubDetail.Text = "Warming up runtime environment & asset caches..."
+    LoaderSubDetail.TextColor3 = Theme.Muted
+    LoaderSubDetail.TextTransparency = 1
+    LoaderSubDetail.TextSize = 10
+    LoaderSubDetail.ZIndex = 32
+    LoaderSubDetail.Parent = LoaderCard
+
     local LoaderBarBg = Instance.new("Frame")
     LoaderBarBg.AnchorPoint = Vector2.new(0.5, 0)
-    LoaderBarBg.Position = UDim2.new(0.5, 0, 0, 174)
-    LoaderBarBg.Size = UDim2.new(1, -64, 0, 5)
+    LoaderBarBg.Position = UDim2.new(0.5, 0, 0, 184)
+    LoaderBarBg.Size = UDim2.new(1, -64, 0, 6)
     LoaderBarBg.BackgroundColor3 = Theme.Surface
     LoaderBarBg.BackgroundTransparency = 1
     LoaderBarBg.BorderSizePixel = 0
@@ -1793,20 +1840,39 @@ do
 
     local LoaderPercent = Instance.new("TextLabel")
     LoaderPercent.AnchorPoint = Vector2.new(0.5, 0)
-    LoaderPercent.Position = UDim2.new(0.5, 0, 0, 188)
+    LoaderPercent.Position = UDim2.new(0.5, 0, 0, 200)
     LoaderPercent.Size = UDim2.new(1, -64, 0, 18)
     LoaderPercent.BackgroundTransparency = 1
     LoaderPercent.Font = Enum.Font.Code
     LoaderPercent.Text = "0%"
-    LoaderPercent.TextColor3 = Theme.Muted
+    LoaderPercent.TextColor3 = Theme.White
     LoaderPercent.TextTransparency = 1
-    LoaderPercent.TextSize = 10
+    LoaderPercent.TextSize = 11
     LoaderPercent.ZIndex = 32
     LoaderPercent.Parent = LoaderCard
+
+    local LoaderFooterHint = Instance.new("TextLabel")
+    LoaderFooterHint.Name = "LoaderFooterHint"
+    LoaderFooterHint.AnchorPoint = Vector2.new(0.5, 1)
+    LoaderFooterHint.Position = UDim2.new(0.5, 0, 1, -12)
+    LoaderFooterHint.Size = UDim2.new(1, -48, 0, 14)
+    LoaderFooterHint.BackgroundTransparency = 1
+    LoaderFooterHint.Font = Enum.Font.Code
+    LoaderFooterHint.Text = "UNIVERSAL EDITION  ·  V4.5"
+    LoaderFooterHint.TextColor3 = Theme.Muted
+    LoaderFooterHint.TextTransparency = 1
+    LoaderFooterHint.TextSize = 9
+    LoaderFooterHint.ZIndex = 32
+    LoaderFooterHint.Parent = LoaderCard
 
     UI.LoaderCard = LoaderCard
     UI.LoaderStroke = LoaderStroke
     UI.LoaderScale = LoaderScale
+    UI.LoaderTopBar = LoaderTopBar
+    UI.LoaderTopGrad = LoaderTopGrad
+    UI.LoaderStageBadge = LoaderStageBadge
+    UI.LoaderSubDetail = LoaderSubDetail
+    UI.LoaderFooterHint = LoaderFooterHint
     UI.EmblemOuterStroke = EmblemOuterStroke
     UI.EmblemInnerStroke = EmblemInnerStroke
     UI.EmblemCore = EmblemCore
@@ -1825,7 +1891,7 @@ do
     KeyCard.Name = "CoreKeySystem"
     KeyCard.AnchorPoint = Vector2.new(0.5, 0.5)
     KeyCard.Position = UDim2.fromScale(0.5, 0.5)
-    KeyCard.Size = UDim2.fromOffset(420, 266)
+    KeyCard.Size = UDim2.fromOffset(440, 298)
     KeyCard.BackgroundColor3 = Theme.Black
     KeyCard.BackgroundTransparency = 1
     KeyCard.Visible = false
@@ -1859,7 +1925,7 @@ do
     KeyTopGrad.Parent = KeyTopBar
 
     local KeySpinBadge = Instance.new("Frame")
-    KeySpinBadge.Position = UDim2.fromOffset(24, 22)
+    KeySpinBadge.Position = UDim2.fromOffset(24, 20)
     KeySpinBadge.Size = UDim2.fromOffset(22, 22)
     KeySpinBadge.BackgroundTransparency = 1
     KeySpinBadge.ZIndex = 32
@@ -1879,8 +1945,8 @@ do
     addCorner(KeySpinDot, 99)
 
     local KeyHeader = Instance.new("TextLabel")
-    KeyHeader.Position = UDim2.fromOffset(56, 20)
-    KeyHeader.Size = UDim2.new(1, -155, 0, 24)
+    KeyHeader.Position = UDim2.fromOffset(56, 16)
+    KeyHeader.Size = UDim2.new(1, -165, 0, 18)
     KeyHeader.BackgroundTransparency = 1
     KeyHeader.Font = Enum.Font.GothamBlack
     KeyHeader.Text = "CORE.XYZ  ·  KEY SYSTEM"
@@ -1890,36 +1956,58 @@ do
     KeyHeader.ZIndex = 32
     KeyHeader.Parent = KeyCard
 
+    local KeyHeaderSub = Instance.new("TextLabel")
+    KeyHeaderSub.Position = UDim2.fromOffset(56, 33)
+    KeyHeaderSub.Size = UDim2.new(1, -165, 0, 14)
+    KeyHeaderSub.BackgroundTransparency = 1
+    KeyHeaderSub.Font = Enum.Font.Code
+    KeyHeaderSub.Text = "LICENSE VERIFICATION GATEWAY"
+    KeyHeaderSub.TextColor3 = Theme.Muted
+    KeyHeaderSub.TextSize = 9
+    KeyHeaderSub.TextXAlignment = Enum.TextXAlignment.Left
+    KeyHeaderSub.ZIndex = 32
+    KeyHeaderSub.Parent = KeyCard
+
     local KeyServiceBadge = Instance.new("TextLabel")
     KeyServiceBadge.AnchorPoint = Vector2.new(1, 0)
-    KeyServiceBadge.Position = UDim2.new(1, -24, 0, 22)
-    KeyServiceBadge.Size = UDim2.fromOffset(88, 20)
+    KeyServiceBadge.Position = UDim2.new(1, -24, 0, 20)
+    KeyServiceBadge.Size = UDim2.fromOffset(92, 22)
     KeyServiceBadge.BackgroundColor3 = Theme.Surface
     KeyServiceBadge.Font = Enum.Font.Code
-    KeyServiceBadge.Text = "PLATOBOOST"
-    KeyServiceBadge.TextColor3 = Theme.Silver
+    KeyServiceBadge.Text = "● PLATOBOOST"
+    KeyServiceBadge.TextColor3 = Theme.White
     KeyServiceBadge.TextSize = 9
     KeyServiceBadge.ZIndex = 32
     KeyServiceBadge.Parent = KeyCard
-    addCorner(KeyServiceBadge, 5)
+    addCorner(KeyServiceBadge, 6)
     addStroke(KeyServiceBadge, Theme.Border, 1, 0)
 
+    local KeyStepsBar = Instance.new("Frame")
+    KeyStepsBar.Name = "KeyStepsBar"
+    KeyStepsBar.Position = UDim2.fromOffset(24, 56)
+    KeyStepsBar.Size = UDim2.new(1, -48, 0, 26)
+    KeyStepsBar.BackgroundColor3 = Theme.Deep
+    KeyStepsBar.ZIndex = 32
+    KeyStepsBar.Parent = KeyCard
+    addCorner(KeyStepsBar, 6)
+    addStroke(KeyStepsBar, Theme.Border, 1, 0)
+
     local KeySub = Instance.new("TextLabel")
-    KeySub.Position = UDim2.fromOffset(24, 52)
-    KeySub.Size = UDim2.new(1, -48, 0, 30)
+    KeySub.Position = UDim2.fromOffset(12, 0)
+    KeySub.Size = UDim2.new(1, -24, 1, 0)
     KeySub.BackgroundTransparency = 1
-    KeySub.Font = Enum.Font.GothamMedium
-    KeySub.Text = "Click Get Key to copy your verification link, then paste your key below and press Submit."
+    KeySub.Font = Enum.Font.Code
+    KeySub.Text = "1. Click Get Key   →   2. Complete Link   →   3. Paste & Submit"
     KeySub.TextColor3 = Theme.Silver
-    KeySub.TextSize = 11
-    KeySub.TextWrapped = true
-    KeySub.TextXAlignment = Enum.TextXAlignment.Left
-    KeySub.ZIndex = 32
-    KeySub.Parent = KeyCard
+    KeySub.TextSize = 10
+    KeySub.TextTruncate = Enum.TextTruncate.AtEnd
+    KeySub.TextXAlignment = Enum.TextXAlignment.Center
+    KeySub.ZIndex = 33
+    KeySub.Parent = KeyStepsBar
 
     local KeyInputHolder = Instance.new("Frame")
-    KeyInputHolder.Position = UDim2.fromOffset(24, 90)
-    KeyInputHolder.Size = UDim2.new(1, -48, 0, 42)
+    KeyInputHolder.Position = UDim2.fromOffset(24, 92)
+    KeyInputHolder.Size = UDim2.new(1, -48, 0, 44)
     KeyInputHolder.BackgroundColor3 = Theme.Surface
     KeyInputHolder.ZIndex = 32
     KeyInputHolder.Parent = KeyCard
@@ -1928,7 +2016,7 @@ do
 
     local KeyInputBox = Instance.new("TextBox")
     KeyInputBox.Position = UDim2.fromOffset(14, 0)
-    KeyInputBox.Size = UDim2.new(1, -28, 1, 0)
+    KeyInputBox.Size = UDim2.new(1, -68, 1, 0)
     KeyInputBox.BackgroundTransparency = 1
     KeyInputBox.Font = Enum.Font.Code
     KeyInputBox.PlaceholderText = "Paste your Platoboost key here..."
@@ -1941,6 +2029,32 @@ do
     KeyInputBox.ZIndex = 33
     KeyInputBox.Parent = KeyInputHolder
 
+    local KeyClearBtn = Instance.new("TextButton")
+    KeyClearBtn.Name = "KeyClearBtn"
+    KeyClearBtn.AnchorPoint = Vector2.new(1, 0.5)
+    KeyClearBtn.Position = UDim2.new(1, -8, 0.5, 0)
+    KeyClearBtn.Size = UDim2.fromOffset(46, 26)
+    KeyClearBtn.BackgroundColor3 = Theme.Deep
+    KeyClearBtn.AutoButtonColor = false
+    KeyClearBtn.Font = Enum.Font.Code
+    KeyClearBtn.Text = "CLEAR"
+    KeyClearBtn.TextColor3 = Theme.Muted
+    KeyClearBtn.TextSize = 9
+    KeyClearBtn.ZIndex = 34
+    KeyClearBtn.Parent = KeyInputHolder
+    addCorner(KeyClearBtn, 5)
+    addStroke(KeyClearBtn, Theme.Border, 1, 0)
+
+    KeyClearBtn.MouseEnter:Connect(function()
+        tween(KeyClearBtn, FastTween, { BackgroundColor3 = Theme.Elevated, TextColor3 = Theme.White })
+    end)
+    KeyClearBtn.MouseLeave:Connect(function()
+        tween(KeyClearBtn, FastTween, { BackgroundColor3 = Theme.Deep, TextColor3 = Theme.Muted })
+    end)
+    KeyClearBtn.MouseButton1Click:Connect(function()
+        KeyInputBox.Text = ""
+    end)
+
     KeyInputBox.Focused:Connect(function()
         tween(KeyInputStroke, FastTween, { Color = Theme.White, Thickness = 1.6 })
         tween(KeyInputHolder, FastTween, { BackgroundColor3 = Theme.Elevated })
@@ -1950,23 +2064,44 @@ do
         tween(KeyInputHolder, FastTween, { BackgroundColor3 = Theme.Surface })
     end)
 
+    local KeyStatusRow = Instance.new("Frame")
+    KeyStatusRow.Name = "KeyStatusRow"
+    KeyStatusRow.Position = UDim2.fromOffset(24, 144)
+    KeyStatusRow.Size = UDim2.new(1, -48, 0, 24)
+    KeyStatusRow.BackgroundColor3 = Theme.Deep
+    KeyStatusRow.ZIndex = 32
+    KeyStatusRow.Parent = KeyCard
+    addCorner(KeyStatusRow, 6)
+    addStroke(KeyStatusRow, Theme.Border, 1, 0)
+
+    local KeyStatusDot = Instance.new("Frame")
+    KeyStatusDot.Name = "KeyStatusDot"
+    KeyStatusDot.AnchorPoint = Vector2.new(0, 0.5)
+    KeyStatusDot.Position = UDim2.new(0, 10, 0.5, 0)
+    KeyStatusDot.Size = UDim2.fromOffset(6, 6)
+    KeyStatusDot.BackgroundColor3 = Theme.Silver
+    KeyStatusDot.BorderSizePixel = 0
+    KeyStatusDot.ZIndex = 33
+    KeyStatusDot.Parent = KeyStatusRow
+    addCorner(KeyStatusDot, 99)
+
     local KeyFeedback = Instance.new("TextLabel")
-    KeyFeedback.Position = UDim2.fromOffset(24, 140)
-    KeyFeedback.Size = UDim2.new(1, -48, 0, 18)
+    KeyFeedback.Position = UDim2.fromOffset(24, 0)
+    KeyFeedback.Size = UDim2.new(1, -32, 1, 0)
     KeyFeedback.BackgroundTransparency = 1
     KeyFeedback.Font = Enum.Font.Code
     KeyFeedback.Text = "Status: Waiting for key submission..."
     KeyFeedback.TextColor3 = Theme.Muted
-    KeyFeedback.TextSize = 11
+    KeyFeedback.TextSize = 10
     KeyFeedback.TextTruncate = Enum.TextTruncate.AtEnd
     KeyFeedback.TextXAlignment = Enum.TextXAlignment.Left
-    KeyFeedback.ZIndex = 32
-    KeyFeedback.Parent = KeyCard
+    KeyFeedback.ZIndex = 33
+    KeyFeedback.Parent = KeyStatusRow
 
     local UnlockButton = Instance.new("TextButton")
     UnlockButton.Name = "SubmitKeyButton"
-    UnlockButton.Position = UDim2.fromOffset(24, 168)
-    UnlockButton.Size = UDim2.new(0.5, -28, 0, 42)
+    UnlockButton.Position = UDim2.fromOffset(24, 178)
+    UnlockButton.Size = UDim2.new(0.5, -28, 0, 44)
     UnlockButton.BackgroundColor3 = Theme.White
     UnlockButton.AutoButtonColor = false
     UnlockButton.Font = Enum.Font.GothamBlack
@@ -1977,11 +2112,12 @@ do
     UnlockButton.ZIndex = 32
     UnlockButton.Parent = KeyCard
     addCorner(UnlockButton, 8)
+    local UnlockBtnStroke = addStroke(UnlockButton, Theme.White, 1.2, 0.2)
 
     local CopyKeyButton = Instance.new("TextButton")
     CopyKeyButton.Name = "GetKeyButton"
-    CopyKeyButton.Position = UDim2.new(0.5, 4, 0, 168)
-    CopyKeyButton.Size = UDim2.new(0.5, -28, 0, 42)
+    CopyKeyButton.Position = UDim2.new(0.5, 4, 0, 178)
+    CopyKeyButton.Size = UDim2.new(0.5, -28, 0, 44)
     CopyKeyButton.BackgroundColor3 = Theme.Surface
     CopyKeyButton.AutoButtonColor = false
     CopyKeyButton.Font = Enum.Font.GothamBold
@@ -1992,19 +2128,57 @@ do
     CopyKeyButton.ZIndex = 32
     CopyKeyButton.Parent = KeyCard
     addCorner(CopyKeyButton, 8)
-    addStroke(CopyKeyButton, Theme.Border, 1.2, 0)
+    local CopyBtnStroke = addStroke(CopyKeyButton, Theme.Border, 1.2, 0)
+
+    UnlockButton.MouseEnter:Connect(function()
+        tween(UnlockButton, FastTween, { BackgroundColor3 = Theme.Silver })
+        tween(UnlockBtnStroke, FastTween, { Transparency = 0 })
+    end)
+    UnlockButton.MouseLeave:Connect(function()
+        tween(UnlockButton, FastTween, { BackgroundColor3 = Theme.White })
+        tween(UnlockBtnStroke, FastTween, { Transparency = 0.2 })
+    end)
+
+    CopyKeyButton.MouseEnter:Connect(function()
+        tween(CopyKeyButton, FastTween, { BackgroundColor3 = Theme.Elevated })
+        tween(CopyBtnStroke, FastTween, { Color = Theme.White })
+    end)
+    CopyKeyButton.MouseLeave:Connect(function()
+        tween(CopyKeyButton, FastTween, { BackgroundColor3 = Theme.Surface })
+        tween(CopyBtnStroke, FastTween, { Color = Theme.Border })
+    end)
+
+    local KeyDivider = Instance.new("Frame")
+    KeyDivider.Position = UDim2.fromOffset(24, 236)
+    KeyDivider.Size = UDim2.new(1, -48, 0, 1)
+    KeyDivider.BackgroundColor3 = Theme.Border
+    KeyDivider.BorderSizePixel = 0
+    KeyDivider.ZIndex = 32
+    KeyDivider.Parent = KeyCard
 
     local KeyFooter = Instance.new("TextLabel")
-    KeyFooter.Position = UDim2.fromOffset(24, 226)
-    KeyFooter.Size = UDim2.new(1, -48, 0, 18)
+    KeyFooter.Position = UDim2.fromOffset(24, 246)
+    KeyFooter.Size = UDim2.new(1, -48, 0, 16)
     KeyFooter.BackgroundTransparency = 1
     KeyFooter.Font = Enum.Font.Code
-    KeyFooter.Text = "CORE.XYZ  ·  SECURED BY PLATOBOOST"
-    KeyFooter.TextColor3 = Theme.Muted
-    KeyFooter.TextSize = 10
+    KeyFooter.Text = "SECURED BY PLATOBOOST  ·  ACCURATE LIVE KEY DURATION"
+    KeyFooter.TextColor3 = Theme.Silver
+    KeyFooter.TextSize = 9
     KeyFooter.TextXAlignment = Enum.TextXAlignment.Center
     KeyFooter.ZIndex = 32
     KeyFooter.Parent = KeyCard
+
+    local KeyFooterSub = Instance.new("TextLabel")
+    KeyFooterSub.Position = UDim2.fromOffset(24, 264)
+    KeyFooterSub.Size = UDim2.new(1, -48, 0, 14)
+    KeyFooterSub.BackgroundTransparency = 1
+    KeyFooterSub.Font = Enum.Font.Code
+    KeyFooterSub.Text = "SUPPORTS 24H STANDARD & DEVELOPER KEYS"
+    KeyFooterSub.TextColor3 = Theme.Muted
+    KeyFooterSub.TextSize = 8
+    KeyFooterSub.TextXAlignment = Enum.TextXAlignment.Center
+    KeyFooterSub.ZIndex = 32
+    KeyFooterSub.Parent = KeyCard
 
     UI.KeyCard = KeyCard
     UI.KeyCardStroke = KeyCardStroke
@@ -2012,6 +2186,7 @@ do
     UI.KeyTopGrad = KeyTopGrad
     UI.KeyInputBox = KeyInputBox
     UI.KeyInputStroke = KeyInputStroke
+    UI.KeyStatusDot = KeyStatusDot
     UI.KeyFeedback = KeyFeedback
     UI.UnlockButton = UnlockButton
     UI.CopyKeyButton = CopyKeyButton
@@ -2164,6 +2339,9 @@ local function toggleMainHub()
         tween(UI.MainStroke, FastTween, { Transparency = 0.08 })
         tween(UI.FloatingToggle, FastTween, { BackgroundColor3 = Theme.Black })
     else
+        if UI.ColorPickerPopup then
+            UI.ColorPickerPopup.Visible = false
+        end
         tween(UI.MainScale, FastTween, { Scale = targetScale * 0.9 })
         tween(UI.MainWindow, FastTween, { BackgroundTransparency = 1 })
         tween(UI.MainStroke, FastTween, { Transparency = 1 })
@@ -2433,16 +2611,18 @@ do
     HeaderTitle.Parent = HeaderBar
 
     local HeaderSub = Instance.new("TextLabel")
+    HeaderSub.Name = "HeaderSubtitle"
     HeaderSub.Position = UDim2.fromOffset(42, 24)
     HeaderSub.Size = UDim2.fromOffset(220, 14)
     HeaderSub.BackgroundTransparency = 1
     HeaderSub.Font = Enum.Font.Code
-    HeaderSub.Text = "UNIVERSAL V4.5  ·  ULTRA-FPS STEALTH"
+    HeaderSub.Text = "UNIVERSAL EDITION  ·  V4.5"
     HeaderSub.TextColor3 = Theme.Muted
     HeaderSub.TextSize = 9
     HeaderSub.TextXAlignment = Enum.TextXAlignment.Left
     HeaderSub.ZIndex = 13
     HeaderSub.Parent = HeaderBar
+    UI.HeaderSub = HeaderSub
 
     local HeaderSearchHolder = Instance.new("Frame")
     HeaderSearchHolder.Name = "HeaderSearchHolder"
@@ -2525,7 +2705,14 @@ do
                         if #q == 0 then
                             child.Visible = true
                         else
-                            child.Visible = nodeMatchesQuery(child, q)
+                            local matched = nodeMatchesQuery(child, q)
+                            child.Visible = matched
+                            if matched then
+                                local secContent = child:FindFirstChild("SectionContent")
+                                if secContent then
+                                    secContent.Visible = true
+                                end
+                            end
                         end
                     end
                 end
@@ -2656,7 +2843,7 @@ do
     UserStatusLbl.Size = UDim2.new(1, -20, 0, 12)
     UserStatusLbl.BackgroundTransparency = 1
     UserStatusLbl.Font = Enum.Font.Code
-    UserStatusLbl.Text = "● STEALTH · V4.5"
+    UserStatusLbl.Text = "● ACTIVE · V4.5"
     UserStatusLbl.TextColor3 = Theme.Silver
     UserStatusLbl.TextSize = 9
     UserStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -2746,6 +2933,9 @@ local function createTab(name, order)
             t.Page.Visible = false
         end
         State.activeTab = tabObj
+        if UI.HeaderSub then
+            UI.HeaderSub.Text = "UNIVERSAL EDITION  ·  " .. string.upper(tostring(name))
+        end
         tween(btn, FastTween, {
             BackgroundTransparency = 0.1,
             TextColor3 = Theme.White,
@@ -2937,23 +3127,65 @@ do
         return Color3.fromRGB(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
     end
 
-    -- Floating Custom Color Picker Popup (Matches Reference Screenshot IMG_20261102_204241_ffaa9d5b.jpg)
+    -- Floating Custom Color Picker Popup (Matches Reference Screenshot IMG_20261102_204241_ffaa9d5b.jpg + Draggable Header & Close Button)
     local pickerPopup = Instance.new("Frame")
     pickerPopup.Name = "CoreColorPickerPopup"
     pickerPopup.AnchorPoint = Vector2.new(0.5, 0.5)
     pickerPopup.Position = UDim2.new(0.5, 195, 0.5, 0)
-    pickerPopup.Size = UDim2.fromOffset(224, 232)
+    pickerPopup.Size = UDim2.fromOffset(224, 254)
     pickerPopup.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
     pickerPopup.Visible = false
+    pickerPopup.Active = true
     pickerPopup.ZIndex = 120
     pickerPopup.Parent = UI.ScreenGui
-    addCorner(pickerPopup, 6)
+    addCorner(pickerPopup, 8)
     addStroke(pickerPopup, Theme.Border, 1.2, 0)
     UI.ColorPickerPopup = pickerPopup
 
+    local pickerScale = Instance.new("UIScale")
+    pickerScale.Scale = 1
+    pickerScale.Parent = pickerPopup
+
+    local pickerHeader = Instance.new("Frame")
+    pickerHeader.Name = "ColorPickerHeader"
+    pickerHeader.Size = UDim2.new(1, 0, 0, 24)
+    pickerHeader.BackgroundColor3 = Theme.Deep
+    pickerHeader.BorderSizePixel = 0
+    pickerHeader.ZIndex = 121
+    pickerHeader.Parent = pickerPopup
+    addCorner(pickerHeader, 8)
+
+    local pickerTitle = Instance.new("TextLabel")
+    pickerTitle.Position = UDim2.fromOffset(10, 0)
+    pickerTitle.Size = UDim2.new(1, -36, 1, 0)
+    pickerTitle.BackgroundTransparency = 1
+    pickerTitle.Font = Enum.Font.Code
+    pickerTitle.Text = "COLOR PICKER"
+    pickerTitle.TextColor3 = Theme.Silver
+    pickerTitle.TextSize = 9
+    pickerTitle.TextXAlignment = Enum.TextXAlignment.Left
+    pickerTitle.ZIndex = 122
+    pickerTitle.Parent = pickerHeader
+
+    local pickerCloseBtn = Instance.new("TextButton")
+    pickerCloseBtn.Name = "ColorPickerCloseBtn"
+    pickerCloseBtn.AnchorPoint = Vector2.new(1, 0.5)
+    pickerCloseBtn.Position = UDim2.new(1, -6, 0.5, 0)
+    pickerCloseBtn.Size = UDim2.fromOffset(18, 18)
+    pickerCloseBtn.BackgroundTransparency = 1
+    pickerCloseBtn.AutoButtonColor = false
+    pickerCloseBtn.Font = Enum.Font.GothamBold
+    pickerCloseBtn.Text = "×"
+    pickerCloseBtn.TextColor3 = Theme.Muted
+    pickerCloseBtn.TextSize = 12
+    pickerCloseBtn.ZIndex = 123
+    pickerCloseBtn.Parent = pickerHeader
+
+    makeDraggable(pickerHeader, pickerPopup)
+
     local svSquare = Instance.new("Frame")
     svSquare.Name = "SVSquare"
-    svSquare.Position = UDim2.fromOffset(8, 8)
+    svSquare.Position = UDim2.fromOffset(8, 28)
     svSquare.Size = UDim2.new(1, -16, 0, 134)
     svSquare.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     svSquare.BorderSizePixel = 0
@@ -3011,7 +3243,7 @@ do
 
     local hueBar = Instance.new("Frame")
     hueBar.Name = "HueBar"
-    hueBar.Position = UDim2.fromOffset(8, 148)
+    hueBar.Position = UDim2.fromOffset(8, 168)
     hueBar.Size = UDim2.new(1, -16, 0, 14)
     hueBar.BackgroundColor3 = Theme.White
     hueBar.BorderSizePixel = 0
@@ -3054,7 +3286,7 @@ do
 
     local alphaBar = Instance.new("Frame")
     alphaBar.Name = "AlphaBar"
-    alphaBar.Position = UDim2.fromOffset(8, 168)
+    alphaBar.Position = UDim2.fromOffset(8, 188)
     alphaBar.Size = UDim2.new(1, -16, 0, 14)
     alphaBar.BackgroundColor3 = Color3.fromRGB(220, 220, 228)
     alphaBar.BorderSizePixel = 0
@@ -3092,7 +3324,7 @@ do
 
     local rgbaBox = Instance.new("TextBox")
     rgbaBox.Name = "ColorPickerRGBABox"
-    rgbaBox.Position = UDim2.fromOffset(8, 190)
+    rgbaBox.Position = UDim2.fromOffset(8, 210)
     rgbaBox.Size = UDim2.new(1, -50, 0, 32)
     rgbaBox.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     rgbaBox.ClearTextOnFocus = false
@@ -3109,7 +3341,7 @@ do
 
     local previewSwatch = Instance.new("TextButton")
     previewSwatch.Name = "ColorPickerPreviewSwatch"
-    previewSwatch.Position = UDim2.new(1, -36, 0, 190)
+    previewSwatch.Position = UDim2.new(1, -36, 0, 210)
     previewSwatch.Size = UDim2.fromOffset(28, 32)
     previewSwatch.BackgroundColor3 = Theme.White
     previewSwatch.AutoButtonColor = false
@@ -3144,10 +3376,6 @@ do
             ColorSequenceKeypoint.new(1, finalCol),
         })
         previewSwatch.BackgroundColor3 = finalCol
-        local rawR, rawG, rawB = finalCol.R or 1, finalCol.G or 1, finalCol.B or 1
-        if rawR <= 1 and rawG <= 1 and rawB <= 1 and (pickerState.V == 0 or (rawR <= 1 and rawG <= 1 and rawB <= 1 and (rawR < 1.0001 and rawG < 1.0001 and rawB < 1.0001 and not (rawR == 255 or rawG == 255 or rawB == 255)))) then
-            -- compute directly from HSV to avoid 0..1 vs 0..255 ambiguity
-        end
         local iH = math.floor(pickerState.H * 6)
         local fH = pickerState.H * 6 - iH
         local pH = pickerState.V * (1 - pickerState.S)
@@ -3186,8 +3414,16 @@ do
         pickerState.A = 1
         syncPickerVisuals(false)
         pickerPopup.Visible = true
+        pickerScale.Scale = 0.92
+        tween(pickerScale, SpringTween, { Scale = 1 })
     end
     UI.openColorPickerForSwatch = openColorPickerForSwatch
+
+    pickerCloseBtn.MouseButton1Click:Connect(function()
+        pickerPopup.Visible = false
+        pickerState.ActiveBtn = nil
+        pickerState.ActiveTarget = nil
+    end)
 
     previewSwatch.MouseButton1Click:Connect(function()
         pickerPopup.Visible = false
@@ -3988,6 +4224,17 @@ local function createDropdown(page, text, options, defaultOpt, callback)
             optBtn.Parent = listHolder
             addCorner(optBtn, 6)
             table.insert(optionButtons, optBtn)
+
+            optBtn.MouseEnter:Connect(function()
+                if opt ~= selected then
+                    tween(optBtn, FastTween, { BackgroundColor3 = Theme.Elevated, TextColor3 = Theme.White })
+                end
+            end)
+            optBtn.MouseLeave:Connect(function()
+                if opt ~= selected then
+                    tween(optBtn, FastTween, { BackgroundColor3 = Theme.Deep, TextColor3 = Theme.Silver })
+                end
+            end)
 
             optBtn.MouseButton1Click:Connect(function()
                 selected = opt
@@ -12042,6 +12289,7 @@ local function attemptAuthorization()
     if entered == "" then
         UI.KeyFeedback.Text = "Status: Please paste your key before pressing Submit."
         UI.KeyFeedback.TextColor3 = Theme.Error
+        if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Error end
         shakeKeyCardOnError()
         return
     end
@@ -12050,6 +12298,7 @@ local function attemptAuthorization()
     UI.UnlockButton.Text = "Verifying..."
     UI.KeyFeedback.Text = "Status: Verifying license with Platoboost..."
     UI.KeyFeedback.TextColor3 = Theme.Silver
+    if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.White end
 
     local okVerify, expireTs = PlatoBoost.verifyKey(entered)
     if okVerify then
@@ -12059,6 +12308,7 @@ local function attemptAuthorization()
         UI.UnlockButton.Text = "Submit"
         UI.KeyFeedback.Text = "Status: Key verified! Launching Core.xyz..."
         UI.KeyFeedback.TextColor3 = Theme.Success
+        if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Success end
         tween(UI.KeyScale, FastTween, { Scale = 0.9 })
         tween(UI.KeyCard, FastTween, { BackgroundTransparency = 1 })
         tween(UI.KeyCardStroke, FastTween, { Transparency = 1 })
@@ -12070,6 +12320,7 @@ local function attemptAuthorization()
         State.isAuthorizing = false
         UI.UnlockButton.Text = "Submit"
         UI.KeyFeedback.TextColor3 = Theme.Error
+        if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Error end
         shakeKeyCardOnError()
     end
 end
@@ -12078,14 +12329,17 @@ UI.CopyKeyButton.MouseButton1Click:Connect(function()
     spawnRipple(UI.CopyKeyButton)
     UI.KeyFeedback.Text = "Status: Generating Platoboost key link..."
     UI.KeyFeedback.TextColor3 = Theme.Silver
+    if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.White end
     local ok, linkOrErr = PlatoBoost.copyLink()
     if ok then
         UI.KeyFeedback.Text = "Status: Key link copied! Paste it into your browser."
         UI.KeyFeedback.TextColor3 = Theme.Success
+        if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Success end
         notify("Key System", "Platoboost key link copied to clipboard!", 4)
     else
         UI.KeyFeedback.Text = "Status: " .. tostring(linkOrErr or "Failed to copy key link.")
         UI.KeyFeedback.TextColor3 = Theme.Error
+        if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Error end
     end
 end)
 
@@ -12642,6 +12896,9 @@ do
             local pulse = 1 + 0.22 * math.sin(animClock * 4.5)
             if UI.LoaderCard.Visible then
                 UI.EmblemCore.Size = UDim2.fromOffset(8 * pulse, 8 * pulse)
+                if UI.LoaderTopGrad then
+                    UI.LoaderTopGrad.Offset = Vector2.new(math.sin(animClock * 2.0) * 0.45, 0)
+                end
             end
             if UI.KeyCard.Visible then
                 UI.KeyTopGrad.Offset = Vector2.new(math.sin(animClock * 2.2) * 0.45, 0)
@@ -12689,6 +12946,10 @@ task.spawn(function()
     tween(UI.LoaderCard, SmoothTween, { BackgroundTransparency = 0.03 })
     tween(UI.LoaderStroke, SmoothTween, { Transparency = 0.08 })
     tween(UI.LoaderScale, SpringTween, { Scale = targetScale })
+    if UI.LoaderTopBar then tween(UI.LoaderTopBar, SmoothTween, { BackgroundTransparency = 0 }) end
+    if UI.LoaderStageBadge then tween(UI.LoaderStageBadge, SmoothTween, { BackgroundTransparency = 0.15, TextTransparency = 0 }) end
+    if UI.LoaderSubDetail then tween(UI.LoaderSubDetail, SmoothTween, { TextTransparency = 0 }) end
+    if UI.LoaderFooterHint then tween(UI.LoaderFooterHint, SmoothTween, { TextTransparency = 0 }) end
     tween(UI.EmblemOuterStroke, SmoothTween, { Transparency = 0.08 })
     tween(UI.EmblemInnerStroke, SmoothTween, { Transparency = 0.25 })
     tween(UI.EmblemCore, SmoothTween, { BackgroundTransparency = 0 })
@@ -12698,32 +12959,44 @@ task.spawn(function()
     tween(UI.LoaderPercent, SmoothTween, { TextTransparency = 0 })
 
     local stages = {
-        { pct = 16, text = "Starting Core.xyz..." },
-        { pct = 34, text = "Preparing graphics & overlay engine..." },
-        { pct = 52, text = "Optimizing frame pacing & memory pool..." },
-        { pct = 70, text = "Loading saved profile & preferences..." },
-        { pct = 88, text = "Verifying license status..." },
-        { pct = 100, text = "Finalizing workspace..." },
+        { pct = 16, tag = "STAGE 1 / 6  ·  CORE", text = "Starting Core.xyz...", sub = "Initializing runtime environment & core modules..." },
+        { pct = 34, tag = "STAGE 2 / 6  ·  RENDER", text = "Preparing graphics & overlay engine...", sub = "Pre-allocating 3D ESP, skeleton & chams pools..." },
+        { pct = 52, tag = "STAGE 3 / 6  ·  WEATHER", text = "Optimizing frame pacing & memory pool...", sub = "Warming up 3D volumetric weather & audio nodes..." },
+        { pct = 70, tag = "STAGE 4 / 6  ·  CONFIG", text = "Loading saved profile & preferences...", sub = "Syncing themes, keybinds & performance profiles..." },
+        { pct = 88, tag = "STAGE 5 / 6  ·  LICENSE", text = "Verifying license status...", sub = "Connecting to Platoboost verification gateway..." },
+        { pct = 100, tag = "STAGE 6 / 6  ·  READY", text = "Finalizing workspace...", sub = "All systems ready · Opening license gateway..." },
     }
 
     local currentPct = 0
     for idx, stage in ipairs(stages) do
         UI.LoaderStatus.Text = stage.text
+        if UI.LoaderStageBadge then
+            UI.LoaderStageBadge.Text = stage.tag
+        end
+        if UI.LoaderSubDetail then
+            UI.LoaderSubDetail.Text = stage.sub
+        end
         if idx == 5 then
             pcall(PlatoBoost.cacheLink)
         end
         tween(UI.LoaderBarFill, SlowTween, { Size = UDim2.fromScale(stage.pct / 100, 1) })
         while currentPct < stage.pct do
-            currentPct = math.min(stage.pct, currentPct + 3)
+            currentPct = math.min(stage.pct, currentPct + 1)
             UI.LoaderPercent.Text = tostring(currentPct) .. "%"
-            task.wait(0.018)
+            task.wait(0.042)
         end
-        task.wait(0.12)
+        task.wait(0.38)
     end
+
+    task.wait(0.45)
 
     tween(UI.LoaderScale, FastTween, { Scale = targetScale * 0.9 })
     tween(UI.LoaderCard, FastTween, { BackgroundTransparency = 1 })
     tween(UI.LoaderStroke, FastTween, { Transparency = 1 })
+    if UI.LoaderTopBar then tween(UI.LoaderTopBar, FastTween, { BackgroundTransparency = 1 }) end
+    if UI.LoaderStageBadge then tween(UI.LoaderStageBadge, FastTween, { BackgroundTransparency = 1, TextTransparency = 1 }) end
+    if UI.LoaderSubDetail then tween(UI.LoaderSubDetail, FastTween, { TextTransparency = 1 }) end
+    if UI.LoaderFooterHint then tween(UI.LoaderFooterHint, FastTween, { TextTransparency = 1 }) end
     tween(UI.LoaderTitle, FastTween, { TextTransparency = 1 })
     tween(UI.LoaderStatus, FastTween, { TextTransparency = 1 })
     tween(UI.LoaderPercent, FastTween, { TextTransparency = 1 })
@@ -12732,12 +13005,13 @@ task.spawn(function()
     tween(UI.EmblemOuterStroke, FastTween, { Transparency = 1 })
     tween(UI.EmblemInnerStroke, FastTween, { Transparency = 1 })
     tween(UI.EmblemCore, FastTween, { BackgroundTransparency = 1 })
-    task.wait(0.2)
+    task.wait(0.24)
     UI.LoaderCard.Visible = false
 
     -- Always display the polished Key System on every launch (No auto-save key bypass)
     UI.KeyFeedback.Text = "Status: Waiting for key submission..."
     UI.KeyFeedback.TextColor3 = Theme.Muted
+    if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Silver end
     UI.KeyCard.Visible = true
     UI.KeyScale.Scale = targetScale * 0.88
     tween(UI.KeyCard, SmoothTween, { BackgroundTransparency = 0.03 })
