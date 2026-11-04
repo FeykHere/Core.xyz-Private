@@ -1119,15 +1119,6 @@ local State = {
     orbitAngle = 0,
     expandedPlayerName = nil,
     espObjects = {},
-    discoveredHitparts = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso" },
-    discoveredHitpartSet = {
-        ["Head"] = true,
-        ["HumanoidRootPart"] = true,
-        ["UpperTorso"] = true,
-        ["LowerTorso"] = true,
-    },
-    refreshHitpartDropdown = nil,
-    scannedRigChars = setmetatable({}, { __mode = "k" }),
     cachedAimTarget = nil,
     targetScanAccumulator = 0,
     noclipCollideCache = {},
@@ -4278,7 +4269,6 @@ local function createDropdown(page, text, options, defaultOpt, callback)
 
     local function rebuildOptions(newOptions)
         options = newOptions
-        listHolder.Size = UDim2.new(1, -16, 0, #options * 28)
         for _, b in ipairs(optionButtons) do
             if b and b.Parent then
                 b:Destroy()
@@ -4525,271 +4515,28 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
 end
 
 --------------------------------------------------------------------------------
--- 11. CORE GAMEPLAY & UNIVERSAL FEATURE IMPLEMENTATIONS (WITH CUSTOM RIG ENGINE)
+-- 11. CORE GAMEPLAY & UNIVERSAL FEATURE IMPLEMENTATIONS
 --------------------------------------------------------------------------------
-local STANDARD_R15_R6_LIMBS = {
-    ["Head"] = true,
-    ["HumanoidRootPart"] = true,
-    ["UpperTorso"] = true,
-    ["LowerTorso"] = true,
-    ["Torso"] = true,
-    ["LeftUpperArm"] = true,
-    ["LeftLowerArm"] = true,
-    ["LeftHand"] = true,
-    ["RightUpperArm"] = true,
-    ["RightLowerArm"] = true,
-    ["RightHand"] = true,
-    ["LeftUpperLeg"] = true,
-    ["LeftLowerLeg"] = true,
-    ["LeftFoot"] = true,
-    ["RightUpperLeg"] = true,
-    ["RightLowerLeg"] = true,
-    ["RightFoot"] = true,
-    ["Left Arm"] = true,
-    ["Right Arm"] = true,
-    ["Left Leg"] = true,
-    ["Right Leg"] = true,
-}
-
-local function isIgnoredRigPart(inst, char)
-    if not inst or not inst.Name then
-        return true
-    end
-    local n = tostring(inst.Name)
-    if n == "" or n == "KorbloxPeg" or n == "Handle" or string.find(n, "^CoreXyz_") then
-        return true
-    end
-    local p = inst.Parent
-    while p and p ~= char do
-        local cn = tostring(p.ClassName or "")
-        if cn == "Tool" or cn == "Accessory" or cn == "Accoutrement" or cn == "Hat" or string.find(tostring(p.Name or ""), "Tool") then
-            return true
-        end
-        p = p.Parent
-    end
-    return false
-end
-
-local function getRigNodeWorldPos(node)
-    if not node then
-        return nil
-    end
-    local cn = node.ClassName
-    if cn == "Bone" or cn == "Attachment" then
-        local okW, wPos = pcall(function()
-            if node.TransformedWorldCFrame then
-                return node.TransformedWorldCFrame.Position
-            end
-            return node.WorldPosition or node.Position
-        end)
-        if okW and wPos then
-            return wPos
-        end
-    end
-    return node.Position
-end
-
-local function collectCharacterBodyParts(char)
-    local parts = {}
-    if not char then
-        return parts
-    end
-    if char.GetDescendants then
-        local okD, descList = pcall(function()
-            return char:GetDescendants()
-        end)
-        if okD and type(descList) == "table" then
-            for _, d in ipairs(descList) do
-                if (d:IsA("BasePart") or d.ClassName == "Bone") and not isIgnoredRigPart(d, char) then
-                    table.insert(parts, d)
-                end
-            end
-            return parts
-        end
-    end
-    if char.GetChildren then
-        for _, c in ipairs(char:GetChildren()) do
-            if (c:IsA("BasePart") or c.ClassName == "Bone") and not isIgnoredRigPart(c, char) then
-                table.insert(parts, c)
-            end
-        end
-    end
-    return parts
-end
-
-local function resolveCharacterRootPart(char, hum)
-    if not char then
-        return nil
-    end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        return hrp
-    end
-    if hum then
-        local okR, rootP = pcall(function()
-            return hum.RootPart
-        end)
-        if okR and rootP and rootP.Parent then
-            return rootP
-        end
-    end
-    local okPP, pp = pcall(function()
-        return char.PrimaryPart
-    end)
-    if okPP and pp and pp.Parent then
-        return pp
-    end
-    local stdTorso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("LowerTorso")
-    if stdTorso then
-        return stdTorso
-    end
-    local bodyParts = collectCharacterBodyParts(char)
-    for _, part in ipairs(bodyParts) do
-        if part.ClassName ~= "Bone" then
-            local low = string.lower(tostring(part.Name or ""))
-            if string.find(low, "root", 1, true)
-                or string.find(low, "torso", 1, true)
-                or string.find(low, "chest", 1, true)
-                or string.find(low, "pelvis", 1, true)
-                or string.find(low, "spine", 1, true)
-                or string.find(low, "core", 1, true)
-                or string.find(low, "body", 1, true)
-                or string.find(low, "hitbox", 1, true)
-                or string.find(low, "chassis", 1, true) then
-                return part
-            end
-        end
-    end
-    for _, part in ipairs(bodyParts) do
-        if part.ClassName ~= "Bone" then
-            return part
-        end
-    end
-    return nil
-end
-
-local function resolveCharacterHeadPart(char, rootPart)
-    if not char then
-        return nil
-    end
-    local head = char:FindFirstChild("Head")
-    if head then
-        return head
-    end
-    local bodyParts = collectCharacterBodyParts(char)
-    for _, part in ipairs(bodyParts) do
-        local low = string.lower(tostring(part.Name or ""))
-        if string.find(low, "head", 1, true)
-            or string.find(low, "skull", 1, true)
-            or string.find(low, "cranium", 1, true)
-            or string.find(low, "helmet", 1, true)
-            or string.find(low, "face", 1, true)
-            or string.find(low, "crit", 1, true)
-            or string.find(low, "weakspot", 1, true) then
-            return part
-        end
-    end
-    local highestPart = nil
-    local highestY = -math.huge
-    for _, part in ipairs(bodyParts) do
-        if part.ClassName ~= "Bone" then
-            local pos = getRigNodeWorldPos(part)
-            if pos and pos.Y and pos.Y > highestY then
-                highestY = pos.Y
-                highestPart = part
-            end
-        end
-    end
-    return highestPart or rootPart
-end
-
-local function scanCharacterRigParts(char)
-    if not char or State.scannedRigChars[char] then
-        return
-    end
-    local bodyParts = collectCharacterBodyParts(char)
-    if #bodyParts == 0 then
-        return
-    end
-    State.scannedRigChars[char] = true
-
-    local hasStandardR15 = (char:FindFirstChild("UpperTorso") ~= nil)
-    local hasStandardR6 = (char:FindFirstChild("Torso") ~= nil and char:FindFirstChild("Left Arm") ~= nil)
-    local isCustomRig = (not hasStandardR15 and not hasStandardR6)
-
-    local addedNew = false
-    for _, part in ipairs(bodyParts) do
-        local pName = tostring(part.Name or "")
-        if pName ~= "" and not State.discoveredHitpartSet[pName] then
-            if isCustomRig or not STANDARD_R15_R6_LIMBS[pName] then
-                if #State.discoveredHitparts < 20 then
-                    State.discoveredHitpartSet[pName] = true
-                    table.insert(State.discoveredHitparts, pName)
-                    addedNew = true
-                end
-            end
-        end
-    end
-
-    if addedNew and State.refreshHitpartDropdown then
-        State.refreshHitpartDropdown(State.discoveredHitparts, ConfigState.TargetPart)
-    end
-end
-State.scanCharacterRigParts = scanCharacterRigParts
-
-local function findPartByNameRecursive(char, targetName)
-    if not char or not targetName or targetName == "" then
-        return nil
-    end
-    local direct = char:FindFirstChild(targetName)
-    if direct and not isIgnoredRigPart(direct, char) then
-        return direct
-    end
-    if char.GetDescendants then
-        local okD, descList = pcall(function()
-            return char:GetDescendants()
-        end)
-        if okD and type(descList) == "table" then
-            for _, d in ipairs(descList) do
-                if d.Name == targetName and (d:IsA("BasePart") or d.ClassName == "Bone") and not isIgnoredRigPart(d, char) then
-                    return d
-                end
-            end
-        end
-    end
-    return nil
-end
-
 local function getTargetPartFromCharacter(char, partName)
     if not char then
         return nil
     end
-    scanCharacterRigParts(char)
-    local found = findPartByNameRecursive(char, partName)
+    local found = char:FindFirstChild(partName)
     if found then
         return found
     end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local rootFallback = resolveCharacterRootPart(char, hum)
-    if partName == "Head" then
-        return resolveCharacterHeadPart(char, rootFallback) or rootFallback
-    elseif partName == "HumanoidRootPart" then
-        return rootFallback or resolveCharacterHeadPart(char, nil)
-    elseif partName == "UpperTorso" or partName == "LowerTorso" or partName == "Torso" then
-        return char:FindFirstChild("Torso")
-            or char:FindFirstChild("UpperTorso")
-            or char:FindFirstChild("LowerTorso")
-            or rootFallback
+    if partName == "UpperTorso" or partName == "LowerTorso" then
+        return char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
     elseif partName == "RightUpperArm" then
-        return char:FindFirstChild("Right Arm") or rootFallback
+        return char:FindFirstChild("Right Arm") or char:FindFirstChild("HumanoidRootPart")
     elseif partName == "LeftUpperArm" then
-        return char:FindFirstChild("Left Arm") or rootFallback
+        return char:FindFirstChild("Left Arm") or char:FindFirstChild("HumanoidRootPart")
     elseif partName == "RightUpperLeg" or partName == "RightLowerLeg" then
-        return char:FindFirstChild("RightLowerLeg") or char:FindFirstChild("Right Leg") or rootFallback
+        return char:FindFirstChild("RightLowerLeg") or char:FindFirstChild("Right Leg") or char:FindFirstChild("HumanoidRootPart")
     elseif partName == "LeftUpperLeg" or partName == "LeftLowerLeg" then
-        return char:FindFirstChild("LeftLowerLeg") or char:FindFirstChild("Left Leg") or rootFallback
+        return char:FindFirstChild("LeftLowerLeg") or char:FindFirstChild("Left Leg") or char:FindFirstChild("HumanoidRootPart")
     end
-    return rootFallback or resolveCharacterHeadPart(char, nil)
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
 end
 
 local function isPlayerWhitelisted(player)
@@ -5278,19 +5025,13 @@ local function hookPlayerLifecycle(player)
     local conns = {}
     pcall(function()
         if player.CharacterAdded and player.CharacterAdded.Connect then
-            local cAdd = player.CharacterAdded:Connect(function(newChar)
+            local cAdd = player.CharacterAdded:Connect(function()
                 hidePlayerESP(player)
                 invalidatePlayerESPCache(player)
-                if newChar then
-                    scanCharacterRigParts(newChar)
-                end
             end)
             table.insert(conns, cAdd)
         end
     end)
-    if player.Character then
-        scanCharacterRigParts(player.Character)
-    end
     pcall(function()
         if player.CharacterRemoving and player.CharacterRemoving.Connect then
             local cRem = player.CharacterRemoving:Connect(function()
@@ -5342,8 +5083,7 @@ local function cacheCharacterBones(char)
     local jointPairs = {}
     local validCount = 0
     local isR15 = char:FindFirstChild("UpperTorso") ~= nil
-    local isR6 = (not isR15) and (char:FindFirstChild("Torso") ~= nil and char:FindFirstChild("Left Arm") ~= nil)
-    local expectedMin = isR15 and 10 or (isR6 and 5 or 1)
+    local expectedMin = isR15 and 10 or 5
     for bIdx, jointDef in ipairs(SKELETON_JOINTS) do
         local partA = char:FindFirstChild(jointDef[1])
             or (jointDef[1] == "UpperTorso" and char:FindFirstChild("Torso"))
@@ -5357,86 +5097,6 @@ local function cacheCharacterBones(char)
             jointPairs[bIdx] = false
         end
     end
-
-    -- Universal Custom-Rig Skeleton Discovery (Motor6D / Weld Joint Graph -> Skinned Mesh Bone Hierarchy -> Hub Fallback)
-    if not isR15 and not isR6 and validCount < 3 then
-        local pairSeen = {}
-        for idx = 1, #SKELETON_JOINTS do
-            local existing = jointPairs[idx]
-            if existing and existing.PartA and existing.PartB then
-                pairSeen[tostring(existing.PartA) .. "->" .. tostring(existing.PartB)] = true
-                pairSeen[tostring(existing.PartB) .. "->" .. tostring(existing.PartA)] = true
-            end
-        end
-
-        local function tryInsertCustomBonePair(nodeA, nodeB)
-            if not nodeA or not nodeB or nodeA == nodeB then
-                return
-            end
-            if isIgnoredRigPart(nodeA, char) or isIgnoredRigPart(nodeB, char) then
-                return
-            end
-            local key1 = tostring(nodeA) .. "->" .. tostring(nodeB)
-            local key2 = tostring(nodeB) .. "->" .. tostring(nodeA)
-            if pairSeen[key1] or pairSeen[key2] then
-                return
-            end
-            for slot = 1, #SKELETON_JOINTS do
-                if not jointPairs[slot] then
-                    jointPairs[slot] = { PartA = nodeA, PartB = nodeB }
-                    pairSeen[key1] = true
-                    pairSeen[key2] = true
-                    validCount = validCount + 1
-                    return
-                end
-            end
-        end
-
-        if char.GetDescendants then
-            local okD, descList = pcall(function()
-                return char:GetDescendants()
-            end)
-            if okD and type(descList) == "table" then
-                -- Pass 1: Motor6D & Weld Joint Graph
-                for _, d in ipairs(descList) do
-                    if validCount >= #SKELETON_JOINTS then break end
-                    local cn = tostring(d.ClassName or "")
-                    if cn == "Motor6D" or cn == "Weld" or cn == "Motor" then
-                        local p0, p1 = nil, nil
-                        pcall(function()
-                            p0 = d.Part0
-                            p1 = d.Part1
-                        end)
-                        if p0 and p1 then
-                            tryInsertCustomBonePair(p0, p1)
-                        end
-                    end
-                end
-                -- Pass 2: Skinned Mesh Bone Hierarchy
-                for _, d in ipairs(descList) do
-                    if validCount >= #SKELETON_JOINTS then break end
-                    if d.ClassName == "Bone" and d.Parent and (d.Parent.ClassName == "Bone" or d.Parent:IsA("BasePart")) then
-                        tryInsertCustomBonePair(d.Parent, d)
-                    end
-                end
-            end
-        end
-
-        -- Pass 3: Custom BasePart Hub Fallback (connect custom rig limbs to RootPart)
-        if validCount == 0 then
-            local rootP = resolveCharacterRootPart(char, char:FindFirstChildOfClass("Humanoid"))
-            local bodyParts = collectCharacterBodyParts(char)
-            if rootP then
-                for _, part in ipairs(bodyParts) do
-                    if validCount >= #SKELETON_JOINTS then break end
-                    if part ~= rootP and part.ClassName ~= "Bone" then
-                        tryInsertCustomBonePair(rootP, part)
-                    end
-                end
-            end
-        end
-    end
-
     return jointPairs, (validCount >= expectedMin)
 end
 
@@ -5464,20 +5124,19 @@ local function updateESP(camera)
             if not char or not passesTeamCheck(player) then
                 hidePlayerESP(player)
             else
-                -- Self-healing character & part cache: supports R15, R6, and Custom Rigs via resolveCharacterRootPart!
+                -- Self-healing character & part cache: verifies parent ancestry so respawned or streamed-in characters always re-bind!
                 local hrp = tagData.CachedHRP
                 local hum = tagData.CachedHum
                 if tagData.CachedChar ~= char
-                    or not hrp or not hrp.Parent
+                    or not hrp or hrp.Parent ~= char
                     or not hum or hum.Parent ~= char then
+                    hrp = char:FindFirstChild("HumanoidRootPart")
                     hum = char:FindFirstChildOfClass("Humanoid")
-                    hrp = resolveCharacterRootPart(char, hum)
                     if hrp and hum then
-                        scanCharacterRigParts(char)
                         tagData.CachedChar = char
                         tagData.CachedHRP = hrp
                         tagData.CachedHum = hum
-                        tagData.CachedHead = resolveCharacterHeadPart(char, hrp)
+                        tagData.CachedHead = char:FindFirstChild("Head")
                         tagData.CachedJointPairs = nil
                         tagData.BonesComplete = false
                         tagData.BoneRetryFrames = 0
@@ -5760,10 +5419,8 @@ local function updateESP(camera)
                                 local bStroke = tagData.BoneStrokes and tagData.BoneStrokes[bIdx]
                                 local jDot = tagData.JointDots and tagData.JointDots[bIdx]
                                 if pair and pair.PartA and pair.PartB and pair.PartA.Parent and pair.PartB.Parent then
-                                    local posA = getRigNodeWorldPos(pair.PartA)
-                                    local posB = getRigNodeWorldPos(pair.PartB)
-                                    local vpA = camera:WorldToViewportPoint(posA)
-                                    local vpB = camera:WorldToViewportPoint(posB)
+                                    local vpA = camera:WorldToViewportPoint(pair.PartA.Position)
+                                    local vpB = camera:WorldToViewportPoint(pair.PartB.Position)
                                     local ptA = Vector2.new(vpA.X, vpA.Y)
                                     local ptB = Vector2.new(vpB.X, vpB.Y)
                                     drawLineFrame(sLine, ptA, ptB, skelCol, boneThick)
@@ -5790,10 +5447,10 @@ local function updateESP(camera)
                             end
 
                             if tagData.HeadCircle then
-                                local headPart = tagData.CachedHead or resolveCharacterHeadPart(char, hrp)
+                                local headPart = tagData.CachedHead or char:FindFirstChild("Head")
                                 if wantHeadCircle and headPart and headPart.Parent then
                                     tagData.CachedHead = headPart
-                                    local headVp = camera:WorldToViewportPoint(getRigNodeWorldPos(headPart))
+                                    local headVp = camera:WorldToViewportPoint(headPart.Position)
                                     local headRadius = math.clamp(math.floor(420 / math.max(dist, 6)), 8, 36)
                                     tagData.HeadCircle.Position = UDim2.fromOffset(headVp.X, headVp.Y)
                                     tagData.HeadCircle.Size = UDim2.fromOffset(headRadius, headRadius)
@@ -6087,16 +5744,15 @@ local function getClosestTarget(camera)
             local humanoid = (tagData and tagData.CachedChar == player.Character and tagData.CachedHum)
                 or player.Character:FindFirstChildOfClass("Humanoid")
             local checkPart = getTargetPartFromCharacter(player.Character, ConfigState.TargetPart)
-            local checkPos = checkPart and getRigNodeWorldPos(checkPart)
-            if humanoid and humanoid.Health > 0 and checkPart and checkPos then
-                local screenPos, onScreen = camera:WorldToViewportPoint(checkPos)
+            if humanoid and humanoid.Health > 0 and checkPart then
+                local screenPos, onScreen = camera:WorldToViewportPoint(checkPart.Position)
                 local isFront = (not screenPos.Z) or (screenPos.Z > 0)
                 if onScreen and isFront then
                     local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
                     if dist <= ConfigState.FOVRadius then
                         local visiblePass = true
                         if useWallCheck then
-                            local dir = checkPos - camera.CFrame.Position
+                            local dir = checkPart.Position - camera.CFrame.Position
                             local ray = workspace:Raycast(camera.CFrame.Position, dir.Unit * 999, rayParams)
                             visiblePass = (ray and ray.Instance and ray.Instance:IsDescendantOf(player.Character)) and true or false
                         end
@@ -6131,10 +5787,10 @@ local function updateHitboxExpander()
     end
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart") or resolveCharacterRootPart(p.Character, hum)
             local isAlive = (not hum) or (hum.Health > 0)
-            if hrp and hrp.ClassName ~= "Bone" then
+            if hrp then
                 if ConfigState.HitboxExpander and isAlive and passesTeamCheck(p) then
                     if not State.hitboxCache[hrp] then
                         State.hitboxCache[hrp] = {
@@ -9697,19 +9353,10 @@ do
     end)
 
     createLabel(CombatTab, "Targeting, Hitpart, Wall Check, Team Check & Whitelist")
-    local HitpartDropdownCtrl = createDropdown(CombatTab, "Hitpart", State.discoveredHitparts, ConfigState.TargetPart or "Head", function(opt)
+    createDropdown(CombatTab, "Hitpart", { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso" }, ConfigState.TargetPart or "Head", function(opt)
         ConfigState.TargetPart = opt
         State.cachedAimTarget = nil
     end)
-    State.refreshHitpartDropdown = HitpartDropdownCtrl.Refresh
-    if LocalPlayer.Character then
-        scanCharacterRigParts(LocalPlayer.Character)
-    end
-    for _, existingPlr in ipairs(Players:GetPlayers()) do
-        if existingPlr.Character then
-            scanCharacterRigParts(existingPlr.Character)
-        end
-    end
     createToggle(CombatTab, "Wall Check", false, function(val)
         ConfigState.AimbotWallCheck = val
     end)
@@ -12843,11 +12490,10 @@ end)
 --------------------------------------------------------------------------------
 local function refreshLocalCharacterCache(char)
     State.cachedLocalChar = char
+    State.cachedLocalHRP = char and char:FindFirstChild("HumanoidRootPart") or nil
     State.cachedLocalHum = char and char:FindFirstChildOfClass("Humanoid") or nil
-    State.cachedLocalHRP = char and resolveCharacterRootPart(char, State.cachedLocalHum) or nil
     table.clear(State.cachedLocalParts)
     if char then
-        scanCharacterRigParts(char)
         for _, desc in ipairs(char:GetDescendants()) do
             if desc:IsA("BasePart") then
                 table.insert(State.cachedLocalParts, desc)
@@ -13231,7 +12877,7 @@ do
             local target = getClosestTarget(camera)
             State.cachedAimTarget = target
             if target and target.Parent then
-                local targetPos = getRigNodeWorldPos(target) or target.Position
+                local targetPos = target.Position
                 local camGoal = CFrame.new(camera.CFrame.Position, targetPos)
                 local rawSmooth = math.clamp(ConfigState.Smoothness or 0.9, 0.05, 1)
                 local expFactor = (rawSmooth >= 0.98) and 1 or math.clamp(1 - math.exp(-(rawSmooth * 34) * safeDt), rawSmooth * 0.5, 1)
