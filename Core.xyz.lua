@@ -75,6 +75,10 @@ local MUSIC_FOLDER = "CoreXyz_Music"
 local CONFIG_INDEX_FILE = FS_FOLDER .. "/ConfigIndex.json"
 local AUTO_LOAD_FILE = FS_FOLDER .. "/AutoLoadConfig.txt"
 local KEY_META_FILE = FS_FOLDER .. "/PlatoKeyMeta.json"
+local SAVED_KEY_FILE = FS_FOLDER .. "/SavedKey.json"
+local CHANGELOG_SEEN_FILE = FS_FOLDER .. "/SeenChangelogVersion.txt"
+local CHANGELOG_VERSION = "v4.4"
+local CHANGELOG_DATE = "Nov 3, 2026"
 local WAYPOINTS_FILE = FS_FOLDER .. "/Waypoints_" .. CURRENT_PLACE_ID .. ".json"
 
 pcall(function()
@@ -110,7 +114,8 @@ local function safeReadFile(path)
             end
             return nil
         end)
-        if ok and data and data ~= "" then
+        if ok and data ~= nil then
+            memoryFileStore[path] = data
             return data
         end
     end
@@ -1905,33 +1910,52 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 7. STAGE 2: POLISHED KEY SYSTEM (PLATOBOOST · 2 BUTTONS: SUBMIT & GET KEY)
+-- 7. STAGE 2: POLISHED KEY SYSTEM (PLATOBOOST · SAVE-KEY TOGGLE & LUXURY GRADIENTS)
 --------------------------------------------------------------------------------
 do
     local KeyCard = Instance.new("Frame")
     KeyCard.Name = "CoreKeySystem"
     KeyCard.AnchorPoint = Vector2.new(0.5, 0.5)
     KeyCard.Position = UDim2.fromScale(0.5, 0.5)
-    KeyCard.Size = UDim2.fromOffset(440, 266)
-    KeyCard.BackgroundColor3 = Theme.Black
+    KeyCard.Size = UDim2.fromOffset(448, 304)
+    KeyCard.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     KeyCard.BackgroundTransparency = 1
     KeyCard.Visible = false
     KeyCard.Active = true
     KeyCard.ClipsDescendants = true
     KeyCard.ZIndex = 30
     KeyCard.Parent = UI.ScreenGui
-    addCorner(KeyCard, 12)
+    addCorner(KeyCard, 14)
     local KeyCardStroke, KeyCardStrokeGrad = addLiveBorder(KeyCard, 1.5, 75, 1)
 
     local KeyCardGrad = Instance.new("UIGradient")
     KeyCardGrad.Name = "KeyCardGradient"
     KeyCardGrad.Rotation = 135
     KeyCardGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 220, 230)),
-        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(185, 185, 200)),
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(22, 22, 32)),
+        ColorSequenceKeypoint.new(0.35, Color3.fromRGB(13, 13, 19)),
+        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(8, 8, 12)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(16, 16, 24)),
     })
     KeyCardGrad.Parent = KeyCard
+
+    local KeyInnerBevel = Instance.new("Frame")
+    KeyInnerBevel.Name = "KeyInnerBevel"
+    KeyInnerBevel.Position = UDim2.fromOffset(1, 1)
+    KeyInnerBevel.Size = UDim2.new(1, -2, 1, -2)
+    KeyInnerBevel.BackgroundTransparency = 1
+    KeyInnerBevel.ZIndex = 31
+    KeyInnerBevel.Parent = KeyCard
+    addCorner(KeyInnerBevel, 13)
+    local KeyInnerBevelStroke = addStroke(KeyInnerBevel, Theme.White, 1, 0.86)
+    local KeyInnerBevelGrad = Instance.new("UIGradient")
+    KeyInnerBevelGrad.Rotation = 90
+    KeyInnerBevelGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 0.68),
+        NumberSequenceKeypoint.new(0.5, 0.90),
+        NumberSequenceKeypoint.new(1.0, 0.96),
+    })
+    KeyInnerBevelGrad.Parent = KeyInnerBevelStroke
 
     local KeyGradientOverlay = Instance.new("Frame")
     KeyGradientOverlay.Name = "KeyGradientOverlay"
@@ -1941,15 +1965,21 @@ do
     KeyGradientOverlay.BorderSizePixel = 0
     KeyGradientOverlay.ZIndex = 31
     KeyGradientOverlay.Parent = KeyCard
-    addCorner(KeyGradientOverlay, 12)
+    addCorner(KeyGradientOverlay, 14)
 
     local KeyOverlayGrad = Instance.new("UIGradient")
     KeyOverlayGrad.Name = "KeyOverlayGradient"
     KeyOverlayGrad.Rotation = 135
     KeyOverlayGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 60, 75)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(170, 20, 35)),
-        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(35, 6, 12)),
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 68, 92)),
+        ColorSequenceKeypoint.new(0.32, Color3.fromRGB(210, 28, 52)),
+        ColorSequenceKeypoint.new(0.68, Color3.fromRGB(95, 12, 24)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(28, 5, 10)),
+    })
+    KeyOverlayGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.00, 0.08),
+        NumberSequenceKeypoint.new(0.45, 0.28),
+        NumberSequenceKeypoint.new(1.00, 0.62),
     })
     KeyOverlayGrad.Parent = KeyGradientOverlay
 
@@ -1965,14 +1995,23 @@ do
     KeyTopBar.Size = UDim2.new(1, 0, 0, 2)
     KeyTopBar.BackgroundColor3 = Theme.White
     KeyTopBar.BorderSizePixel = 0
-    KeyTopBar.ZIndex = 32
+    KeyTopBar.ZIndex = 33
     KeyTopBar.Parent = KeyCard
 
     local KeyTopGrad = Instance.new("UIGradient")
     KeyTopGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, Theme.Black),
-        ColorSequenceKeypoint.new(0.5, Theme.White),
-        ColorSequenceKeypoint.new(1.0, Theme.Black),
+        ColorSequenceKeypoint.new(0.00, Theme.Black),
+        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(160, 160, 185)),
+        ColorSequenceKeypoint.new(0.50, Theme.White),
+        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(160, 160, 185)),
+        ColorSequenceKeypoint.new(1.00, Theme.Black),
+    })
+    KeyTopGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 0.85),
+        NumberSequenceKeypoint.new(0.2, 0.15),
+        NumberSequenceKeypoint.new(0.5, 0.0),
+        NumberSequenceKeypoint.new(0.8, 0.15),
+        NumberSequenceKeypoint.new(1.0, 0.85),
     })
     KeyTopGrad.Parent = KeyTopBar
 
@@ -1982,8 +2021,8 @@ do
     KeySpinBadge.BackgroundTransparency = 1
     KeySpinBadge.ZIndex = 32
     KeySpinBadge.Parent = KeyCard
-    addCorner(KeySpinBadge, 5)
-    addStroke(KeySpinBadge, Theme.White, 1.4, 0.1)
+    addCorner(KeySpinBadge, 6)
+    local KeySpinStroke = addStroke(KeySpinBadge, Theme.White, 1.3, 0.12)
     table.insert(State.liveRotators, { Instance = KeySpinBadge, Speed = 42 })
 
     local KeySpinDot = Instance.new("Frame")
@@ -2023,8 +2062,9 @@ do
     local KeyServiceBadge = Instance.new("TextLabel")
     KeyServiceBadge.AnchorPoint = Vector2.new(1, 0)
     KeyServiceBadge.Position = UDim2.new(1, -24, 0, 20)
-    KeyServiceBadge.Size = UDim2.fromOffset(92, 22)
+    KeyServiceBadge.Size = UDim2.fromOffset(94, 22)
     KeyServiceBadge.BackgroundColor3 = Theme.Surface
+    KeyServiceBadge.BackgroundTransparency = 0.15
     KeyServiceBadge.Font = Enum.Font.Code
     KeyServiceBadge.Text = "● PLATOBOOST"
     KeyServiceBadge.TextColor3 = Theme.White
@@ -2032,16 +2072,17 @@ do
     KeyServiceBadge.ZIndex = 32
     KeyServiceBadge.Parent = KeyCard
     addCorner(KeyServiceBadge, 6)
-    addStroke(KeyServiceBadge, Theme.Border, 1, 0)
+    addStroke(KeyServiceBadge, Theme.Border, 1, 0.25)
 
     local KeyInputHolder = Instance.new("Frame")
-    KeyInputHolder.Position = UDim2.fromOffset(24, 60)
+    KeyInputHolder.Position = UDim2.fromOffset(24, 56)
     KeyInputHolder.Size = UDim2.new(1, -48, 0, 44)
     KeyInputHolder.BackgroundColor3 = Theme.Surface
+    KeyInputHolder.BackgroundTransparency = 0.08
     KeyInputHolder.ZIndex = 32
     KeyInputHolder.Parent = KeyCard
-    addCorner(KeyInputHolder, 8)
-    local KeyInputStroke = addStroke(KeyInputHolder, Theme.Border, 1.2, 0)
+    addCorner(KeyInputHolder, 9)
+    local KeyInputStroke = addStroke(KeyInputHolder, Theme.Border, 1.1, 0.15)
 
     local KeyInputBox = Instance.new("TextBox")
     KeyInputBox.Position = UDim2.fromOffset(14, 0)
@@ -2062,7 +2103,7 @@ do
     KeyClearBtn.Name = "KeyClearBtn"
     KeyClearBtn.AnchorPoint = Vector2.new(1, 0.5)
     KeyClearBtn.Position = UDim2.new(1, -8, 0.5, 0)
-    KeyClearBtn.Size = UDim2.fromOffset(46, 26)
+    KeyClearBtn.Size = UDim2.fromOffset(48, 26)
     KeyClearBtn.BackgroundColor3 = Theme.Deep
     KeyClearBtn.AutoButtonColor = false
     KeyClearBtn.Font = Enum.Font.Code
@@ -2071,8 +2112,8 @@ do
     KeyClearBtn.TextSize = 9
     KeyClearBtn.ZIndex = 34
     KeyClearBtn.Parent = KeyInputHolder
-    addCorner(KeyClearBtn, 5)
-    addStroke(KeyClearBtn, Theme.Border, 1, 0)
+    addCorner(KeyClearBtn, 6)
+    addStroke(KeyClearBtn, Theme.Border, 1, 0.25)
 
     KeyClearBtn.MouseEnter:Connect(function()
         tween(KeyClearBtn, FastTween, { BackgroundColor3 = Theme.Elevated, TextColor3 = Theme.White })
@@ -2085,23 +2126,24 @@ do
     end)
 
     KeyInputBox.Focused:Connect(function()
-        tween(KeyInputStroke, FastTween, { Color = Theme.White, Thickness = 1.6 })
+        tween(KeyInputStroke, FastTween, { Color = Theme.White, Thickness = 1.5, Transparency = 0 })
         tween(KeyInputHolder, FastTween, { BackgroundColor3 = Theme.Elevated })
     end)
     KeyInputBox.FocusLost:Connect(function()
-        tween(KeyInputStroke, FastTween, { Color = Theme.Border, Thickness = 1.2 })
+        tween(KeyInputStroke, FastTween, { Color = Theme.Border, Thickness = 1.1, Transparency = 0.15 })
         tween(KeyInputHolder, FastTween, { BackgroundColor3 = Theme.Surface })
     end)
 
     local KeyStatusRow = Instance.new("Frame")
     KeyStatusRow.Name = "KeyStatusRow"
-    KeyStatusRow.Position = UDim2.fromOffset(24, 112)
+    KeyStatusRow.Position = UDim2.fromOffset(24, 106)
     KeyStatusRow.Size = UDim2.new(1, -48, 0, 24)
     KeyStatusRow.BackgroundColor3 = Theme.Deep
+    KeyStatusRow.BackgroundTransparency = 0.12
     KeyStatusRow.ZIndex = 32
     KeyStatusRow.Parent = KeyCard
-    addCorner(KeyStatusRow, 6)
-    addStroke(KeyStatusRow, Theme.Border, 1, 0)
+    addCorner(KeyStatusRow, 7)
+    local KeyStatusStroke = addStroke(KeyStatusRow, Theme.Border, 1, 0.25)
 
     local KeyStatusDot = Instance.new("Frame")
     KeyStatusDot.Name = "KeyStatusDot"
@@ -2127,9 +2169,88 @@ do
     KeyFeedback.ZIndex = 33
     KeyFeedback.Parent = KeyStatusRow
 
+    -- Interactive Save-Key Toggle Row (Saves verified key & auto-checks expiry on every execution)
+    local SaveKeyToggle = Instance.new("TextButton")
+    SaveKeyToggle.Name = "SaveKeyToggle"
+    SaveKeyToggle.Position = UDim2.fromOffset(24, 136)
+    SaveKeyToggle.Size = UDim2.new(1, -48, 0, 32)
+    SaveKeyToggle.BackgroundColor3 = Theme.Surface
+    SaveKeyToggle.BackgroundTransparency = 0.12
+    SaveKeyToggle.AutoButtonColor = false
+    SaveKeyToggle.Text = ""
+    SaveKeyToggle.ZIndex = 32
+    SaveKeyToggle.Parent = KeyCard
+    addCorner(SaveKeyToggle, 8)
+    local SaveKeyStroke = addStroke(SaveKeyToggle, ConfigState.RememberKey and Theme.White or Theme.Border, 1, ConfigState.RememberKey and 0.45 or 0.25)
+
+    local SaveKeyLabel = Instance.new("TextLabel")
+    SaveKeyLabel.Name = "SaveKeyLabel"
+    SaveKeyLabel.Position = UDim2.fromOffset(12, 0)
+    SaveKeyLabel.Size = UDim2.new(1, -68, 1, 0)
+    SaveKeyLabel.BackgroundTransparency = 1
+    SaveKeyLabel.Font = Enum.Font.GothamBold
+    SaveKeyLabel.Text = "Save Key  ·  Auto-Login Until Key Expires"
+    SaveKeyLabel.TextColor3 = ConfigState.RememberKey and Theme.White or Theme.Silver
+    SaveKeyLabel.TextSize = 11
+    SaveKeyLabel.TextXAlignment = Enum.TextXAlignment.Left
+    SaveKeyLabel.ZIndex = 33
+    SaveKeyLabel.Parent = SaveKeyToggle
+
+    local SaveKeyPill = Instance.new("Frame")
+    SaveKeyPill.Name = "SaveKeyPill"
+    SaveKeyPill.AnchorPoint = Vector2.new(1, 0.5)
+    SaveKeyPill.Position = UDim2.new(1, -10, 0.5, 0)
+    SaveKeyPill.Size = UDim2.fromOffset(38, 20)
+    SaveKeyPill.BackgroundColor3 = ConfigState.RememberKey and Theme.White or Theme.Deep
+    SaveKeyPill.ZIndex = 33
+    SaveKeyPill.Parent = SaveKeyToggle
+    addCorner(SaveKeyPill, 99)
+    local SaveKeyPillStroke = addStroke(SaveKeyPill, ConfigState.RememberKey and Theme.White or Theme.Border, 1, 0.2)
+
+    local SaveKeyDot = Instance.new("Frame")
+    SaveKeyDot.Name = "SaveKeyDot"
+    SaveKeyDot.AnchorPoint = Vector2.new(0, 0.5)
+    SaveKeyDot.Position = ConfigState.RememberKey and UDim2.new(1, -17, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
+    SaveKeyDot.Size = UDim2.fromOffset(14, 14)
+    SaveKeyDot.BackgroundColor3 = ConfigState.RememberKey and Theme.Black or Theme.Muted
+    SaveKeyDot.ZIndex = 34
+    SaveKeyDot.Parent = SaveKeyPill
+    addCorner(SaveKeyDot, 99)
+
+    local function setSaveKeyVisualState(enabled, syncSettings)
+        ConfigState.RememberKey = (enabled == true)
+        tween(SaveKeyStroke, FastTween, {
+            Color = ConfigState.RememberKey and Theme.White or Theme.Border,
+            Transparency = ConfigState.RememberKey and 0.45 or 0.25,
+        })
+        tween(SaveKeyLabel, FastTween, {
+            TextColor3 = ConfigState.RememberKey and Theme.White or Theme.Silver,
+        })
+        tween(SaveKeyPill, FastTween, {
+            BackgroundColor3 = ConfigState.RememberKey and Theme.White or Theme.Deep,
+        })
+        tween(SaveKeyPillStroke, FastTween, {
+            Color = ConfigState.RememberKey and Theme.White or Theme.Border,
+        })
+        tween(SaveKeyDot, SpringTween, {
+            Position = ConfigState.RememberKey and UDim2.new(1, -17, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+            BackgroundColor3 = ConfigState.RememberKey and Theme.Black or Theme.Muted,
+        })
+        if not ConfigState.RememberKey then
+            safeWriteFile(SAVED_KEY_FILE, "")
+        end
+        if syncSettings ~= false and type(State.syncSettingsSaveKeyToggle) == "function" then
+            State.syncSettingsSaveKeyToggle(ConfigState.RememberKey, false)
+        end
+    end
+
+    SaveKeyToggle.MouseButton1Click:Connect(function()
+        setSaveKeyVisualState(not ConfigState.RememberKey, true)
+    end)
+
     local UnlockButton = Instance.new("TextButton")
     UnlockButton.Name = "SubmitKeyButton"
-    UnlockButton.Position = UDim2.fromOffset(24, 146)
+    UnlockButton.Position = UDim2.fromOffset(24, 176)
     UnlockButton.Size = UDim2.new(0.5, -28, 0, 44)
     UnlockButton.BackgroundColor3 = Theme.White
     UnlockButton.AutoButtonColor = false
@@ -2140,12 +2261,12 @@ do
     UnlockButton.ClipsDescendants = true
     UnlockButton.ZIndex = 32
     UnlockButton.Parent = KeyCard
-    addCorner(UnlockButton, 8)
+    addCorner(UnlockButton, 9)
     local UnlockBtnStroke = addStroke(UnlockButton, Theme.White, 1.2, 0.2)
 
     local CopyKeyButton = Instance.new("TextButton")
     CopyKeyButton.Name = "GetKeyButton"
-    CopyKeyButton.Position = UDim2.new(0.5, 4, 0, 146)
+    CopyKeyButton.Position = UDim2.new(0.5, 4, 0, 176)
     CopyKeyButton.Size = UDim2.new(0.5, -28, 0, 44)
     CopyKeyButton.BackgroundColor3 = Theme.Surface
     CopyKeyButton.AutoButtonColor = false
@@ -2156,8 +2277,8 @@ do
     CopyKeyButton.ClipsDescendants = true
     CopyKeyButton.ZIndex = 32
     CopyKeyButton.Parent = KeyCard
-    addCorner(CopyKeyButton, 8)
-    local CopyBtnStroke = addStroke(CopyKeyButton, Theme.Border, 1.2, 0)
+    addCorner(CopyKeyButton, 9)
+    local CopyBtnStroke = addStroke(CopyKeyButton, Theme.Border, 1.1, 0.15)
 
     UnlockButton.MouseEnter:Connect(function()
         tween(UnlockButton, FastTween, { BackgroundColor3 = Theme.Silver })
@@ -2170,23 +2291,30 @@ do
 
     CopyKeyButton.MouseEnter:Connect(function()
         tween(CopyKeyButton, FastTween, { BackgroundColor3 = Theme.Elevated })
-        tween(CopyBtnStroke, FastTween, { Color = Theme.White })
+        tween(CopyBtnStroke, FastTween, { Color = Theme.White, Transparency = 0 })
     end)
     CopyKeyButton.MouseLeave:Connect(function()
         tween(CopyKeyButton, FastTween, { BackgroundColor3 = Theme.Surface })
-        tween(CopyBtnStroke, FastTween, { Color = Theme.Border })
+        tween(CopyBtnStroke, FastTween, { Color = Theme.Border, Transparency = 0.15 })
     end)
 
     local KeyDivider = Instance.new("Frame")
-    KeyDivider.Position = UDim2.fromOffset(24, 204)
+    KeyDivider.Position = UDim2.fromOffset(24, 234)
     KeyDivider.Size = UDim2.new(1, -48, 0, 1)
-    KeyDivider.BackgroundColor3 = Theme.Border
+    KeyDivider.BackgroundColor3 = Theme.White
     KeyDivider.BorderSizePixel = 0
     KeyDivider.ZIndex = 32
     KeyDivider.Parent = KeyCard
+    local KeyDividerGrad = Instance.new("UIGradient")
+    KeyDividerGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 0.96),
+        NumberSequenceKeypoint.new(0.5, 0.65),
+        NumberSequenceKeypoint.new(1.0, 0.96),
+    })
+    KeyDividerGrad.Parent = KeyDivider
 
     local KeyFooter = Instance.new("TextLabel")
-    KeyFooter.Position = UDim2.fromOffset(24, 214)
+    KeyFooter.Position = UDim2.fromOffset(24, 246)
     KeyFooter.Size = UDim2.new(1, -48, 0, 16)
     KeyFooter.BackgroundTransparency = 1
     KeyFooter.Font = Enum.Font.Code
@@ -2198,7 +2326,7 @@ do
     KeyFooter.Parent = KeyCard
 
     local KeyFooterSub = Instance.new("TextLabel")
-    KeyFooterSub.Position = UDim2.fromOffset(24, 232)
+    KeyFooterSub.Position = UDim2.fromOffset(24, 264)
     KeyFooterSub.Size = UDim2.new(1, -48, 0, 14)
     KeyFooterSub.BackgroundTransparency = 1
     KeyFooterSub.Font = Enum.Font.Code
@@ -2211,6 +2339,7 @@ do
 
     UI.KeyCard = KeyCard
     UI.KeyCardGrad = KeyCardGrad
+    UI.KeyInnerBevelStroke = KeyInnerBevelStroke
     UI.KeyGradientOverlay = KeyGradientOverlay
     UI.KeyOverlayGrad = KeyOverlayGrad
     UI.KeyCardStroke = KeyCardStroke
@@ -2218,12 +2347,271 @@ do
     UI.KeyScale = KeyScale
     UI.KeyTopBar = KeyTopBar
     UI.KeyTopGrad = KeyTopGrad
+    UI.KeySpinStroke = KeySpinStroke
+    UI.KeySpinDot = KeySpinDot
     UI.KeyInputBox = KeyInputBox
     UI.KeyInputStroke = KeyInputStroke
+    UI.KeyStatusStroke = KeyStatusStroke
     UI.KeyStatusDot = KeyStatusDot
     UI.KeyFeedback = KeyFeedback
+    UI.SaveKeyToggle = SaveKeyToggle
+    UI.setSaveKeyVisualState = setSaveKeyVisualState
     UI.UnlockButton = UnlockButton
     UI.CopyKeyButton = CopyKeyButton
+end
+
+--------------------------------------------------------------------------------
+-- 7B. ONE-TIME PER-UPDATE CHANGELOG MODAL (v4.4 · SHOWS ONCE PER VERSION)
+--------------------------------------------------------------------------------
+do
+    local ChangelogModal = Instance.new("Frame")
+    ChangelogModal.Name = "CoreChangelogModal"
+    ChangelogModal.AnchorPoint = Vector2.new(0.5, 0.5)
+    ChangelogModal.Position = UDim2.fromScale(0.5, 0.5)
+    ChangelogModal.Size = UDim2.fromOffset(436, 308)
+    ChangelogModal.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    ChangelogModal.BackgroundTransparency = 0.03
+    ChangelogModal.Visible = false
+    ChangelogModal.Active = true
+    ChangelogModal.ClipsDescendants = true
+    ChangelogModal.ZIndex = 95
+    ChangelogModal.Parent = UI.ScreenGui
+    addCorner(ChangelogModal, 14)
+    local ChangelogStroke = addLiveBorder(ChangelogModal, 1.5, 80, 0.08)
+
+    local ChangelogGrad = Instance.new("UIGradient")
+    ChangelogGrad.Name = "ChangelogGradient"
+    ChangelogGrad.Rotation = 135
+    ChangelogGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(24, 24, 34)),
+        ColorSequenceKeypoint.new(0.45, Color3.fromRGB(13, 13, 19)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(8, 8, 12)),
+    })
+    ChangelogGrad.Parent = ChangelogModal
+
+    local ChangelogScale = Instance.new("UIScale")
+    ChangelogScale.Scale = 1
+    ChangelogScale.Parent = ChangelogModal
+
+    local ChangelogHeader = Instance.new("Frame")
+    ChangelogHeader.Name = "ChangelogHeader"
+    ChangelogHeader.Size = UDim2.new(1, 0, 0, 48)
+    ChangelogHeader.BackgroundColor3 = Theme.Deep
+    ChangelogHeader.BackgroundTransparency = 0.15
+    ChangelogHeader.BorderSizePixel = 0
+    ChangelogHeader.ZIndex = 96
+    ChangelogHeader.Parent = ChangelogModal
+    addCorner(ChangelogHeader, 14)
+
+    local ChangelogHeaderPatch = Instance.new("Frame")
+    ChangelogHeaderPatch.Position = UDim2.new(0, 0, 1, -12)
+    ChangelogHeaderPatch.Size = UDim2.new(1, 0, 0, 12)
+    ChangelogHeaderPatch.BackgroundColor3 = Theme.Deep
+    ChangelogHeaderPatch.BackgroundTransparency = 0.15
+    ChangelogHeaderPatch.BorderSizePixel = 0
+    ChangelogHeaderPatch.ZIndex = 96
+    ChangelogHeaderPatch.Parent = ChangelogHeader
+
+    local ChangelogHeaderLine = Instance.new("Frame")
+    ChangelogHeaderLine.Position = UDim2.new(0, 0, 1, -1)
+    ChangelogHeaderLine.Size = UDim2.new(1, 0, 0, 1)
+    ChangelogHeaderLine.BackgroundColor3 = Theme.White
+    ChangelogHeaderLine.BorderSizePixel = 0
+    ChangelogHeaderLine.ZIndex = 97
+    ChangelogHeaderLine.Parent = ChangelogHeader
+    local ChangelogLineGrad = Instance.new("UIGradient")
+    ChangelogLineGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 0.95),
+        NumberSequenceKeypoint.new(0.5, 0.55),
+        NumberSequenceKeypoint.new(1.0, 0.95),
+    })
+    ChangelogLineGrad.Parent = ChangelogHeaderLine
+
+    local ChangelogBadge = Instance.new("TextLabel")
+    ChangelogBadge.Position = UDim2.fromOffset(18, 13)
+    ChangelogBadge.Size = UDim2.fromOffset(48, 22)
+    ChangelogBadge.BackgroundColor3 = Theme.Elevated
+    ChangelogBadge.Font = Enum.Font.Code
+    ChangelogBadge.Text = CHANGELOG_VERSION
+    ChangelogBadge.TextColor3 = Theme.White
+    ChangelogBadge.TextSize = 11
+    ChangelogBadge.ZIndex = 97
+    ChangelogBadge.Parent = ChangelogHeader
+    addCorner(ChangelogBadge, 6)
+    addStroke(ChangelogBadge, Theme.Border, 1, 0.15)
+
+    local ChangelogTitle = Instance.new("TextLabel")
+    ChangelogTitle.Name = "ChangelogTitle"
+    ChangelogTitle.Position = UDim2.fromOffset(76, 9)
+    ChangelogTitle.Size = UDim2.new(1, -124, 0, 18)
+    ChangelogTitle.BackgroundTransparency = 1
+    ChangelogTitle.Font = Enum.Font.GothamBlack
+    ChangelogTitle.Text = "Changelog " .. CHANGELOG_VERSION .. "  ·  " .. CHANGELOG_DATE
+    ChangelogTitle.TextColor3 = Theme.White
+    ChangelogTitle.TextSize = 14
+    ChangelogTitle.TextXAlignment = Enum.TextXAlignment.Left
+    ChangelogTitle.ZIndex = 97
+    ChangelogTitle.Parent = ChangelogHeader
+
+    local ChangelogSubtitle = Instance.new("TextLabel")
+    ChangelogSubtitle.Name = "ChangelogSubtitle"
+    ChangelogSubtitle.Position = UDim2.fromOffset(76, 26)
+    ChangelogSubtitle.Size = UDim2.new(1, -124, 0, 14)
+    ChangelogSubtitle.BackgroundTransparency = 1
+    ChangelogSubtitle.Font = Enum.Font.Code
+    ChangelogSubtitle.Text = "RELEASE NOTES  ·  SHOWS ONCE PER UPDATE"
+    ChangelogSubtitle.TextColor3 = Theme.Muted
+    ChangelogSubtitle.TextSize = 9
+    ChangelogSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+    ChangelogSubtitle.ZIndex = 97
+    ChangelogSubtitle.Parent = ChangelogHeader
+
+    local ChangelogCloseBtn = Instance.new("TextButton")
+    ChangelogCloseBtn.Name = "ChangelogCloseBtn"
+    ChangelogCloseBtn.AnchorPoint = Vector2.new(1, 0.5)
+    ChangelogCloseBtn.Position = UDim2.new(1, -12, 0.5, 0)
+    ChangelogCloseBtn.Size = UDim2.fromOffset(26, 26)
+    ChangelogCloseBtn.BackgroundColor3 = Theme.Surface
+    ChangelogCloseBtn.AutoButtonColor = false
+    ChangelogCloseBtn.Font = Enum.Font.GothamBold
+    ChangelogCloseBtn.Text = "×"
+    ChangelogCloseBtn.TextColor3 = Theme.Silver
+    ChangelogCloseBtn.TextSize = 14
+    ChangelogCloseBtn.ZIndex = 98
+    ChangelogCloseBtn.Parent = ChangelogHeader
+    addCorner(ChangelogCloseBtn, 7)
+    local ChangelogCloseStroke = addStroke(ChangelogCloseBtn, Theme.Border, 1, 0.2)
+
+    ChangelogCloseBtn.MouseEnter:Connect(function()
+        tween(ChangelogCloseBtn, FastTween, { BackgroundColor3 = Theme.Error, TextColor3 = Theme.White })
+        tween(ChangelogCloseStroke, FastTween, { Color = Theme.Error, Transparency = 0 })
+    end)
+    ChangelogCloseBtn.MouseLeave:Connect(function()
+        tween(ChangelogCloseBtn, FastTween, { BackgroundColor3 = Theme.Surface, TextColor3 = Theme.Silver })
+        tween(ChangelogCloseStroke, FastTween, { Color = Theme.Border, Transparency = 0.2 })
+    end)
+
+    makeDraggable(ChangelogHeader, ChangelogModal)
+
+    local ChangelogBody = Instance.new("ScrollingFrame")
+    ChangelogBody.Name = "ChangelogBody"
+    ChangelogBody.Position = UDim2.fromOffset(16, 56)
+    ChangelogBody.Size = UDim2.new(1, -32, 1, -68)
+    ChangelogBody.BackgroundTransparency = 1
+    ChangelogBody.BorderSizePixel = 0
+    ChangelogBody.ScrollBarThickness = 2
+    ChangelogBody.ScrollBarImageColor3 = Theme.Silver
+    ChangelogBody.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    ChangelogBody.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ChangelogBody.ZIndex = 96
+    ChangelogBody.Parent = ChangelogModal
+
+    local ChangelogLayout = Instance.new("UIListLayout")
+    ChangelogLayout.Padding = UDim.new(0, 8)
+    ChangelogLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ChangelogLayout.Parent = ChangelogBody
+
+    local function createChangelogGroup(order, tagText, tagColor, items)
+        local box = Instance.new("Frame")
+        box.Name = "ChangelogGroup_" .. tostring(order)
+        box.LayoutOrder = order
+        box.Size = UDim2.new(1, -4, 0, 24)
+        box.AutomaticSize = Enum.AutomaticSize.Y
+        box.BackgroundColor3 = Theme.Surface
+        box.BackgroundTransparency = 0.22
+        box.ZIndex = 97
+        box.Parent = ChangelogBody
+        addCorner(box, 8)
+        addStroke(box, tagColor, 1, 0.65)
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingTop = UDim.new(0, 8)
+        pad.PaddingBottom = UDim.new(0, 8)
+        pad.PaddingLeft = UDim.new(0, 10)
+        pad.PaddingRight = UDim.new(0, 10)
+        pad.Parent = box
+
+        local list = Instance.new("UIListLayout")
+        list.Padding = UDim.new(0, 4)
+        list.SortOrder = Enum.SortOrder.LayoutOrder
+        list.Parent = box
+
+        local hdr = Instance.new("TextLabel")
+        hdr.Name = "GroupHeader"
+        hdr.LayoutOrder = 0
+        hdr.Size = UDim2.new(1, 0, 0, 16)
+        hdr.BackgroundTransparency = 1
+        hdr.Font = Enum.Font.GothamBlack
+        hdr.Text = tagText
+        hdr.TextColor3 = tagColor
+        hdr.TextSize = 11
+        hdr.TextXAlignment = Enum.TextXAlignment.Left
+        hdr.ZIndex = 98
+        hdr.Parent = box
+
+        for idx, lineText in ipairs(items) do
+            local itemLbl = Instance.new("TextLabel")
+            itemLbl.Name = "Item_" .. tostring(idx)
+            itemLbl.LayoutOrder = idx
+            itemLbl.Size = UDim2.new(1, 0, 0, 15)
+            itemLbl.BackgroundTransparency = 1
+            itemLbl.Font = Enum.Font.Code
+            itemLbl.Text = lineText
+            itemLbl.TextColor3 = Theme.Silver
+            itemLbl.TextSize = 10
+            itemLbl.TextWrapped = true
+            itemLbl.TextXAlignment = Enum.TextXAlignment.Left
+            itemLbl.ZIndex = 98
+            itemLbl.Parent = box
+        end
+    end
+
+    createChangelogGroup(1, "[-] Removed Features", Color3.fromRGB(255, 92, 108), {
+        "[-] Removed experimental custom-rig hitpart scanner",
+        "[-] Removed 3-step key guide bar & kill counter clutter",
+    })
+
+    createChangelogGroup(2, "[+] Added Features", Color3.fromRGB(72, 245, 148), {
+        "[+] Added Save-Key toggle with automatic key expiry check & direct launch",
+        "[+] Added one-time per-update Changelog " .. CHANGELOG_VERSION .. " popup note",
+        "[+] Added professional multi-stop Red & Green Key System gradients",
+        "[+] Added full touch & drag 2D HSV + Hue + Alpha Color Picker",
+    })
+
+    createChangelogGroup(3, "[*] Fixed", Color3.fromRGB(105, 205, 255), {
+        "[*] Fixed Color Picker touch/drag input & swatch selection bugs",
+        "[*] Fixed UI border lines, corner seams & Floating Pill gradient rotation",
+        "[*] Fixed default combat checks (Wall, Team & Whitelist off by default)",
+    })
+
+    local function closeChangelogModal()
+        safeWriteFile(CHANGELOG_SEEN_FILE, CHANGELOG_VERSION)
+        ChangelogModal.Visible = false
+    end
+
+    local function showChangelogModal(forceShow)
+        local seenVer = tostring(safeReadFile(CHANGELOG_SEEN_FILE) or ""):gsub("^%s*(.-)%s*$", "%1")
+        if not forceShow and seenVer == CHANGELOG_VERSION then
+            return false
+        end
+        safeWriteFile(CHANGELOG_SEEN_FILE, CHANGELOG_VERSION)
+        local targetScale = getResponsiveScale()
+        ChangelogModal.BackgroundTransparency = 0.03
+        ChangelogStroke.Transparency = 0.08
+        ChangelogScale.Scale = targetScale * 0.9
+        ChangelogModal.Visible = true
+        tween(ChangelogScale, SpringTween, { Scale = targetScale })
+        return true
+    end
+
+    ChangelogCloseBtn.MouseButton1Click:Connect(function()
+        closeChangelogModal()
+    end)
+
+    UI.ChangelogModal = ChangelogModal
+    UI.ChangelogCloseBtn = ChangelogCloseBtn
+    UI.showChangelogModal = showChangelogModal
+    UI.closeChangelogModal = closeChangelogModal
 end
 
 --------------------------------------------------------------------------------
@@ -2591,11 +2979,21 @@ do
     HeaderBar.Parent = MainWindow
     addCorner(HeaderBar, 12)
 
+    local HeaderCornerPatch = Instance.new("Frame")
+    HeaderCornerPatch.Name = "HeaderCornerPatch"
+    HeaderCornerPatch.Position = UDim2.new(0, 0, 1, -12)
+    HeaderCornerPatch.Size = UDim2.new(1, 0, 0, 12)
+    HeaderCornerPatch.BackgroundColor3 = Theme.Deep
+    HeaderCornerPatch.BackgroundTransparency = 0.08
+    HeaderCornerPatch.BorderSizePixel = 0
+    HeaderCornerPatch.ZIndex = 12
+    HeaderCornerPatch.Parent = HeaderBar
+
     local HeaderBottomLine = Instance.new("Frame")
     HeaderBottomLine.Position = UDim2.new(0, 0, 1, -1)
     HeaderBottomLine.Size = UDim2.new(1, 0, 0, 1)
     HeaderBottomLine.BackgroundColor3 = Theme.Accent
-    HeaderBottomLine.BackgroundTransparency = 0.72
+    HeaderBottomLine.BackgroundTransparency = 0.65
     HeaderBottomLine.BorderSizePixel = 0
     HeaderBottomLine.ZIndex = 13
     HeaderBottomLine.Parent = HeaderBar
@@ -2606,6 +3004,13 @@ do
         ColorSequenceKeypoint.new(0.0, Theme.Black),
         ColorSequenceKeypoint.new(0.5, Theme.White),
         ColorSequenceKeypoint.new(1.0, Theme.Black),
+    })
+    HeaderLineGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 0.85),
+        NumberSequenceKeypoint.new(0.15, 0.15),
+        NumberSequenceKeypoint.new(0.5, 0.0),
+        NumberSequenceKeypoint.new(0.85, 0.15),
+        NumberSequenceKeypoint.new(1.0, 0.85),
     })
     HeaderLineGrad.Parent = HeaderBottomLine
 
@@ -2667,7 +3072,7 @@ do
     HeaderSearchHolder.ZIndex = 14
     HeaderSearchHolder.Parent = HeaderBar
     addCorner(HeaderSearchHolder, 6)
-    local HeaderSearchStroke = addStroke(HeaderSearchHolder, Theme.Border, 1, 0)
+    local HeaderSearchStroke = addStroke(HeaderSearchHolder, Theme.Border, 1, 0.15)
 
     local HeaderSearchBox = Instance.new("TextBox")
     HeaderSearchBox.Name = "HeaderSearchBox"
@@ -2757,10 +3162,10 @@ do
     UI.HeaderSearchBox = HeaderSearchBox
 
     HeaderSearchBox.Focused:Connect(function()
-        tween(HeaderSearchStroke, FastTween, { Color = Theme.Accent, Transparency = 0.1 })
+        tween(HeaderSearchStroke, FastTween, { Color = Theme.Accent, Transparency = 0.05 })
     end)
     HeaderSearchBox.FocusLost:Connect(function()
-        tween(HeaderSearchStroke, FastTween, { Color = Theme.Border, Transparency = 0 })
+        tween(HeaderSearchStroke, FastTween, { Color = Theme.Border, Transparency = 0.15 })
         applyFeatureSearchFilter(HeaderSearchBox.Text)
     end)
     if HeaderSearchBox.GetPropertyChangedSignal then
@@ -2788,7 +3193,7 @@ do
     MinimizeBtn.ZIndex = 14
     MinimizeBtn.Parent = HeaderBar
     addCorner(MinimizeBtn, 6)
-    addStroke(MinimizeBtn, Theme.Border, 1, 0)
+    addStroke(MinimizeBtn, Theme.Border, 1, 0.15)
 
     makeDraggable(HeaderBar, MainWindow, function()
         if State.syncMusicPlayerDock then
@@ -2822,6 +3227,14 @@ do
     SidebarDivider.BorderSizePixel = 0
     SidebarDivider.ZIndex = 13
     SidebarDivider.Parent = Sidebar
+    local SidebarDividerGrad = Instance.new("UIGradient")
+    SidebarDividerGrad.Rotation = 90
+    SidebarDividerGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0.0, 0.15),
+        NumberSequenceKeypoint.new(0.85, 0.15),
+        NumberSequenceKeypoint.new(1.0, 0.75),
+    })
+    SidebarDividerGrad.Parent = SidebarDivider
 
     local ActiveTabIndicator = Instance.new("Frame")
     ActiveTabIndicator.Position = UDim2.fromOffset(10, 16)
@@ -3161,20 +3574,46 @@ do
         return Color3.fromRGB(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
     end
 
-    -- Floating Custom Color Picker Popup (Matches Reference Screenshot IMG_20261102_204241_ffaa9d5b.jpg + Draggable Header & Close Button)
+    local function isPrimaryPointerInput(inp)
+        if not inp then
+            return false
+        end
+        local t = inp.UserInputType
+        return t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch
+    end
+
+    local function isPrimaryPointerMove(inp)
+        if not inp then
+            return false
+        end
+        local t = inp.UserInputType
+        return t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch
+    end
+
+    -- Floating Custom Color Picker Popup (Touchable 2D HSV + Hue + Alpha + 10 Quick Swatches + RGBA/Hex Input)
     local pickerPopup = Instance.new("Frame")
     pickerPopup.Name = "CoreColorPickerPopup"
     pickerPopup.AnchorPoint = Vector2.new(0.5, 0.5)
     pickerPopup.Position = UDim2.new(0.5, 195, 0.5, 0)
-    pickerPopup.Size = UDim2.fromOffset(224, 254)
-    pickerPopup.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    pickerPopup.Size = UDim2.fromOffset(244, 296)
+    pickerPopup.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     pickerPopup.Visible = false
     pickerPopup.Active = true
+    pickerPopup.ClipsDescendants = true
     pickerPopup.ZIndex = 120
     pickerPopup.Parent = UI.ScreenGui
-    addCorner(pickerPopup, 8)
-    addStroke(pickerPopup, Theme.Border, 1.2, 0)
+    addCorner(pickerPopup, 12)
+    addLiveBorder(pickerPopup, 1.3, 85, 0.12)
     UI.ColorPickerPopup = pickerPopup
+
+    local pickerBgGrad = Instance.new("UIGradient")
+    pickerBgGrad.Rotation = 135
+    pickerBgGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(22, 22, 30)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(14, 14, 20)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(10, 10, 15)),
+    })
+    pickerBgGrad.Parent = pickerPopup
 
     local pickerScale = Instance.new("UIScale")
     pickerScale.Scale = 1
@@ -3182,19 +3621,38 @@ do
 
     local pickerHeader = Instance.new("Frame")
     pickerHeader.Name = "ColorPickerHeader"
-    pickerHeader.Size = UDim2.new(1, 0, 0, 24)
+    pickerHeader.Size = UDim2.new(1, 0, 0, 28)
     pickerHeader.BackgroundColor3 = Theme.Deep
+    pickerHeader.BackgroundTransparency = 0.12
     pickerHeader.BorderSizePixel = 0
     pickerHeader.ZIndex = 121
     pickerHeader.Parent = pickerPopup
-    addCorner(pickerHeader, 8)
+    addCorner(pickerHeader, 12)
+
+    local pickerHeaderPatch = Instance.new("Frame")
+    pickerHeaderPatch.Position = UDim2.new(0, 0, 1, -8)
+    pickerHeaderPatch.Size = UDim2.new(1, 0, 0, 8)
+    pickerHeaderPatch.BackgroundColor3 = Theme.Deep
+    pickerHeaderPatch.BackgroundTransparency = 0.12
+    pickerHeaderPatch.BorderSizePixel = 0
+    pickerHeaderPatch.ZIndex = 121
+    pickerHeaderPatch.Parent = pickerHeader
+
+    local pickerHeaderLine = Instance.new("Frame")
+    pickerHeaderLine.Position = UDim2.new(0, 0, 1, -1)
+    pickerHeaderLine.Size = UDim2.new(1, 0, 0, 1)
+    pickerHeaderLine.BackgroundColor3 = Theme.Border
+    pickerHeaderLine.BackgroundTransparency = 0.45
+    pickerHeaderLine.BorderSizePixel = 0
+    pickerHeaderLine.ZIndex = 122
+    pickerHeaderLine.Parent = pickerHeader
 
     local pickerTitle = Instance.new("TextLabel")
-    pickerTitle.Position = UDim2.fromOffset(10, 0)
-    pickerTitle.Size = UDim2.new(1, -36, 1, 0)
+    pickerTitle.Position = UDim2.fromOffset(12, 0)
+    pickerTitle.Size = UDim2.new(1, -40, 1, 0)
     pickerTitle.BackgroundTransparency = 1
     pickerTitle.Font = Enum.Font.Code
-    pickerTitle.Text = "COLOR PICKER"
+    pickerTitle.Text = "COLOR PICKER  ·  TOUCH & DRAG"
     pickerTitle.TextColor3 = Theme.Silver
     pickerTitle.TextSize = 9
     pickerTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -3205,28 +3663,31 @@ do
     pickerCloseBtn.Name = "ColorPickerCloseBtn"
     pickerCloseBtn.AnchorPoint = Vector2.new(1, 0.5)
     pickerCloseBtn.Position = UDim2.new(1, -6, 0.5, 0)
-    pickerCloseBtn.Size = UDim2.fromOffset(18, 18)
-    pickerCloseBtn.BackgroundTransparency = 1
+    pickerCloseBtn.Size = UDim2.fromOffset(20, 20)
+    pickerCloseBtn.BackgroundColor3 = Theme.Surface
+    pickerCloseBtn.BackgroundTransparency = 0.2
     pickerCloseBtn.AutoButtonColor = false
     pickerCloseBtn.Font = Enum.Font.GothamBold
     pickerCloseBtn.Text = "×"
-    pickerCloseBtn.TextColor3 = Theme.Muted
-    pickerCloseBtn.TextSize = 12
+    pickerCloseBtn.TextColor3 = Theme.Silver
+    pickerCloseBtn.TextSize = 13
     pickerCloseBtn.ZIndex = 123
     pickerCloseBtn.Parent = pickerHeader
+    addCorner(pickerCloseBtn, 5)
 
     makeDraggable(pickerHeader, pickerPopup)
 
     local svSquare = Instance.new("Frame")
     svSquare.Name = "SVSquare"
-    svSquare.Position = UDim2.fromOffset(8, 28)
-    svSquare.Size = UDim2.new(1, -16, 0, 134)
+    svSquare.Position = UDim2.fromOffset(10, 34)
+    svSquare.Size = UDim2.new(1, -20, 0, 138)
     svSquare.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     svSquare.BorderSizePixel = 0
+    svSquare.ClipsDescendants = true
     svSquare.ZIndex = 121
     svSquare.Parent = pickerPopup
-    addCorner(svSquare, 3)
-    addStroke(svSquare, Theme.Border, 1, 0)
+    addCorner(svSquare, 6)
+    addStroke(svSquare, Theme.Border, 1, 0.15)
 
     local svWhiteOverlay = Instance.new("Frame")
     svWhiteOverlay.Size = UDim2.fromScale(1, 1)
@@ -3234,6 +3695,7 @@ do
     svWhiteOverlay.BorderSizePixel = 0
     svWhiteOverlay.ZIndex = 122
     svWhiteOverlay.Parent = svSquare
+    addCorner(svWhiteOverlay, 6)
     local svWhiteGrad = Instance.new("UIGradient")
     svWhiteGrad.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0),
@@ -3247,6 +3709,7 @@ do
     svBlackOverlay.BorderSizePixel = 0
     svBlackOverlay.ZIndex = 123
     svBlackOverlay.Parent = svSquare
+    addCorner(svBlackOverlay, 6)
     local svBlackGrad = Instance.new("UIGradient")
     svBlackGrad.Rotation = 90
     svBlackGrad.Transparency = NumberSequence.new({
@@ -3259,32 +3722,46 @@ do
     svCursor.Name = "SVCursor"
     svCursor.AnchorPoint = Vector2.new(0.5, 0.5)
     svCursor.Position = UDim2.fromScale(1, 0)
-    svCursor.Size = UDim2.fromOffset(8, 8)
+    svCursor.Size = UDim2.fromOffset(12, 12)
     svCursor.BackgroundColor3 = Theme.White
+    svCursor.BackgroundTransparency = 0.1
     svCursor.ZIndex = 125
     svCursor.Parent = svSquare
-    addCorner(svCursor, 2)
-    addStroke(svCursor, Theme.Black, 1.2, 0)
+    addCorner(svCursor, 99)
+    addStroke(svCursor, Theme.Black, 1.5, 0)
+
+    local svCursorInner = Instance.new("Frame")
+    svCursorInner.AnchorPoint = Vector2.new(0.5, 0.5)
+    svCursorInner.Position = UDim2.fromScale(0.5, 0.5)
+    svCursorInner.Size = UDim2.fromOffset(6, 6)
+    svCursorInner.BackgroundColor3 = Theme.White
+    svCursorInner.BorderSizePixel = 0
+    svCursorInner.ZIndex = 126
+    svCursorInner.Parent = svCursor
+    addCorner(svCursorInner, 99)
+    addStroke(svCursorInner, Theme.White, 1, 0)
 
     local svHitbox = Instance.new("TextButton")
     svHitbox.Name = "ColorPickerSVHitbox"
     svHitbox.Size = UDim2.fromScale(1, 1)
     svHitbox.BackgroundTransparency = 1
+    svHitbox.AutoButtonColor = false
+    svHitbox.Active = true
     svHitbox.Text = " "
     svHitbox.TextTransparency = 1
-    svHitbox.ZIndex = 126
+    svHitbox.ZIndex = 127
     svHitbox.Parent = svSquare
 
     local hueBar = Instance.new("Frame")
     hueBar.Name = "HueBar"
-    hueBar.Position = UDim2.fromOffset(8, 168)
-    hueBar.Size = UDim2.new(1, -16, 0, 14)
+    hueBar.Position = UDim2.fromOffset(10, 180)
+    hueBar.Size = UDim2.new(1, -20, 0, 16)
     hueBar.BackgroundColor3 = Theme.White
     hueBar.BorderSizePixel = 0
     hueBar.ZIndex = 121
     hueBar.Parent = pickerPopup
-    addCorner(hueBar, 3)
-    addStroke(hueBar, Theme.Border, 1, 0)
+    addCorner(hueBar, 5)
+    addStroke(hueBar, Theme.Border, 1, 0.15)
 
     local hueGrad = Instance.new("UIGradient")
     hueGrad.Color = ColorSequence.new({
@@ -3302,17 +3779,20 @@ do
     hueCursor.Name = "HueCursor"
     hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
     hueCursor.Position = UDim2.fromScale(0, 0.5)
-    hueCursor.Size = UDim2.fromOffset(4, 16)
+    hueCursor.Size = UDim2.fromOffset(7, 18)
     hueCursor.BackgroundColor3 = Theme.White
     hueCursor.ZIndex = 123
     hueCursor.Parent = hueBar
-    addCorner(hueCursor, 2)
-    addStroke(hueCursor, Theme.Black, 1, 0)
+    addCorner(hueCursor, 3)
+    addStroke(hueCursor, Theme.Black, 1.2, 0)
 
     local hueHitbox = Instance.new("TextButton")
     hueHitbox.Name = "ColorPickerHueHitbox"
-    hueHitbox.Size = UDim2.fromScale(1, 1)
+    hueHitbox.Position = UDim2.fromOffset(0, -3)
+    hueHitbox.Size = UDim2.new(1, 0, 1, 6)
     hueHitbox.BackgroundTransparency = 1
+    hueHitbox.AutoButtonColor = false
+    hueHitbox.Active = true
     hueHitbox.Text = " "
     hueHitbox.TextTransparency = 1
     hueHitbox.ZIndex = 124
@@ -3320,18 +3800,18 @@ do
 
     local alphaBar = Instance.new("Frame")
     alphaBar.Name = "AlphaBar"
-    alphaBar.Position = UDim2.fromOffset(8, 188)
-    alphaBar.Size = UDim2.new(1, -16, 0, 14)
+    alphaBar.Position = UDim2.fromOffset(10, 202)
+    alphaBar.Size = UDim2.new(1, -20, 0, 16)
     alphaBar.BackgroundColor3 = Color3.fromRGB(220, 220, 228)
     alphaBar.BorderSizePixel = 0
     alphaBar.ZIndex = 121
     alphaBar.Parent = pickerPopup
-    addCorner(alphaBar, 3)
-    addStroke(alphaBar, Theme.Border, 1, 0)
+    addCorner(alphaBar, 5)
+    addStroke(alphaBar, Theme.Border, 1, 0.15)
 
     local alphaGrad = Instance.new("UIGradient")
     alphaGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 45, 55)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 44)),
         ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
     })
     alphaGrad.Parent = alphaBar
@@ -3340,51 +3820,63 @@ do
     alphaCursor.Name = "AlphaCursor"
     alphaCursor.AnchorPoint = Vector2.new(0.5, 0.5)
     alphaCursor.Position = UDim2.fromScale(1, 0.5)
-    alphaCursor.Size = UDim2.fromOffset(4, 16)
-    alphaCursor.BackgroundColor3 = Color3.fromRGB(255, 90, 70)
+    alphaCursor.Size = UDim2.fromOffset(7, 18)
+    alphaCursor.BackgroundColor3 = Theme.White
     alphaCursor.ZIndex = 123
     alphaCursor.Parent = alphaBar
-    addCorner(alphaCursor, 2)
-    addStroke(alphaCursor, Theme.Black, 1, 0)
+    addCorner(alphaCursor, 3)
+    addStroke(alphaCursor, Theme.Black, 1.2, 0)
 
     local alphaHitbox = Instance.new("TextButton")
     alphaHitbox.Name = "ColorPickerAlphaHitbox"
-    alphaHitbox.Size = UDim2.fromScale(1, 1)
+    alphaHitbox.Position = UDim2.fromOffset(0, -3)
+    alphaHitbox.Size = UDim2.new(1, 0, 1, 6)
     alphaHitbox.BackgroundTransparency = 1
+    alphaHitbox.AutoButtonColor = false
+    alphaHitbox.Active = true
     alphaHitbox.Text = " "
     alphaHitbox.TextTransparency = 1
     alphaHitbox.ZIndex = 124
     alphaHitbox.Parent = alphaBar
 
+    -- Quick 10-Swatch Touchable Preset Strip inside the Color Picker
+    local quickPresetRow = Instance.new("Frame")
+    quickPresetRow.Name = "QuickPresetRow"
+    quickPresetRow.Position = UDim2.fromOffset(10, 225)
+    quickPresetRow.Size = UDim2.new(1, -20, 0, 18)
+    quickPresetRow.BackgroundTransparency = 1
+    quickPresetRow.ZIndex = 122
+    quickPresetRow.Parent = pickerPopup
+
     local rgbaBox = Instance.new("TextBox")
     rgbaBox.Name = "ColorPickerRGBABox"
-    rgbaBox.Position = UDim2.fromOffset(8, 210)
-    rgbaBox.Size = UDim2.new(1, -50, 0, 32)
-    rgbaBox.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+    rgbaBox.Position = UDim2.fromOffset(10, 250)
+    rgbaBox.Size = UDim2.new(1, -56, 0, 34)
+    rgbaBox.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
     rgbaBox.ClearTextOnFocus = false
-    rgbaBox.Font = Enum.Font.GothamMedium
-    rgbaBox.PlaceholderText = "255, 255, 255, 1"
+    rgbaBox.Font = Enum.Font.Code
+    rgbaBox.PlaceholderText = "255, 255, 255, 1 or #FFFFFF"
     rgbaBox.PlaceholderColor3 = Theme.Muted
     rgbaBox.Text = "255, 255, 255, 1"
-    rgbaBox.TextColor3 = Theme.Silver
-    rgbaBox.TextSize = 13
+    rgbaBox.TextColor3 = Theme.White
+    rgbaBox.TextSize = 12
     rgbaBox.ZIndex = 122
     rgbaBox.Parent = pickerPopup
-    addCorner(rgbaBox, 4)
-    addStroke(rgbaBox, Theme.Border, 1, 0)
+    addCorner(rgbaBox, 6)
+    addStroke(rgbaBox, Theme.Border, 1, 0.15)
 
     local previewSwatch = Instance.new("TextButton")
     previewSwatch.Name = "ColorPickerPreviewSwatch"
-    previewSwatch.Position = UDim2.new(1, -36, 0, 210)
-    previewSwatch.Size = UDim2.fromOffset(28, 32)
+    previewSwatch.Position = UDim2.new(1, -40, 0, 250)
+    previewSwatch.Size = UDim2.fromOffset(30, 34)
     previewSwatch.BackgroundColor3 = Theme.White
     previewSwatch.AutoButtonColor = false
     previewSwatch.Text = " "
     previewSwatch.TextTransparency = 1
     previewSwatch.ZIndex = 122
     previewSwatch.Parent = pickerPopup
-    addCorner(previewSwatch, 4)
-    addStroke(previewSwatch, Theme.Border, 1, 0)
+    addCorner(previewSwatch, 6)
+    addStroke(previewSwatch, Theme.Border, 1, 0.1)
 
     local pickerState = {
         ActiveTarget = nil,
@@ -3396,6 +3888,7 @@ do
         DraggingSV = false,
         DraggingHue = false,
         DraggingAlpha = false,
+        HadRealPointerInput = false,
     }
 
     local function syncPickerVisuals(fireCallback)
@@ -3403,7 +3896,9 @@ do
         local finalCol = hsvToRgbColor3(pickerState.H, pickerState.S, pickerState.V)
         svSquare.BackgroundColor3 = pureHueCol
         svCursor.Position = UDim2.fromScale(pickerState.S, 1 - pickerState.V)
+        svCursorInner.BackgroundColor3 = finalCol
         hueCursor.Position = UDim2.fromScale(pickerState.H, 0.5)
+        hueCursor.BackgroundColor3 = pureHueCol
         alphaCursor.Position = UDim2.fromScale(pickerState.A, 0.5)
         alphaGrad.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 42)),
@@ -3432,6 +3927,28 @@ do
         end
     end
 
+    for idx = 1, 10 do
+        local presetCol = SWATCH_PALETTE[idx] or Theme.White
+        local qBtn = Instance.new("TextButton")
+        qBtn.Name = "QuickSwatch_" .. tostring(idx)
+        qBtn.Position = UDim2.fromOffset((idx - 1) * 22, 0)
+        qBtn.Size = UDim2.fromOffset(18, 18)
+        qBtn.BackgroundColor3 = presetCol
+        qBtn.AutoButtonColor = false
+        qBtn.Text = ""
+        qBtn.ZIndex = 123
+        qBtn.Parent = quickPresetRow
+        addCorner(qBtn, 4)
+        addStroke(qBtn, Theme.Border, 1, 0.2)
+        qBtn.MouseButton1Click:Connect(function()
+            local h, s, v = color3ToHSV(presetCol)
+            pickerState.H = h
+            pickerState.S = s
+            pickerState.V = v
+            syncPickerVisuals(true)
+        end)
+    end
+
     local function openColorPickerForSwatch(btn, currentColor, applyColorFn)
         if pickerPopup.Visible and pickerState.ActiveBtn == btn then
             pickerPopup.Visible = false
@@ -3441,6 +3958,7 @@ do
         end
         pickerState.ActiveBtn = btn
         pickerState.ActiveTarget = applyColorFn
+        pickerState.HadRealPointerInput = false
         local h, s, v = color3ToHSV(currentColor or Theme.White)
         pickerState.H = h
         pickerState.S = s
@@ -3467,9 +3985,10 @@ do
     local function updateSVFromInputPos(pos)
         local absPos = svSquare.AbsolutePosition
         local absSize = svSquare.AbsoluteSize
-        local w = (absSize and absSize.X > 0) and absSize.X or 208
-        local h = (absSize and absSize.Y > 0) and absSize.Y or 134
+        local w = (absSize and absSize.X > 0) and absSize.X or 224
+        local h = (absSize and absSize.Y > 0) and absSize.Y or 138
         if pos then
+            pickerState.HadRealPointerInput = true
             pickerState.S = math.clamp((pos.X - (absPos and absPos.X or 0)) / w, 0, 1)
             pickerState.V = 1 - math.clamp((pos.Y - (absPos and absPos.Y or 0)) / h, 0, 1)
         else
@@ -3482,8 +4001,9 @@ do
     local function updateHueFromInputPos(pos)
         local absPos = hueBar.AbsolutePosition
         local absSize = hueBar.AbsoluteSize
-        local w = (absSize and absSize.X > 0) and absSize.X or 208
+        local w = (absSize and absSize.X > 0) and absSize.X or 224
         if pos then
+            pickerState.HadRealPointerInput = true
             pickerState.H = math.clamp((pos.X - (absPos and absPos.X or 0)) / w, 0, 1)
         else
             pickerState.H = (pickerState.H + 0.15) % 1
@@ -3494,8 +4014,9 @@ do
     local function updateAlphaFromInputPos(pos)
         local absPos = alphaBar.AbsolutePosition
         local absSize = alphaBar.AbsoluteSize
-        local w = (absSize and absSize.X > 0) and absSize.X or 208
+        local w = (absSize and absSize.X > 0) and absSize.X or 224
         if pos then
+            pickerState.HadRealPointerInput = true
             pickerState.A = math.clamp((pos.X - (absPos and absPos.X or 0)) / w, 0, 1)
         else
             pickerState.A = (pickerState.A <= 0.25) and 1 or math.clamp(pickerState.A - 0.25, 0.1, 1)
@@ -3504,13 +4025,19 @@ do
     end
 
     svHitbox.MouseButton1Click:Connect(function()
-        updateSVFromInputPos(nil)
+        if not pickerState.HadRealPointerInput then
+            updateSVFromInputPos(nil)
+        end
     end)
     hueHitbox.MouseButton1Click:Connect(function()
-        updateHueFromInputPos(nil)
+        if not pickerState.HadRealPointerInput then
+            updateHueFromInputPos(nil)
+        end
     end)
     alphaHitbox.MouseButton1Click:Connect(function()
-        updateAlphaFromInputPos(nil)
+        if not pickerState.HadRealPointerInput then
+            updateAlphaFromInputPos(nil)
+        end
     end)
 
     svHitbox.InputBegan:Connect(function(inp)
@@ -3519,16 +4046,48 @@ do
             updateSVFromInputPos(inp.Position)
         end
     end)
+    svHitbox.InputChanged:Connect(function(inp)
+        if pickerState.DraggingSV and isPrimaryPointerMove(inp) then
+            updateSVFromInputPos(inp.Position)
+        end
+    end)
+    svHitbox.InputEnded:Connect(function(inp)
+        if isPrimaryPointerInput(inp) then
+            pickerState.DraggingSV = false
+        end
+    end)
+
     hueHitbox.InputBegan:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingHue = true
             updateHueFromInputPos(inp.Position)
         end
     end)
+    hueHitbox.InputChanged:Connect(function(inp)
+        if pickerState.DraggingHue and isPrimaryPointerMove(inp) then
+            updateHueFromInputPos(inp.Position)
+        end
+    end)
+    hueHitbox.InputEnded:Connect(function(inp)
+        if isPrimaryPointerInput(inp) then
+            pickerState.DraggingHue = false
+        end
+    end)
+
     alphaHitbox.InputBegan:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingAlpha = true
             updateAlphaFromInputPos(inp.Position)
+        end
+    end)
+    alphaHitbox.InputChanged:Connect(function(inp)
+        if pickerState.DraggingAlpha and isPrimaryPointerMove(inp) then
+            updateAlphaFromInputPos(inp.Position)
+        end
+    end)
+    alphaHitbox.InputEnded:Connect(function(inp)
+        if isPrimaryPointerInput(inp) then
+            pickerState.DraggingAlpha = false
         end
     end)
 
@@ -3596,7 +4155,6 @@ do
 
     local function attachSwatchCyclers(btn, initColor, onColorPicked)
         local curColor = initColor or SWATCH_PALETTE[2]
-        local paletteIdx = 1
         btn.BackgroundColor3 = curColor
         local function setCol(c, fire)
             curColor = c
@@ -3606,9 +4164,7 @@ do
             end
         end
         btn.MouseButton1Click:Connect(function()
-            paletteIdx = (paletteIdx % #SWATCH_PALETTE) + 1
-            local nextCol = SWATCH_PALETTE[paletteIdx]
-            setCol(nextCol, true)
+            setCol(curColor, true)
             openColorPickerForSwatch(btn, curColor, function(pickedCol)
                 setCol(pickedCol, true)
             end)
@@ -3623,11 +4179,11 @@ do
         wrapper.Size = UDim2.new(1, 0, 0, 30)
         wrapper.AutomaticSize = Enum.AutomaticSize.Y
         wrapper.BackgroundColor3 = Theme.Deep
-        wrapper.BackgroundTransparency = 0.12
+        wrapper.BackgroundTransparency = 0.14
         wrapper.ZIndex = 14
         wrapper.Parent = page
-        addCorner(wrapper, 8)
-        local wrapperStroke = addStroke(wrapper, Theme.Border, 1, 0)
+        addCorner(wrapper, 9)
+        local wrapperStroke = addStroke(wrapper, Theme.Border, 1, 0.22)
 
         local titleBg = Instance.new("Frame")
         titleBg.Name = "SectionHeaderBadge"
@@ -3676,9 +4232,25 @@ do
         collapseBtn.ZIndex = 16
         collapseBtn.Parent = titleBg
 
+        local headerLine = Instance.new("Frame")
+        headerLine.Name = "SectionHeaderDivider"
+        headerLine.Position = UDim2.fromOffset(10, 26)
+        headerLine.Size = UDim2.new(1, -20, 0, 1)
+        headerLine.BackgroundColor3 = Theme.Border
+        headerLine.BorderSizePixel = 0
+        headerLine.ZIndex = 15
+        headerLine.Parent = wrapper
+        local headerLineGrad = Instance.new("UIGradient")
+        headerLineGrad.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0.0, 0.35),
+            NumberSequenceKeypoint.new(0.5, 0.55),
+            NumberSequenceKeypoint.new(1.0, 0.92),
+        })
+        headerLineGrad.Parent = headerLine
+
         local content = Instance.new("Frame")
         content.Name = "SectionContent"
-        content.Position = UDim2.fromOffset(0, 26)
+        content.Position = UDim2.fromOffset(0, 28)
         content.Size = UDim2.new(1, 0, 0, 10)
         content.AutomaticSize = Enum.AutomaticSize.Y
         content.BackgroundTransparency = 1
@@ -3689,19 +4261,20 @@ do
         collapseBtn.MouseButton1Click:Connect(function()
             isCollapsed = not isCollapsed
             content.Visible = not isCollapsed
+            headerLine.Visible = not isCollapsed
             collapseBtn.Text = isCollapsed and "▸" or "▾"
             collapseBtn.TextColor3 = isCollapsed and Theme.Accent or Theme.Muted
         end)
 
         wrapper.MouseEnter:Connect(function()
-            tween(wrapperStroke, FastTween, { Color = Theme.Accent, Transparency = 0.45 })
+            tween(wrapperStroke, FastTween, { Color = Theme.Accent, Transparency = 0.35 })
         end)
         wrapper.MouseLeave:Connect(function()
-            tween(wrapperStroke, FastTween, { Color = Theme.Border, Transparency = 0 })
+            tween(wrapperStroke, FastTween, { Color = Theme.Border, Transparency = 0.22 })
         end)
 
         local pad = Instance.new("UIPadding")
-        pad.PaddingTop = UDim.new(0, 2)
+        pad.PaddingTop = UDim.new(0, 3)
         pad.PaddingBottom = UDim.new(0, 10)
         pad.PaddingLeft = UDim.new(0, 8)
         pad.PaddingRight = UDim.new(0, 8)
@@ -3723,7 +4296,7 @@ do
         row.ZIndex = 14
         row.Parent = page
         addCorner(row, 8)
-        addStroke(row, Theme.Border, 1, 0)
+        addStroke(row, Theme.Border, 1, 0.2)
 
         local lbl = Instance.new("TextLabel")
         lbl.Position = UDim2.fromOffset(14, 0)
@@ -3741,14 +4314,14 @@ do
         swatchBtn.Name = "ColorSwatch_" .. tostring(text)
         swatchBtn.AnchorPoint = Vector2.new(1, 0.5)
         swatchBtn.Position = UDim2.new(1, -12, 0.5, 0)
-        swatchBtn.Size = UDim2.fromOffset(24, 16)
+        swatchBtn.Size = UDim2.fromOffset(26, 17)
         swatchBtn.AutoButtonColor = false
         swatchBtn.Text = " "
         swatchBtn.TextTransparency = 1
         swatchBtn.ZIndex = 16
         swatchBtn.Parent = row
-        addCorner(swatchBtn, 4)
-        addStroke(swatchBtn, Theme.Border, 1, 0)
+        addCorner(swatchBtn, 5)
+        addStroke(swatchBtn, Theme.White, 1, 0.45)
 
         local setCol, getCol = attachSwatchCyclers(swatchBtn, defaultColor, callback)
         return { SetColor = setCol, GetColor = getCol, SwatchBtn = swatchBtn, Row = row }
@@ -12273,6 +12846,35 @@ do
             safeWriteFile(AUTO_LOAD_FILE, "")
         end
     end)
+
+    local settingsSaveKeySet = createToggle(SettingsTab, "Save Key (Auto-Login Until Expired)", ConfigState.RememberKey ~= false, function(val)
+        if UI.setSaveKeyVisualState then
+            UI.setSaveKeyVisualState(val, false)
+        else
+            ConfigState.RememberKey = val
+        end
+        if not val then
+            safeWriteFile(SAVED_KEY_FILE, "")
+            notify("Key System", "Saved key cleared. Key System will prompt on next launch.", 3)
+        elseif State.activeKeyString and State.activeKeyString ~= "" and State.activeKeyString ~= "Unverified" then
+            pcall(function()
+                safeWriteFile(SAVED_KEY_FILE, HttpService:JSONEncode({
+                    key = State.activeKeyString,
+                    savedAt = os.time(),
+                    expiresAt = State.keyExpireTimestamp or (os.time() + 86400),
+                    rememberKey = true,
+                }))
+            end)
+            notify("Key System", "Key saved! Auto-login active until key expires.", 3)
+        end
+    end)
+    State.syncSettingsSaveKeyToggle = settingsSaveKeySet and settingsSaveKeySet.Set
+
+    createButton(SettingsTab, "View Changelog (" .. CHANGELOG_VERSION .. ")", function()
+        if UI.showChangelogModal then
+            UI.showChangelogModal(true)
+        end
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -12283,6 +12885,29 @@ PlatoBoost.setOnMessage(function(message)
         UI.KeyFeedback.Text = "Status: " .. tostring(message)
     end
 end)
+
+local function saveKeyRecord(keyStr, expireTs)
+    if ConfigState.RememberKey == false then
+        safeWriteFile(SAVED_KEY_FILE, "")
+        return
+    end
+    if not keyStr or keyStr == "" then
+        return
+    end
+    pcall(function()
+        local payload = HttpService:JSONEncode({
+            key = tostring(keyStr),
+            savedAt = os.time(),
+            expiresAt = tonumber(expireTs) or (os.time() + 86400),
+            rememberKey = true,
+        })
+        safeWriteFile(SAVED_KEY_FILE, payload)
+    end)
+end
+
+local function clearSavedKeyRecord()
+    safeWriteFile(SAVED_KEY_FILE, "")
+end
 
 local function launchMainHub()
     if PlatoBoost.getEntangledScale() ~= 1 or #PlatoBoost.getProofHash() ~= 64 then
@@ -12325,24 +12950,27 @@ local function setKeyCardStateGradient(mode)
     State.keyCardFlashToken = (State.keyCardFlashToken or 0) + 1
     local myToken = State.keyCardFlashToken
     if mode == "error" then
-        UI.KeyCard.BackgroundColor3 = Color3.fromRGB(52, 10, 14)
+        UI.KeyCard.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         if UI.KeyCardGrad then
             UI.KeyCardGrad.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 70, 85)),
-                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(165, 24, 38)),
-                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(45, 8, 14)),
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(96, 16, 28)),
+                ColorSequenceKeypoint.new(0.28, Color3.fromRGB(64, 10, 20)),
+                ColorSequenceKeypoint.new(0.62, Color3.fromRGB(36, 6, 12)),
+                ColorSequenceKeypoint.new(0.88, Color3.fromRGB(20, 4, 8)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(10, 3, 6)),
             })
         end
         if UI.KeyOverlayGrad then
             UI.KeyOverlayGrad.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 55, 70)),
-                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(185, 22, 38)),
-                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(50, 8, 14)),
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 72, 92)),
+                ColorSequenceKeypoint.new(0.32, Color3.fromRGB(220, 34, 56)),
+                ColorSequenceKeypoint.new(0.68, Color3.fromRGB(135, 16, 30)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(38, 6, 12)),
             })
         end
         if UI.KeyGradientOverlay then
-            UI.KeyGradientOverlay.BackgroundColor3 = Theme.Error
-            tween(UI.KeyGradientOverlay, FastTween, { BackgroundTransparency = 0.62 })
+            UI.KeyGradientOverlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            tween(UI.KeyGradientOverlay, FastTween, { BackgroundTransparency = 0.52 })
         end
         tween(UI.KeyCardStroke, FastTween, { Color = Theme.Error, Transparency = 0 })
         tween(UI.KeyInputStroke, FastTween, { Color = Theme.Error })
@@ -12351,18 +12979,19 @@ local function setKeyCardStateGradient(mode)
         end
         task.delay(1.35, function()
             if State.keyCardFlashToken == myToken and UI.KeyCard and UI.KeyCard.Visible then
-                tween(UI.KeyCard, SmoothTween, { BackgroundColor3 = Theme.Black })
+                UI.KeyCard.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                 if UI.KeyCardGrad then
                     UI.KeyCardGrad.Color = ColorSequence.new({
-                        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
-                        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 220, 230)),
-                        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(185, 185, 200)),
+                        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(24, 24, 34)),
+                        ColorSequenceKeypoint.new(0.38, Color3.fromRGB(14, 14, 20)),
+                        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(9, 9, 13)),
+                        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(5, 5, 8)),
                     })
                 end
                 if UI.KeyGradientOverlay then
                     tween(UI.KeyGradientOverlay, SmoothTween, { BackgroundTransparency = 1 })
                 end
-                tween(UI.KeyCardStroke, SmoothTween, { Color = Theme.White, Transparency = 0.08 })
+                tween(UI.KeyCardStroke, SmoothTween, { Color = Theme.White, Transparency = 0.12 })
                 tween(UI.KeyInputStroke, SmoothTween, { Color = Theme.Border })
                 if UI.KeyTopBar then
                     tween(UI.KeyTopBar, SmoothTween, { BackgroundColor3 = Theme.White })
@@ -12370,24 +12999,27 @@ local function setKeyCardStateGradient(mode)
             end
         end)
     elseif mode == "success" then
-        UI.KeyCard.BackgroundColor3 = Color3.fromRGB(10, 52, 28)
+        UI.KeyCard.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         if UI.KeyCardGrad then
             UI.KeyCardGrad.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(80, 255, 150)),
-                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(24, 165, 88)),
-                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(8, 45, 24)),
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(14, 88, 52)),
+                ColorSequenceKeypoint.new(0.28, Color3.fromRGB(10, 58, 35)),
+                ColorSequenceKeypoint.new(0.62, Color3.fromRGB(6, 34, 20)),
+                ColorSequenceKeypoint.new(0.88, Color3.fromRGB(4, 18, 12)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(3, 10, 7)),
             })
         end
         if UI.KeyOverlayGrad then
             UI.KeyOverlayGrad.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(75, 255, 150)),
-                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(28, 185, 95)),
-                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(10, 55, 28)),
+                ColorSequenceKeypoint.new(0.0, Color3.fromRGB(72, 255, 158)),
+                ColorSequenceKeypoint.new(0.35, Color3.fromRGB(32, 205, 112)),
+                ColorSequenceKeypoint.new(0.70, Color3.fromRGB(16, 120, 64)),
+                ColorSequenceKeypoint.new(1.0, Color3.fromRGB(6, 38, 22)),
             })
         end
         if UI.KeyGradientOverlay then
-            UI.KeyGradientOverlay.BackgroundColor3 = Theme.Success
-            tween(UI.KeyGradientOverlay, FastTween, { BackgroundTransparency = 0.58 })
+            UI.KeyGradientOverlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            tween(UI.KeyGradientOverlay, FastTween, { BackgroundTransparency = 0.48 })
         end
         tween(UI.KeyCardStroke, FastTween, { Color = Theme.Success, Transparency = 0 })
         tween(UI.KeyInputStroke, FastTween, { Color = Theme.Success })
@@ -12431,6 +13063,11 @@ local function attemptAuthorization()
         State.activeKeyString = entered
         State.activeKeyTier = "Licensed"
         State.keyExpireTimestamp = expireTs or (os.time() + 86400)
+        if ConfigState.RememberKey ~= false then
+            saveKeyRecord(entered, State.keyExpireTimestamp)
+        else
+            clearSavedKeyRecord()
+        end
         UI.UnlockButton.Text = "Submit"
         UI.KeyFeedback.Text = "Status: Key verified! Launching Core.xyz..."
         UI.KeyFeedback.TextColor3 = Theme.Success
@@ -12455,6 +13092,84 @@ local function attemptAuthorization()
         shakeKeyCardOnError()
     end
 end
+
+local function showKeyCardPrompt(targetScale, statusText, isErrorState)
+    local scaleVal = targetScale or getResponsiveScale()
+    UI.KeyFeedback.Text = statusText or "Status: Waiting for key submission..."
+    UI.KeyFeedback.TextColor3 = isErrorState and Theme.Error or Theme.Muted
+    if UI.KeyStatusDot then
+        UI.KeyStatusDot.BackgroundColor3 = isErrorState and Theme.Error or Theme.Silver
+    end
+    UI.KeyCard.Visible = true
+    UI.KeyScale.Scale = scaleVal * 0.88
+    tween(UI.KeyCard, SmoothTween, { BackgroundTransparency = 0.02 })
+    tween(UI.KeyCardStroke, SmoothTween, { Transparency = isErrorState and 0 or 0.12 })
+    tween(UI.KeyScale, SpringTween, { Scale = scaleVal })
+    if isErrorState then
+        setKeyCardStateGradient("error")
+    end
+end
+
+local function checkSavedKeyAndRoute(targetScale)
+    -- Show Changelog v4.4 note once per version on execution
+    if UI.showChangelogModal then
+        UI.showChangelogModal(false)
+    end
+
+    local rawSaved = safeReadFile(SAVED_KEY_FILE)
+    if rawSaved and rawSaved ~= "" then
+        local okDecode, savedData = pcall(function()
+            return HttpService:JSONDecode(rawSaved)
+        end)
+        if okDecode and type(savedData) == "table" then
+            if savedData.rememberKey ~= nil and UI.setSaveKeyVisualState then
+                UI.setSaveKeyVisualState(savedData.rememberKey == true, true)
+            end
+            local savedKeyStr = type(savedData.key) == "string" and savedData.key:gsub("^%s*(.-)%s*$", "%1") or ""
+            if savedKeyStr ~= "" and savedData.rememberKey ~= false then
+                local savedExpireTs = tonumber(savedData.expiresAt)
+                local nowTs = os.time()
+                -- 1. Check local expiry timestamp first
+                if savedExpireTs and savedExpireTs ~= -1 and nowTs >= savedExpireTs then
+                    clearSavedKeyRecord()
+                    if UI.KeyInputBox then
+                        UI.KeyInputBox.Text = ""
+                    end
+                    showKeyCardPrompt(targetScale, "Status: Your saved key has expired! Please obtain a new key.", true)
+                    notify("Key System", "Your saved key has expired! Please obtain a new key to continue.", 5)
+                    return "expired"
+                end
+
+                -- 2. Verify with Platoboost gateway to confirm key is still active
+                local okVerify, liveExpireTs = PlatoBoost.verifyKey(savedKeyStr)
+                local effectiveExpire = tonumber(liveExpireTs) or savedExpireTs or (nowTs + 86400)
+                if okVerify and (effectiveExpire == -1 or nowTs < effectiveExpire) then
+                    State.activeKeyString = savedKeyStr
+                    State.activeKeyTier = "Licensed"
+                    State.keyExpireTimestamp = effectiveExpire
+                    saveKeyRecord(savedKeyStr, effectiveExpire)
+                    if UI.KeyCard then
+                        UI.KeyCard.Visible = false
+                    end
+                    launchMainHub()
+                    return "launched"
+                else
+                    clearSavedKeyRecord()
+                    if UI.KeyInputBox then
+                        UI.KeyInputBox.Text = ""
+                    end
+                    showKeyCardPrompt(targetScale, "Status: Your saved key has expired! Please obtain a new key.", true)
+                    notify("Key System", "Your saved key has expired! Please obtain a new key to continue.", 5)
+                    return "expired"
+                end
+            end
+        end
+    end
+
+    showKeyCardPrompt(targetScale, "Status: Waiting for key submission...", false)
+    return "prompt"
+end
+State.checkSavedKeyAndRoute = checkSavedKeyAndRoute
 
 UI.CopyKeyButton.MouseButton1Click:Connect(function()
     spawnRipple(UI.CopyKeyButton)
@@ -12941,6 +13656,7 @@ do
         local safeDt = (deltaTime and deltaTime > 0) and deltaTime or (1 / 60)
         animClock = animClock + safeDt
         telemetryTimer = telemetryTimer + safeDt
+        playerListRefreshTimer = playerListRefreshTimer
         playerListRefreshTimer = playerListRefreshTimer + safeDt
         keyCountdownTimer = keyCountdownTimer + safeDt
         uiAnimTimer = uiAnimTimer + safeDt
@@ -13079,7 +13795,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 15. START-TO-END ANIMATED BOOT SEQUENCE (6-STEP SAAS LOADER -> MANDATORY KEY GATE)
+-- 15. START-TO-END ANIMATED BOOT SEQUENCE (6-STEP SAAS LOADER -> SAVED KEY / KEY GATE)
 --------------------------------------------------------------------------------
 task.spawn(function()
     local targetScale = getResponsiveScale()
@@ -13103,8 +13819,8 @@ task.spawn(function()
         { pct = 34, tag = "STAGE 2 / 6  ·  RENDER", text = "Preparing graphics & overlay engine...", sub = "Pre-allocating 3D ESP, skeleton & chams pools..." },
         { pct = 52, tag = "STAGE 3 / 6  ·  WEATHER", text = "Optimizing frame pacing & memory pool...", sub = "Warming up 3D volumetric weather & audio nodes..." },
         { pct = 70, tag = "STAGE 4 / 6  ·  CONFIG", text = "Loading saved profile & preferences...", sub = "Syncing themes, keybinds & performance profiles..." },
-        { pct = 88, tag = "STAGE 5 / 6  ·  LICENSE", text = "Verifying license status...", sub = "Connecting to Platoboost verification gateway..." },
-        { pct = 100, tag = "STAGE 6 / 6  ·  READY", text = "Finalizing workspace...", sub = "All systems ready · Opening license gateway..." },
+        { pct = 88, tag = "STAGE 5 / 6  ·  LICENSE", text = "Verifying license status...", sub = "Checking saved license & Platoboost gateway..." },
+        { pct = 100, tag = "STAGE 6 / 6  ·  READY", text = "Finalizing workspace...", sub = "All systems ready · Routing session..." },
     }
 
     local currentPct = 0
@@ -13148,15 +13864,9 @@ task.spawn(function()
     task.wait(0.24)
     UI.LoaderCard.Visible = false
 
-    -- Always display the polished Key System on every launch (No auto-save key bypass)
-    UI.KeyFeedback.Text = "Status: Waiting for key submission..."
-    UI.KeyFeedback.TextColor3 = Theme.Muted
-    if UI.KeyStatusDot then UI.KeyStatusDot.BackgroundColor3 = Theme.Silver end
-    UI.KeyCard.Visible = true
-    UI.KeyScale.Scale = targetScale * 0.88
-    tween(UI.KeyCard, SmoothTween, { BackgroundTransparency = 0.03 })
-    tween(UI.KeyCardStroke, SmoothTween, { Transparency = 0.08 })
-    tween(UI.KeyScale, SpringTween, { Scale = targetScale })
+    -- Check Saved Key expiry on every execution (auto-loads Main Hub if valid, or prompts Key System with notification if expired)
+    checkSavedKeyAndRoute(targetScale)
 end)
 end)
+
 
