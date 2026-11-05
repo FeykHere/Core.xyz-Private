@@ -1424,7 +1424,6 @@ end
 
 local function makeDraggable(handle, targetFrame, onDragCallback)
     local dragging = false
-    local dragInput = nil
     local dragStart = nil
     local startPos = nil
 
@@ -1433,23 +1432,11 @@ local function makeDraggable(handle, targetFrame, onDragCallback)
             dragging = true
             dragStart = input.Position
             startPos = targetFrame.Position
-
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    handle.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging and dragStart and startPos then
+        if dragging and dragStart and startPos and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             targetFrame.Position = UDim2.new(
                 startPos.X.Scale,
@@ -1460,6 +1447,12 @@ local function makeDraggable(handle, targetFrame, onDragCallback)
             if onDragCallback then
                 onDragCallback(delta)
             end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
         end
     end)
 end
@@ -3891,6 +3884,8 @@ do
         HadRealPointerInput = false,
     }
 
+    local UltraFastPickerTween = TweenInfo.new(0.04, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+
     local function syncPickerVisuals(fireCallback)
         local pureHueCol = hsvToRgbColor3(pickerState.H, 1, 1)
         local finalCol = hsvToRgbColor3(pickerState.H, pickerState.S, pickerState.V)
@@ -3939,7 +3934,15 @@ do
         qBtn.ZIndex = 123
         qBtn.Parent = quickPresetRow
         addCorner(qBtn, 4)
-        addStroke(qBtn, Theme.Border, 1, 0.2)
+        local qStroke = addStroke(qBtn, Theme.Border, 1, 0.2)
+        qBtn.MouseEnter:Connect(function()
+            tween(qBtn, UltraFastPickerTween, { Size = UDim2.fromOffset(20, 20) })
+            tween(qStroke, UltraFastPickerTween, { Color = Theme.White, Transparency = 0 })
+        end)
+        qBtn.MouseLeave:Connect(function()
+            tween(qBtn, UltraFastPickerTween, { Size = UDim2.fromOffset(18, 18) })
+            tween(qStroke, UltraFastPickerTween, { Color = Theme.Border, Transparency = 0.2 })
+        end)
         qBtn.MouseButton1Click:Connect(function()
             local h, s, v = color3ToHSV(presetCol)
             pickerState.H = h
@@ -3966,7 +3969,7 @@ do
         pickerState.A = 1
         syncPickerVisuals(false)
         pickerPopup.Visible = true
-        pickerScale.Scale = 0.92
+        pickerScale.Scale = 0.94
         tween(pickerScale, SpringTween, { Scale = 1 })
     end
     UI.openColorPickerForSwatch = openColorPickerForSwatch
@@ -4043,6 +4046,7 @@ do
     svHitbox.InputBegan:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingSV = true
+            tween(svCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(15, 15) })
             updateSVFromInputPos(inp.Position)
         end
     end)
@@ -4054,12 +4058,14 @@ do
     svHitbox.InputEnded:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingSV = false
+            tween(svCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(12, 12) })
         end
     end)
 
     hueHitbox.InputBegan:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingHue = true
+            tween(hueCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(9, 20) })
             updateHueFromInputPos(inp.Position)
         end
     end)
@@ -4071,12 +4077,14 @@ do
     hueHitbox.InputEnded:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingHue = false
+            tween(hueCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(7, 18) })
         end
     end)
 
     alphaHitbox.InputBegan:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingAlpha = true
+            tween(alphaCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(9, 20) })
             updateAlphaFromInputPos(inp.Position)
         end
     end)
@@ -4088,6 +4096,7 @@ do
     alphaHitbox.InputEnded:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
             pickerState.DraggingAlpha = false
+            tween(alphaCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(7, 18) })
         end
     end)
 
@@ -4108,11 +4117,44 @@ do
 
     UserInputService.InputEnded:Connect(function(inp)
         if isPrimaryPointerInput(inp) then
+            if pickerState.DraggingSV then
+                tween(svCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(12, 12) })
+            end
+            if pickerState.DraggingHue then
+                tween(hueCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(7, 18) })
+            end
+            if pickerState.DraggingAlpha then
+                tween(alphaCursor, UltraFastPickerTween, { Size = UDim2.fromOffset(7, 18) })
+            end
             pickerState.DraggingSV = false
             pickerState.DraggingHue = false
             pickerState.DraggingAlpha = false
         end
     end)
+
+    -- 60FPS RenderStepped pointer polling for ultra-smooth zero-latency Color Picker dragging
+    State.updateColorPickerFrame = function()
+        if not pickerPopup.Visible then
+            return
+        end
+        if not (pickerState.DraggingSV or pickerState.DraggingHue or pickerState.DraggingAlpha) then
+            return
+        end
+        if type(UserInputService.GetMouseLocation) == "function" then
+            local okLoc, mouseLoc = pcall(function()
+                return UserInputService:GetMouseLocation()
+            end)
+            if okLoc and mouseLoc then
+                if pickerState.DraggingSV then
+                    updateSVFromInputPos(mouseLoc)
+                elseif pickerState.DraggingHue then
+                    updateHueFromInputPos(mouseLoc)
+                elseif pickerState.DraggingAlpha then
+                    updateAlphaFromInputPos(mouseLoc)
+                end
+            end
+        end
+    end
 
     rgbaBox.FocusLost:Connect(function()
         local raw = tostring(rgbaBox.Text or "")
@@ -7800,7 +7842,7 @@ do
     addCorner(TimelineTrack, 10)
     local TimelineStroke = addStroke(TimelineTrack, Theme.Border, 1, 0)
 
-    -- Baseline Subtle Track Line inside the Ocean Scrubber
+    -- Single Continuous Smooth Wave Scrubber (Hidden legacy fill bars so only ONE smooth long wave renders)
     local TimelineBaseline = Instance.new("Frame")
     TimelineBaseline.Name = "MusicTimelineBaseline"
     TimelineBaseline.AnchorPoint = Vector2.new(0, 0.5)
@@ -7808,10 +7850,10 @@ do
     TimelineBaseline.Size = UDim2.new(1, 0, 0, 2)
     TimelineBaseline.BackgroundColor3 = Theme.Elevated
     TimelineBaseline.BorderSizePixel = 0
+    TimelineBaseline.Visible = false
     TimelineBaseline.ZIndex = 12
     TimelineBaseline.Parent = TimelineTrack
 
-    -- Flowing Ocean Wave Crest Ribbons (Primary Swell & Secondary Bioluminescent Tide Layers)
     local OceanCrestPrimary = Instance.new("Frame")
     OceanCrestPrimary.Name = "OceanWaveCrestPrimary"
     OceanCrestPrimary.AnchorPoint = Vector2.new(0, 1)
@@ -7820,6 +7862,7 @@ do
     OceanCrestPrimary.BackgroundColor3 = Color3.fromRGB(65, 160, 255)
     OceanCrestPrimary.BackgroundTransparency = 0.54
     OceanCrestPrimary.BorderSizePixel = 0
+    OceanCrestPrimary.Visible = false
     OceanCrestPrimary.ZIndex = 13
     OceanCrestPrimary.Parent = TimelineTrack
     addCorner(OceanCrestPrimary, 6)
@@ -7832,11 +7875,12 @@ do
     OceanCrestSecondary.BackgroundColor3 = Color3.fromRGB(145, 222, 255)
     OceanCrestSecondary.BackgroundTransparency = 0.42
     OceanCrestSecondary.BorderSizePixel = 0
+    OceanCrestSecondary.Visible = false
     OceanCrestSecondary.ZIndex = 13
     OceanCrestSecondary.Parent = TimelineTrack
     addCorner(OceanCrestSecondary, 6)
 
-    -- Pre-Allocated 28 Multi-Harmonic Tangential Wavy Ocean Scrubber Segments (Zero Per-Frame Allocations)
+    -- Pre-Allocated 28 Seamless Ribbon Segments Forming ONE Single Long Continuous Wave (Zero Per-Frame Allocations)
     local OCEAN_WAVE_SEGMENTS = 28
     local oceanSegments = {}
     for i = 1, OCEAN_WAVE_SEGMENTS do
@@ -7845,9 +7889,9 @@ do
         seg.AnchorPoint = Vector2.new(0.5, 0.5)
         local xScale = (i - 0.5) / OCEAN_WAVE_SEGMENTS
         seg.Position = UDim2.fromScale(xScale, 0.5)
-        seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -2, 0, 6)
-        seg.BackgroundColor3 = Color3.fromRGB(120, 205, 255)
-        seg.BackgroundTransparency = 0.1
+        seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, 3, 0, 3)
+        seg.BackgroundColor3 = Theme.White
+        seg.BackgroundTransparency = 0.05
         seg.BorderSizePixel = 0
         seg.ZIndex = 14
         seg.Parent = TimelineTrack
@@ -7861,14 +7905,14 @@ do
     ScrubberKnobHalo.AnchorPoint = Vector2.new(0.5, 0.5)
     ScrubberKnobHalo.Position = UDim2.fromScale(0, 0.5)
     ScrubberKnobHalo.Size = UDim2.fromOffset(18, 18)
-    ScrubberKnobHalo.BackgroundColor3 = Color3.fromRGB(130, 215, 255)
-    ScrubberKnobHalo.BackgroundTransparency = 0.68
+    ScrubberKnobHalo.BackgroundColor3 = Color3.fromRGB(220, 240, 255)
+    ScrubberKnobHalo.BackgroundTransparency = 0.72
     ScrubberKnobHalo.BorderSizePixel = 0
     ScrubberKnobHalo.ZIndex = 15
     ScrubberKnobHalo.Parent = TimelineTrack
     addCorner(ScrubberKnobHalo, 999)
 
-    -- Buoyant Ocean Wave Scrubber Thumb Knob
+    -- Buoyant Single-Wave Scrubber Thumb Knob
     local ScrubberKnob = Instance.new("Frame")
     ScrubberKnob.Name = "MusicScrubberKnob"
     ScrubberKnob.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -7948,53 +7992,42 @@ do
     local function updateWavyScrubberVisuals(progressRatio, animTime)
         local clampedRatio = math.clamp(tonumber(progressRatio) or 0, 0, 1)
         local isPlaying = State.musicIsPlaying and true or false
-        local waveSpeed = isPlaying and 4.8 or 1.6
-        local waveAmp = isPlaying and 0.25 or 0.085
-
-        OceanCrestPrimary.Size = UDim2.new(clampedRatio, 0, 0.64 + math.sin(animTime * 2.5) * 0.10, 0)
-        OceanCrestSecondary.Size = UDim2.new(clampedRatio, 0, 0.46 + math.cos(animTime * 3.3) * 0.09, 0)
+        local waveSpeed = isPlaying and 3.4 or 1.2
+        local waveAmp = isPlaying and 0.24 or 0.08
+        local lineThickness = isPlaying and 3 or 2
 
         for i = 1, OCEAN_WAVE_SEGMENTS do
             local seg = oceanSegments[i]
             local segNorm = (i - 0.5) / OCEAN_WAVE_SEGMENTS
-            -- 3-harmonic Gerstner/ocean wave synthesis (primary swell + cross-chop + capillary ripple)
-            local wave1 = math.sin(animTime * waveSpeed - i * 0.48)
-            local wave2 = math.cos(animTime * (waveSpeed * 0.72) + i * 0.33)
-            local wave3 = math.sin(animTime * (waveSpeed * 1.35) - i * 0.82)
-            local combinedWave = (wave1 * 0.58) + (wave2 * 0.27) + (wave3 * 0.15)
-            local crestFactor = math.clamp((combinedWave + 1) * 0.5, 0, 1)
+            -- Single continuous long-wavelength smooth sine wave across the entire timeline
+            local phaseAngle = animTime * waveSpeed - segNorm * math.pi * 2.2
+            local longWave = math.sin(phaseAngle)
+            local slope = math.cos(phaseAngle)
+            local yPos = 0.5 + longWave * waveAmp
+            local tiltAngle = -slope * (isPlaying and 10.5 or 3.8)
+
+            seg.Position = UDim2.fromScale(segNorm, yPos)
+            seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, 3, 0, lineThickness)
+            seg.Rotation = tiltAngle
 
             if segNorm <= clampedRatio then
-                local yPos = 0.5 + combinedWave * waveAmp
-                local barHeight = math.floor(6 + crestFactor * (isPlaying and 9 or 5))
-                seg.Position = UDim2.fromScale(segNorm, yPos)
-                seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -2, 0, barHeight)
-                seg.Rotation = combinedWave * (isPlaying and 11.5 or 4.0)
-                -- Interpolate from deep ocean azure at trough to glowing seafoam cyan-white at wave crest
-                local rCol = math.floor(70 + crestFactor * 125)
-                local gCol = math.floor(165 + crestFactor * 78)
-                local bCol = 255
-                seg.BackgroundColor3 = Color3.fromRGB(rCol, gCol, bCol)
-                seg.BackgroundTransparency = 0.05 + (1 - crestFactor) * 0.10
+                local crestFactor = math.clamp((longWave + 1) * 0.5, 0, 1)
+                local rCol = math.floor(195 + crestFactor * 60)
+                local gCol = math.floor(225 + crestFactor * 30)
+                seg.BackgroundColor3 = Color3.fromRGB(rCol, gCol, 255)
+                seg.BackgroundTransparency = 0.02
             else
-                local idleWave = (math.sin(animTime * 1.45 - i * 0.42) * 0.7) + (math.cos(animTime * 0.95 + i * 0.28) * 0.3)
-                local idleY = 0.5 + idleWave * 0.055
-                seg.Position = UDim2.fromScale(segNorm, idleY)
-                seg.Size = UDim2.new(1 / OCEAN_WAVE_SEGMENTS, -2, 0, 4)
-                seg.Rotation = idleWave * 2.5
                 seg.BackgroundColor3 = Theme.Elevated
-                seg.BackgroundTransparency = 0.38
+                seg.BackgroundTransparency = 0.36
             end
         end
 
-        local phaseAtKnob = clampedRatio * OCEAN_WAVE_SEGMENTS
-        local kWave1 = math.sin(animTime * waveSpeed - phaseAtKnob * 0.48)
-        local kWave2 = math.cos(animTime * (waveSpeed * 0.72) + phaseAtKnob * 0.33)
-        local knobCombined = (kWave1 * 0.68) + (kWave2 * 0.32)
-        local knobY = math.clamp(0.5 + knobCombined * (waveAmp * 0.88), 0.20, 0.80)
+        local knobPhaseAngle = animTime * waveSpeed - clampedRatio * math.pi * 2.2
+        local knobWave = math.sin(knobPhaseAngle)
+        local knobY = math.clamp(0.5 + knobWave * waveAmp, 0.20, 0.80)
         ScrubberKnob.Position = UDim2.fromScale(clampedRatio, knobY)
         ScrubberKnobHalo.Position = UDim2.fromScale(clampedRatio, knobY)
-        local haloSize = isPlaying and math.floor(18 + math.sin(animTime * 5.2) * 3) or 16
+        local haloSize = isPlaying and math.floor(18 + math.sin(animTime * 4.5) * 2.5) or 16
         ScrubberKnobHalo.Size = UDim2.fromOffset(haloSize, haloSize)
     end
 
@@ -13706,9 +13739,9 @@ do
             end
         end
 
-        -- Continuously animate live gradients & rotators at ~30Hz for any visible UI (including Floating Pill & FOV Circle when MainWindow is closed!)
-        local menuCardOpen = UI.LoaderCard.Visible or UI.KeyCard.Visible or UI.MainWindow.Visible
-        if uiAnimTimer >= 0.033 then
+        -- Continuously animate live gradients & rotators at 60Hz for any visible UI (including Floating Pill, FOV Circle & Color Picker!)
+        local menuCardOpen = UI.LoaderCard.Visible or UI.KeyCard.Visible or UI.MainWindow.Visible or (UI.ColorPickerPopup and UI.ColorPickerPopup.Visible)
+        if uiAnimTimer >= 0.016 then
             local animDt = uiAnimTimer
             uiAnimTimer = 0
 
@@ -13770,6 +13803,10 @@ do
                     end
                 end
             end
+        end
+
+        if State.updateColorPickerFrame then
+            State.updateColorPickerFrame(safeDt)
         end
 
         if State.updateWeatherFrame then
