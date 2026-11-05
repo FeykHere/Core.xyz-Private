@@ -1077,28 +1077,28 @@ local ConfigState = {
     CustomBgPanelSeeThrough = 0.35,
     CustomBgImageFit = "Crop",
     CustomBgSearchQuery = "",
-    -- Full UI Theme Palette Suite
-    ThemeBgColor = Color3.fromRGB(10, 10, 14),
-    ThemeElementColor = Color3.fromRGB(16, 16, 22),
-    ThemeBorderColor = Color3.fromRGB(45, 45, 56),
-    ThemeAccentColor = Color3.fromRGB(115, 95, 255),
-    ThemeGlowColor = Color3.fromRGB(115, 95, 255),
-    ThemeOutlineColor = Color3.fromRGB(35, 35, 48),
-    ThemeInlineColor = Color3.fromRGB(24, 24, 32),
-    ThemeGradientColor = Color3.fromRGB(150, 130, 255),
-    ThemeFontColor = Color3.fromRGB(255, 255, 255),
-    ThemeFontOutlineColor = Color3.fromRGB(5, 5, 7),
-    ThemeFontFace = "Gotham",
+    -- Full UI Theme Palette Suite (Vaderpaste Default)
+    ThemeBgColor = Color3.fromRGB(19, 19, 19),
+    ThemeElementColor = Color3.fromRGB(22, 22, 22),
+    ThemeBorderColor = Color3.fromRGB(56, 56, 56),
+    ThemeAccentColor = Color3.fromRGB(100, 100, 255),
+    ThemeGlowColor = Color3.fromRGB(100, 100, 255),
+    ThemeOutlineColor = Color3.fromRGB(8, 8, 8),
+    ThemeInlineColor = Color3.fromRGB(26, 26, 26),
+    ThemeGradientColor = Color3.fromRGB(130, 130, 255),
+    ThemeFontColor = Color3.fromRGB(170, 170, 170),
+    ThemeFontOutlineColor = Color3.fromRGB(0, 0, 0),
+    ThemeFontFace = "Code",
     ThemeListSelection = "Default",
     CustomThemeName = "",
     -- UI & Settings
     CustomPillTitle = "CORE.XYZ",
     RememberKey = true,
-    ThemePreset = "Pure Monochrome",
-    AccentR = 255,
-    AccentG = 255,
+    ThemePreset = "Vaderpaste",
+    AccentR = 100,
+    AccentG = 100,
     AccentB = 255,
-    WindowTransparency = 0.03,
+    WindowTransparency = 0,
     ParticlesEnabled = true,
     ShimmerEnabled = true,
     AutoLoadConfig = false,
@@ -1249,18 +1249,19 @@ rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.IgnoreWater = true
 
 --------------------------------------------------------------------------------
--- 4. DYNAMIC MONOCHROME & CUSTOM RGB THEME PALETTE
+-- 4. VADERPASTE DARK SLATE & PERIWINKLE ACCENT THEME PALETTE
 --------------------------------------------------------------------------------
 local Theme = {
-    Black = Color3.fromRGB(5, 5, 7),
-    Deep = Color3.fromRGB(10, 10, 14),
-    Surface = Color3.fromRGB(16, 16, 22),
-    Elevated = Color3.fromRGB(24, 24, 32),
-    Border = Color3.fromRGB(45, 45, 56),
-    Muted = Color3.fromRGB(125, 125, 138),
-    Silver = Color3.fromRGB(200, 200, 212),
+    Black = Color3.fromRGB(8, 8, 8),
+    Deep = Color3.fromRGB(19, 19, 19),
+    Surface = Color3.fromRGB(22, 22, 22),
+    Elevated = Color3.fromRGB(26, 26, 26),
+    Outer = Color3.fromRGB(40, 40, 40),
+    Border = Color3.fromRGB(56, 56, 56),
+    Muted = Color3.fromRGB(90, 90, 90),
+    Silver = Color3.fromRGB(170, 170, 170),
     White = Color3.fromRGB(255, 255, 255),
-    Accent = Color3.fromRGB(255, 255, 255),
+    Accent = Color3.fromRGB(100, 100, 255),
     Error = Color3.fromRGB(255, 80, 80),
     Success = Color3.fromRGB(90, 255, 150),
 }
@@ -2942,115 +2943,133 @@ local function buildInteractiveAvatarViewport(container)
 end
 
 do
+    -- Vaderpaste Double-Bordered Window Architecture (inline1 -> inline2 -> main -> tab_inline -> tabs)
     local MainWindow = Instance.new("Frame")
     MainWindow.Name = "CoreMainWindow"
     MainWindow.AnchorPoint = Vector2.new(0.5, 0.5)
     MainWindow.Position = UDim2.fromScale(0.5, 0.52)
-    MainWindow.Size = UDim2.fromOffset(560, 365)
-    MainWindow.BackgroundColor3 = Theme.Black
+    MainWindow.Size = UDim2.fromOffset(620, 420)
+    MainWindow.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    MainWindow.BorderColor3 = Color3.fromRGB(8, 8, 8)
+    MainWindow.BorderSizePixel = 1
     MainWindow.BackgroundTransparency = 1
     MainWindow.Active = true
     MainWindow.Visible = false
     MainWindow.ClipsDescendants = true
     MainWindow.ZIndex = 10
     MainWindow.Parent = UI.ScreenGui
-    addCorner(MainWindow, 12)
-    local MainStroke = addLiveBorder(MainWindow, 1.5, 55, 1)
+    local MainStroke = addStroke(MainWindow, Color3.fromRGB(8, 8, 8), 1, 1)
 
     local MainScale = Instance.new("UIScale")
     MainScale.Scale = 0.88
     MainScale.Parent = MainWindow
 
-    local MainParticleCanvas = createParticleCanvas(MainWindow, 18)
+    local MainParticleCanvas = createParticleCanvas(MainWindow, 12)
+
+    local VaderInline2 = Instance.new("Frame")
+    VaderInline2.Name = "VaderInline2"
+    VaderInline2.Position = UDim2.new(0, 2, 0, 2)
+    VaderInline2.Size = UDim2.new(1, -4, 1, -4)
+    VaderInline2.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+    VaderInline2.BorderColor3 = Color3.fromRGB(8, 8, 8)
+    VaderInline2.BorderSizePixel = 1
+    VaderInline2.ZIndex = 10
+    VaderInline2.Parent = MainWindow
+
+    local VaderMain = Instance.new("Frame")
+    VaderMain.Name = "VaderMain"
+    VaderMain.Position = UDim2.new(0, 2, 0, 2)
+    VaderMain.Size = UDim2.new(1, -4, 1, -4)
+    VaderMain.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+    VaderMain.BorderColor3 = Color3.fromRGB(57, 57, 57)
+    VaderMain.BorderSizePixel = 1
+    VaderMain.ZIndex = 11
+    VaderMain.Parent = VaderInline2
+    UI.VaderMain = VaderMain
+
+    local VaderAccentLine = Instance.new("Frame")
+    VaderAccentLine.Name = "VaderAccentLine"
+    VaderAccentLine.Size = UDim2.new(1, 0, 0, 2)
+    VaderAccentLine.BackgroundColor3 = Theme.Accent
+    VaderAccentLine.BorderSizePixel = 0
+    VaderAccentLine.ZIndex = 15
+    VaderAccentLine.Parent = VaderMain
+    registerAccentObject(VaderAccentLine, "BackgroundColor3")
+
+    local VaderAccentGlow = Instance.new("ImageLabel")
+    VaderAccentGlow.Name = "VaderAccentGlow"
+    VaderAccentGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+    VaderAccentGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    VaderAccentGlow.Size = UDim2.new(1, 20, 1, 20)
+    VaderAccentGlow.BackgroundTransparency = 1
+    VaderAccentGlow.Image = "http://www.roblox.com/asset/?id=18245826428"
+    VaderAccentGlow.ImageColor3 = Theme.Accent
+    VaderAccentGlow.ImageTransparency = 0.89
+    VaderAccentGlow.ScaleType = Enum.ScaleType.Slice
+    pcall(function() VaderAccentGlow.SliceCenter = Rect.new(Vector2.new(21, 21), Vector2.new(79, 79)) end)
+    VaderAccentGlow.ZIndex = 14
+    VaderAccentGlow.Parent = VaderAccentLine
+    registerAccentObject(VaderAccentGlow, "ImageColor3")
+
+    local VaderDepthLine = Instance.new("Frame")
+    VaderDepthLine.Name = "VaderDepthLine"
+    VaderDepthLine.Position = UDim2.new(0, 0, 0, 2)
+    VaderDepthLine.Size = UDim2.new(1, 0, 0, 1)
+    VaderDepthLine.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    VaderDepthLine.BorderSizePixel = 0
+    VaderDepthLine.ZIndex = 15
+    VaderDepthLine.Parent = VaderAccentLine
 
     local HeaderBar = Instance.new("Frame")
-    HeaderBar.Size = UDim2.new(1, 0, 0, 46)
-    HeaderBar.BackgroundColor3 = Theme.Deep
-    HeaderBar.BackgroundTransparency = 0.08
+    HeaderBar.Name = "HeaderBar"
+    HeaderBar.Position = UDim2.fromOffset(0, 3)
+    HeaderBar.Size = UDim2.new(1, 0, 0, 26)
+    HeaderBar.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+    HeaderBar.BackgroundTransparency = 1
     HeaderBar.BorderSizePixel = 0
     HeaderBar.ZIndex = 12
-    HeaderBar.Parent = MainWindow
-    addCorner(HeaderBar, 12)
-
-    local HeaderCornerPatch = Instance.new("Frame")
-    HeaderCornerPatch.Name = "HeaderCornerPatch"
-    HeaderCornerPatch.Position = UDim2.new(0, 0, 1, -12)
-    HeaderCornerPatch.Size = UDim2.new(1, 0, 0, 12)
-    HeaderCornerPatch.BackgroundColor3 = Theme.Deep
-    HeaderCornerPatch.BackgroundTransparency = 0.08
-    HeaderCornerPatch.BorderSizePixel = 0
-    HeaderCornerPatch.ZIndex = 12
-    HeaderCornerPatch.Parent = HeaderBar
+    HeaderBar.Parent = VaderMain
 
     local HeaderBottomLine = Instance.new("Frame")
-    HeaderBottomLine.Position = UDim2.new(0, 0, 1, -1)
-    HeaderBottomLine.Size = UDim2.new(1, 0, 0, 1)
-    HeaderBottomLine.BackgroundColor3 = Theme.Accent
-    HeaderBottomLine.BackgroundTransparency = 0.65
+    HeaderBottomLine.Position = UDim2.new(0, 12, 1, -1)
+    HeaderBottomLine.Size = UDim2.new(1, -24, 0, 1)
+    HeaderBottomLine.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    HeaderBottomLine.BackgroundTransparency = 0.25
     HeaderBottomLine.BorderSizePixel = 0
     HeaderBottomLine.ZIndex = 13
     HeaderBottomLine.Parent = HeaderBar
-    registerAccentObject(HeaderBottomLine, "BackgroundColor3")
 
     local HeaderLineGrad = Instance.new("UIGradient")
     HeaderLineGrad.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0.0, Theme.Black),
-        ColorSequenceKeypoint.new(0.5, Theme.White),
+        ColorSequenceKeypoint.new(0.5, Theme.Accent),
         ColorSequenceKeypoint.new(1.0, Theme.Black),
-    })
-    HeaderLineGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0.0, 0.85),
-        NumberSequenceKeypoint.new(0.15, 0.15),
-        NumberSequenceKeypoint.new(0.5, 0.0),
-        NumberSequenceKeypoint.new(0.85, 0.15),
-        NumberSequenceKeypoint.new(1.0, 0.85),
     })
     HeaderLineGrad.Parent = HeaderBottomLine
 
-    local HeaderLogoOuter = Instance.new("Frame")
-    HeaderLogoOuter.AnchorPoint = Vector2.new(0, 0.5)
-    HeaderLogoOuter.Position = UDim2.new(0, 16, 0.5, 0)
-    HeaderLogoOuter.Size = UDim2.fromOffset(18, 18)
-    HeaderLogoOuter.BackgroundTransparency = 1
-    HeaderLogoOuter.ZIndex = 13
-    HeaderLogoOuter.Parent = HeaderBar
-    addCorner(HeaderLogoOuter, 4)
-    local HeaderLogoStroke = addStroke(HeaderLogoOuter, Theme.Accent, 1.4, 0)
-    registerAccentObject(HeaderLogoStroke, "Color")
-    table.insert(State.liveRotators, { Instance = HeaderLogoOuter, Speed = 45 })
-
-    local HeaderLogoDot = Instance.new("Frame")
-    HeaderLogoDot.AnchorPoint = Vector2.new(0.5, 0.5)
-    HeaderLogoDot.Position = UDim2.fromScale(0.5, 0.5)
-    HeaderLogoDot.Size = UDim2.fromOffset(5, 5)
-    HeaderLogoDot.BackgroundColor3 = Theme.Accent
-    HeaderLogoDot.BorderSizePixel = 0
-    HeaderLogoDot.ZIndex = 13
-    HeaderLogoDot.Parent = HeaderLogoOuter
-    addCorner(HeaderLogoDot, 99)
-    registerAccentObject(HeaderLogoDot, "BackgroundColor3")
-
     local HeaderTitle = Instance.new("TextLabel")
-    HeaderTitle.Position = UDim2.fromOffset(42, 7)
-    HeaderTitle.Size = UDim2.fromOffset(180, 18)
+    HeaderTitle.Position = UDim2.fromOffset(12, 4)
+    HeaderTitle.Size = UDim2.fromOffset(165, 18)
     HeaderTitle.BackgroundTransparency = 1
-    HeaderTitle.Font = Enum.Font.GothamBlack
-    HeaderTitle.Text = "CORE.XYZ"
-    HeaderTitle.TextColor3 = Theme.White
-    HeaderTitle.TextSize = 15
+    HeaderTitle.Font = Enum.Font.Code
+    HeaderTitle.Text = "vaderpaste | core.xyz"
+    HeaderTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
+    HeaderTitle.TextStrokeTransparency = 0.5
+    HeaderTitle.TextSize = 12
     HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
     HeaderTitle.ZIndex = 13
     HeaderTitle.Parent = HeaderBar
 
     local HeaderSub = Instance.new("TextLabel")
     HeaderSub.Name = "HeaderSubtitle"
-    HeaderSub.Position = UDim2.fromOffset(42, 24)
-    HeaderSub.Size = UDim2.fromOffset(220, 14)
+    HeaderSub.Position = UDim2.fromOffset(175, 4)
+    HeaderSub.Size = UDim2.fromOffset(195, 18)
     HeaderSub.BackgroundTransparency = 1
     HeaderSub.Font = Enum.Font.Code
-    HeaderSub.Text = "UNIVERSAL EDITION  ·  V4.5"
-    HeaderSub.TextColor3 = Theme.Muted
-    HeaderSub.TextSize = 9
+    HeaderSub.Text = "universal · home"
+    HeaderSub.TextColor3 = Color3.fromRGB(90, 90, 90)
+    HeaderSub.TextStrokeTransparency = 0.5
+    HeaderSub.TextSize = 11
     HeaderSub.TextXAlignment = Enum.TextXAlignment.Left
     HeaderSub.ZIndex = 13
     HeaderSub.Parent = HeaderBar
@@ -3059,26 +3078,28 @@ do
     local HeaderSearchHolder = Instance.new("Frame")
     HeaderSearchHolder.Name = "HeaderSearchHolder"
     HeaderSearchHolder.AnchorPoint = Vector2.new(1, 0.5)
-    HeaderSearchHolder.Position = UDim2.new(1, -46, 0.5, 0)
-    HeaderSearchHolder.Size = UDim2.fromOffset(168, 28)
-    HeaderSearchHolder.BackgroundColor3 = Theme.Surface
+    HeaderSearchHolder.Position = UDim2.new(1, -36, 0.5, 0)
+    HeaderSearchHolder.Size = UDim2.fromOffset(156, 18)
+    HeaderSearchHolder.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    HeaderSearchHolder.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    HeaderSearchHolder.BorderSizePixel = 1
     HeaderSearchHolder.ZIndex = 14
     HeaderSearchHolder.Parent = HeaderBar
-    addCorner(HeaderSearchHolder, 6)
-    local HeaderSearchStroke = addStroke(HeaderSearchHolder, Theme.Border, 1, 0.15)
+    local HeaderSearchStroke = addStroke(HeaderSearchHolder, Color3.fromRGB(8, 8, 8), 1, 0.15)
 
     local HeaderSearchBox = Instance.new("TextBox")
     HeaderSearchBox.Name = "HeaderSearchBox"
-    HeaderSearchBox.Position = UDim2.fromOffset(10, 0)
-    HeaderSearchBox.Size = UDim2.new(1, -30, 1, 0)
+    HeaderSearchBox.Position = UDim2.fromOffset(6, 0)
+    HeaderSearchBox.Size = UDim2.new(1, -24, 1, 0)
     HeaderSearchBox.BackgroundTransparency = 1
     HeaderSearchBox.ClearTextOnFocus = false
     HeaderSearchBox.Font = Enum.Font.Code
-    HeaderSearchBox.PlaceholderText = "Filter features..."
-    HeaderSearchBox.PlaceholderColor3 = Theme.Muted
+    HeaderSearchBox.PlaceholderText = "search..."
+    HeaderSearchBox.PlaceholderColor3 = Color3.fromRGB(90, 90, 90)
     HeaderSearchBox.Text = ""
-    HeaderSearchBox.TextColor3 = Theme.White
-    HeaderSearchBox.TextSize = 10
+    HeaderSearchBox.TextColor3 = Color3.fromRGB(170, 170, 170)
+    HeaderSearchBox.TextStrokeTransparency = 0.5
+    HeaderSearchBox.TextSize = 11
     HeaderSearchBox.TextXAlignment = Enum.TextXAlignment.Left
     HeaderSearchBox.ZIndex = 15
     HeaderSearchBox.Parent = HeaderSearchHolder
@@ -3086,13 +3107,13 @@ do
     local HeaderSearchClearBtn = Instance.new("TextButton")
     HeaderSearchClearBtn.Name = "HeaderSearchClearBtn"
     HeaderSearchClearBtn.AnchorPoint = Vector2.new(1, 0.5)
-    HeaderSearchClearBtn.Position = UDim2.new(1, -4, 0.5, 0)
-    HeaderSearchClearBtn.Size = UDim2.fromOffset(18, 18)
+    HeaderSearchClearBtn.Position = UDim2.new(1, -2, 0.5, 0)
+    HeaderSearchClearBtn.Size = UDim2.fromOffset(16, 16)
     HeaderSearchClearBtn.BackgroundTransparency = 1
     HeaderSearchClearBtn.AutoButtonColor = false
-    HeaderSearchClearBtn.Font = Enum.Font.GothamBold
+    HeaderSearchClearBtn.Font = Enum.Font.Code
     HeaderSearchClearBtn.Text = "×"
-    HeaderSearchClearBtn.TextColor3 = Theme.Muted
+    HeaderSearchClearBtn.TextColor3 = Color3.fromRGB(140, 140, 140)
     HeaderSearchClearBtn.TextSize = 12
     HeaderSearchClearBtn.Visible = false
     HeaderSearchClearBtn.ZIndex = 16
@@ -3155,10 +3176,12 @@ do
     UI.HeaderSearchBox = HeaderSearchBox
 
     HeaderSearchBox.Focused:Connect(function()
+        HeaderSearchHolder.BorderColor3 = Theme.Accent
         tween(HeaderSearchStroke, FastTween, { Color = Theme.Accent, Transparency = 0.05 })
     end)
     HeaderSearchBox.FocusLost:Connect(function()
-        tween(HeaderSearchStroke, FastTween, { Color = Theme.Border, Transparency = 0.15 })
+        HeaderSearchHolder.BorderColor3 = Color3.fromRGB(56, 56, 56)
+        tween(HeaderSearchStroke, FastTween, { Color = Color3.fromRGB(8, 8, 8), Transparency = 0.15 })
         applyFeatureSearchFilter(HeaderSearchBox.Text)
     end)
     if HeaderSearchBox.GetPropertyChangedSignal then
@@ -3176,17 +3199,17 @@ do
     local MinimizeBtn = Instance.new("TextButton")
     MinimizeBtn.AnchorPoint = Vector2.new(1, 0.5)
     MinimizeBtn.Position = UDim2.new(1, -12, 0.5, 0)
-    MinimizeBtn.Size = UDim2.fromOffset(28, 28)
-    MinimizeBtn.BackgroundColor3 = Theme.Surface
+    MinimizeBtn.Size = UDim2.fromOffset(18, 18)
+    MinimizeBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    MinimizeBtn.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    MinimizeBtn.BorderSizePixel = 1
     MinimizeBtn.AutoButtonColor = false
-    MinimizeBtn.Font = Enum.Font.GothamBold
+    MinimizeBtn.Font = Enum.Font.Code
     MinimizeBtn.Text = "—"
-    MinimizeBtn.TextColor3 = Theme.Silver
-    MinimizeBtn.TextSize = 12
+    MinimizeBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+    MinimizeBtn.TextSize = 11
     MinimizeBtn.ZIndex = 14
     MinimizeBtn.Parent = HeaderBar
-    addCorner(MinimizeBtn, 6)
-    addStroke(MinimizeBtn, Theme.Border, 1, 0.15)
 
     makeDraggable(HeaderBar, MainWindow, function()
         if State.syncMusicPlayerDock then
@@ -3204,100 +3227,55 @@ do
         toggleMainHub()
     end)
 
-    local Sidebar = Instance.new("Frame")
-    Sidebar.Position = UDim2.fromOffset(0, 46)
-    Sidebar.Size = UDim2.new(0, 146, 1, -46)
-    Sidebar.BackgroundColor3 = Theme.Deep
-    Sidebar.BackgroundTransparency = 0.2
-    Sidebar.BorderSizePixel = 0
-    Sidebar.ZIndex = 12
-    Sidebar.Parent = MainWindow
-
-    local SidebarDivider = Instance.new("Frame")
-    SidebarDivider.Position = UDim2.new(1, -1, 0, 0)
-    SidebarDivider.Size = UDim2.new(0, 1, 1, 0)
-    SidebarDivider.BackgroundColor3 = Theme.Border
-    SidebarDivider.BorderSizePixel = 0
-    SidebarDivider.ZIndex = 13
-    SidebarDivider.Parent = Sidebar
-    local SidebarDividerGrad = Instance.new("UIGradient")
-    SidebarDividerGrad.Rotation = 90
-    SidebarDividerGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0.0, 0.15),
-        NumberSequenceKeypoint.new(0.85, 0.15),
-        NumberSequenceKeypoint.new(1.0, 0.75),
-    })
-    SidebarDividerGrad.Parent = SidebarDivider
-
-    local ActiveTabIndicator = Instance.new("Frame")
-    ActiveTabIndicator.Position = UDim2.fromOffset(10, 16)
-    ActiveTabIndicator.Size = UDim2.fromOffset(3, 18)
-    ActiveTabIndicator.BackgroundColor3 = Theme.Accent
-    ActiveTabIndicator.BorderSizePixel = 0
-    ActiveTabIndicator.ZIndex = 15
-    ActiveTabIndicator.Parent = Sidebar
-    addCorner(ActiveTabIndicator, 99)
-    registerAccentObject(ActiveTabIndicator, "BackgroundColor3")
-
-    local NavList = Instance.new("ScrollingFrame")
-    NavList.Position = UDim2.fromOffset(10, 10)
-    NavList.Size = UDim2.new(1, -20, 1, -52)
+    -- Vaderpaste Horizontal Top Tab Bar (tab_buttons)
+    local NavList = Instance.new("Frame")
+    NavList.Name = "NavList"
+    NavList.Position = UDim2.new(0, 12, 0, 31)
+    NavList.Size = UDim2.new(1, -24, 0, 22)
     NavList.BackgroundTransparency = 1
     NavList.BorderSizePixel = 0
-    NavList.ScrollBarThickness = 0
-    NavList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    NavList.CanvasSize = UDim2.new(0, 0, 0, 0)
     NavList.ZIndex = 13
-    NavList.Parent = Sidebar
+    NavList.Parent = VaderMain
 
     local NavLayout = Instance.new("UIListLayout")
+    pcall(function() NavLayout.FillDirection = Enum.FillDirection.Horizontal end)
+    pcall(function() NavLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left end)
     NavLayout.Padding = UDim.new(0, 4)
     NavLayout.SortOrder = Enum.SortOrder.LayoutOrder
     NavLayout.Parent = NavList
 
-    local UserBadge = Instance.new("Frame")
-    UserBadge.AnchorPoint = Vector2.new(0, 1)
-    UserBadge.Position = UDim2.new(0, 10, 1, -8)
-    UserBadge.Size = UDim2.new(1, -20, 0, 34)
-    UserBadge.BackgroundColor3 = Theme.Surface
-    UserBadge.ZIndex = 13
-    UserBadge.Parent = Sidebar
-    addCorner(UserBadge, 8)
-    addStroke(UserBadge, Theme.Border, 1, 0)
+    local ActiveTabIndicator = Instance.new("Frame")
+    ActiveTabIndicator.Name = "ActiveTabIndicator"
+    ActiveTabIndicator.Position = UDim2.fromOffset(12, 51)
+    ActiveTabIndicator.Size = UDim2.fromOffset(64, 2)
+    ActiveTabIndicator.BackgroundColor3 = Theme.Accent
+    ActiveTabIndicator.BorderSizePixel = 0
+    ActiveTabIndicator.Visible = false
+    ActiveTabIndicator.ZIndex = 15
+    ActiveTabIndicator.Parent = VaderMain
+    registerAccentObject(ActiveTabIndicator, "BackgroundColor3")
 
-    local UserNameLbl = Instance.new("TextLabel")
-    UserNameLbl.Position = UDim2.fromOffset(10, 4)
-    UserNameLbl.Size = UDim2.new(1, -20, 0, 14)
-    UserNameLbl.BackgroundTransparency = 1
-    UserNameLbl.Font = Enum.Font.GothamBold
-    UserNameLbl.Text = tostring(LocalPlayer.DisplayName or LocalPlayer.Name)
-    UserNameLbl.TextColor3 = Theme.White
-    UserNameLbl.TextSize = 10
-    UserNameLbl.TextTruncate = Enum.TextTruncate.AtEnd
-    UserNameLbl.TextXAlignment = Enum.TextXAlignment.Left
-    UserNameLbl.ZIndex = 14
-    UserNameLbl.Parent = UserBadge
-
-    local UserStatusLbl = Instance.new("TextLabel")
-    UserStatusLbl.Position = UDim2.fromOffset(10, 17)
-    UserStatusLbl.Size = UDim2.new(1, -20, 0, 12)
-    UserStatusLbl.BackgroundTransparency = 1
-    UserStatusLbl.Font = Enum.Font.Code
-    UserStatusLbl.Text = "● ACTIVE · V4.5"
-    UserStatusLbl.TextColor3 = Theme.Silver
-    UserStatusLbl.TextSize = 9
-    UserStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-    UserStatusLbl.ZIndex = 14
-    UserStatusLbl.Parent = UserBadge
+    -- Vaderpaste Double-Bordered Inner Tab Container (tab_inline -> PagesHolder)
+    local VaderTabInline = Instance.new("Frame")
+    VaderTabInline.Name = "VaderTabInline"
+    VaderTabInline.Position = UDim2.new(0, 12, 0, 56)
+    VaderTabInline.Size = UDim2.new(1, -24, 1, -68)
+    VaderTabInline.BackgroundColor3 = Color3.fromRGB(19, 19, 19)
+    VaderTabInline.BorderColor3 = Color3.fromRGB(8, 8, 8)
+    VaderTabInline.BorderSizePixel = 1
+    VaderTabInline.ZIndex = 12
+    VaderTabInline.Parent = VaderMain
 
     local PagesHolder = Instance.new("Frame")
     PagesHolder.Name = "PagesHolder"
-    PagesHolder.Position = UDim2.fromOffset(156, 54)
-    PagesHolder.Size = UDim2.new(1, -166, 1, -62)
-    PagesHolder.BackgroundTransparency = 1
+    PagesHolder.Position = UDim2.new(0, 2, 0, 2)
+    PagesHolder.Size = UDim2.new(1, -4, 1, -4)
+    PagesHolder.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    PagesHolder.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    PagesHolder.BorderSizePixel = 1
     PagesHolder.ClipsDescendants = true
     PagesHolder.ZIndex = 12
-    PagesHolder.Parent = MainWindow
+    PagesHolder.Parent = VaderTabInline
 
     UI.MainWindow = MainWindow
     UI.MainStroke = MainStroke
@@ -3310,26 +3288,59 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 10. ANIMATED UI COMPONENT BUILDERS
+-- 10. VADERPASTE UI COMPONENT BUILDERS
 --------------------------------------------------------------------------------
 local function createTab(name, order)
     local btn = Instance.new("TextButton")
     btn.Name = name .. "_TabBtn"
     btn.LayoutOrder = order
-    btn.Size = UDim2.new(1, 0, 0, 28)
-    btn.BackgroundColor3 = Theme.Elevated
+    btn.Size = UDim2.new(0.125, -4, 1, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
     btn.BackgroundTransparency = 1
     btn.AutoButtonColor = false
-    btn.Font = Enum.Font.GothamBold
-    btn.Text = "    " .. name
-    btn.TextColor3 = Theme.Muted
-    btn.TextSize = 11
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.ClipsDescendants = true
+    btn.Font = Enum.Font.Code
+    btn.Text = string.lower(tostring(name))
+    btn.TextColor3 = Color3.fromRGB(90, 90, 90)
+    btn.TextStrokeTransparency = 0.5
+    btn.TextSize = 12
+    btn.TextXAlignment = Enum.TextXAlignment.Center
+    btn.ClipsDescendants = false
     btn.ZIndex = 14
     btn.Parent = UI.NavList
-    addCorner(btn, 7)
     local st = addStroke(btn, Theme.Border, 1, 1)
+
+    local tabLine = Instance.new("Frame")
+    tabLine.Name = "VaderTabLine"
+    tabLine.Position = UDim2.new(0, 0, 1, -2)
+    tabLine.Size = UDim2.new(1, 0, 0, 2)
+    tabLine.BackgroundColor3 = Color3.fromRGB(57, 57, 57)
+    tabLine.BorderSizePixel = 0
+    tabLine.ZIndex = 15
+    tabLine.Parent = btn
+
+    local tabGlow = Instance.new("ImageLabel")
+    tabGlow.Name = "VaderTabGlow"
+    tabGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+    tabGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    tabGlow.Size = UDim2.new(1, 16, 1, 14)
+    tabGlow.BackgroundTransparency = 1
+    tabGlow.Image = "http://www.roblox.com/asset/?id=18245826428"
+    tabGlow.ImageColor3 = Theme.Accent
+    tabGlow.ImageTransparency = 1
+    tabGlow.ScaleType = Enum.ScaleType.Slice
+    pcall(function() tabGlow.SliceCenter = Rect.new(Vector2.new(21, 21), Vector2.new(79, 79)) end)
+    tabGlow.ZIndex = 14
+    tabGlow.Parent = tabLine
+    registerAccentObject(tabGlow, "ImageColor3")
+
+    local tabDepth = Instance.new("Frame")
+    tabDepth.Name = "VaderTabDepth"
+    tabDepth.Position = UDim2.new(0, 0, 0, 1)
+    tabDepth.Size = UDim2.new(1, 0, 0, 1)
+    tabDepth.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    tabDepth.BorderSizePixel = 0
+    tabDepth.ZIndex = 15
+    tabDepth.Parent = tabLine
 
     local page = Instance.new("ScrollingFrame")
     page.Name = name .. "_Page"
@@ -3346,10 +3357,10 @@ local function createTab(name, order)
     registerAccentObject(page, "ScrollBarImageColor3")
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0, 2)
+    pad.PaddingTop = UDim.new(0, 8)
     pad.PaddingBottom = UDim.new(0, 14)
-    pad.PaddingLeft = UDim.new(0, 2)
-    pad.PaddingRight = UDim.new(0, 8)
+    pad.PaddingLeft = UDim.new(0, 8)
+    pad.PaddingRight = UDim.new(0, 10)
     pad.Parent = page
 
     local list = Instance.new("UIListLayout")
@@ -3357,7 +3368,15 @@ local function createTab(name, order)
     list.SortOrder = Enum.SortOrder.LayoutOrder
     list.Parent = page
 
-    local tabObj = { Name = name, Btn = btn, Stroke = st, Page = page, Order = order }
+    local tabObj = {
+        Name = name,
+        Btn = btn,
+        Stroke = st,
+        Line = tabLine,
+        Glow = tabGlow,
+        Page = page,
+        Order = order,
+    }
     table.insert(State.Tabs, tabObj)
 
     local function selectTab()
@@ -3366,9 +3385,14 @@ local function createTab(name, order)
         end
         for _, t in ipairs(State.Tabs) do
             tween(t.Btn, FastTween, {
-                BackgroundTransparency = 1,
-                TextColor3 = Theme.Muted,
+                TextColor3 = Color3.fromRGB(90, 90, 90),
             })
+            if t.Line then
+                tween(t.Line, FastTween, { BackgroundColor3 = Color3.fromRGB(57, 57, 57) })
+            end
+            if t.Glow then
+                tween(t.Glow, FastTween, { ImageTransparency = 1 })
+            end
             tween(t.Stroke, FastTween, { Transparency = 1 })
             t.Page.Visible = false
         end
@@ -3377,17 +3401,12 @@ local function createTab(name, order)
             UI.HeaderSub.Text = "UNIVERSAL EDITION  ·  " .. string.upper(tostring(name))
         end
         tween(btn, FastTween, {
-            BackgroundTransparency = 0.1,
-            TextColor3 = Theme.White,
+            TextColor3 = Color3.fromRGB(170, 170, 170),
         })
-        tween(st, FastTween, { Transparency = 0.2, Color = Theme.Accent })
+        tween(tabLine, FastTween, { BackgroundColor3 = Theme.Accent })
+        tween(tabGlow, FastTween, { ImageTransparency = 0.89 })
 
-        local targetY = 10 + ((order - 1) * 32) + 5
-        tween(UI.ActiveTabIndicator, SpringTween, {
-            Position = UDim2.fromOffset(10, targetY),
-        })
-
-        page.Position = UDim2.fromOffset(14, 0)
+        page.Position = UDim2.fromOffset(8, 0)
         page.Visible = true
         tween(page, SmoothTween, { Position = UDim2.fromOffset(0, 0) })
         if name == "Players" and State.refreshPlayerListUI then
@@ -3398,25 +3417,20 @@ local function createTab(name, order)
     btn.MouseEnter:Connect(function()
         if State.activeTab ~= tabObj then
             tween(btn, FastTween, {
-                BackgroundTransparency = 0.45,
-                TextColor3 = Theme.Silver,
+                TextColor3 = Color3.fromRGB(140, 140, 140),
             })
-            tween(st, FastTween, { Transparency = 0.55, Color = Theme.Border })
         end
     end)
 
     btn.MouseLeave:Connect(function()
         if State.activeTab ~= tabObj then
             tween(btn, FastTween, {
-                BackgroundTransparency = 1,
-                TextColor3 = Theme.Muted,
+                TextColor3 = Color3.fromRGB(90, 90, 90),
             })
-            tween(st, FastTween, { Transparency = 1 })
         end
     end)
 
     btn.MouseButton1Click:Connect(function()
-        spawnRipple(btn)
         selectTab()
     end)
 
@@ -3429,7 +3443,7 @@ end
 
 local function createLabel(page, text)
     local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(1, 0, 0, 22)
+    holder.Size = UDim2.new(1, 0, 0, 20)
     holder.BackgroundTransparency = 1
     holder.ZIndex = 14
     holder.Parent = page
@@ -3437,22 +3451,22 @@ local function createLabel(page, text)
     local dot = Instance.new("Frame")
     dot.AnchorPoint = Vector2.new(0, 0.5)
     dot.Position = UDim2.new(0, 2, 0.5, 0)
-    dot.Size = UDim2.fromOffset(4, 4)
+    dot.Size = UDim2.fromOffset(2, 10)
     dot.BackgroundColor3 = Theme.Accent
     dot.BorderSizePixel = 0
     dot.ZIndex = 14
     dot.Parent = holder
-    addCorner(dot, 99)
     registerAccentObject(dot, "BackgroundColor3")
 
     local lbl = Instance.new("TextLabel")
-    lbl.Position = UDim2.fromOffset(12, 0)
-    lbl.Size = UDim2.new(1, -12, 1, 0)
+    lbl.Position = UDim2.fromOffset(10, 0)
+    lbl.Size = UDim2.new(1, -10, 1, 0)
     lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.GothamBlack
-    lbl.Text = string.upper(text)
-    lbl.TextColor3 = Theme.Silver
-    lbl.TextSize = 10
+    lbl.Font = Enum.Font.Code
+    lbl.Text = string.upper(tostring(text))
+    lbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    lbl.TextStrokeTransparency = 0.5
+    lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 14
     lbl.Parent = holder
@@ -3460,34 +3474,35 @@ end
 
 local function createButton(page, text, callback)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 38)
-    btn.BackgroundColor3 = Theme.Surface
+    btn.Size = UDim2.new(1, 0, 0, 24)
+    btn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    btn.BorderColor3 = Color3.fromRGB(8, 8, 8)
+    btn.BorderSizePixel = 1
     btn.AutoButtonColor = false
-    btn.Font = Enum.Font.GothamBold
+    btn.Font = Enum.Font.Code
     btn.Text = text
-    btn.TextColor3 = Theme.White
+    btn.TextColor3 = Color3.fromRGB(170, 170, 170)
+    btn.TextStrokeTransparency = 0.5
     btn.TextSize = 12
     btn.ClipsDescendants = true
     btn.ZIndex = 14
     btn.Parent = page
-    addCorner(btn, 8)
-    local st = addStroke(btn, Theme.Border, 1, 0)
+    local st = addStroke(btn, Color3.fromRGB(56, 56, 56), 1, 0)
 
     btn.MouseEnter:Connect(function()
-        tween(btn, FastTween, { BackgroundColor3 = Theme.Elevated })
-        tween(st, FastTween, { Color = Theme.Accent, Transparency = 0.25 })
+        tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(28, 28, 28), TextColor3 = Theme.White })
+        tween(st, FastTween, { Color = Theme.Accent, Transparency = 0.15 })
     end)
 
     btn.MouseLeave:Connect(function()
-        tween(btn, FastTween, { BackgroundColor3 = Theme.Surface })
-        tween(st, FastTween, { Color = Theme.Border, Transparency = 0 })
+        tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(22, 22, 22), TextColor3 = Color3.fromRGB(170, 170, 170) })
+        tween(st, FastTween, { Color = Color3.fromRGB(56, 56, 56), Transparency = 0 })
     end)
 
     btn.MouseButton1Click:Connect(function()
-        spawnRipple(btn)
-        tween(btn, TweenInfo.new(0.08), { BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Black })
+        tween(btn, TweenInfo.new(0.08), { BackgroundColor3 = Theme.Accent, TextColor3 = Theme.White })
         task.delay(0.12, function()
-            tween(btn, FastTween, { BackgroundColor3 = Theme.Surface, TextColor3 = Theme.White })
+            tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(22, 22, 22), TextColor3 = Color3.fromRGB(170, 170, 170) })
         end)
         callback()
     end)
@@ -4218,19 +4233,29 @@ do
     UI.createSectionBox = function(page, sectionTitle)
         local wrapper = Instance.new("Frame")
         wrapper.Name = "SectionBox_" .. tostring(sectionTitle)
-        wrapper.Size = UDim2.new(1, 0, 0, 30)
+        wrapper.Size = UDim2.new(1, 0, 0, 28)
         wrapper.AutomaticSize = Enum.AutomaticSize.Y
-        wrapper.BackgroundColor3 = Theme.Deep
-        wrapper.BackgroundTransparency = 0.14
+        wrapper.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+        wrapper.BorderColor3 = Color3.fromRGB(56, 56, 56)
+        wrapper.BorderSizePixel = 1
+        wrapper.BackgroundTransparency = 0
         wrapper.ZIndex = 14
         wrapper.Parent = page
-        addCorner(wrapper, 9)
-        local wrapperStroke = addStroke(wrapper, Theme.Border, 1, 0.22)
+        local wrapperStroke = addStroke(wrapper, Color3.fromRGB(8, 8, 8), 1, 0)
+
+        local topAccentLine = Instance.new("Frame")
+        topAccentLine.Name = "VaderSectionTopLine"
+        topAccentLine.Size = UDim2.new(1, 0, 0, 2)
+        topAccentLine.BackgroundColor3 = Theme.Accent
+        topAccentLine.BorderSizePixel = 0
+        topAccentLine.ZIndex = 16
+        topAccentLine.Parent = wrapper
+        registerAccentObject(topAccentLine, "BackgroundColor3")
 
         local titleBg = Instance.new("Frame")
         titleBg.Name = "SectionHeaderBadge"
-        titleBg.Position = UDim2.fromOffset(12, 6)
-        titleBg.Size = UDim2.new(1, -24, 0, 18)
+        titleBg.Position = UDim2.fromOffset(8, 5)
+        titleBg.Size = UDim2.new(1, -16, 0, 18)
         titleBg.BackgroundTransparency = 1
         titleBg.ZIndex = 15
         titleBg.Parent = wrapper
@@ -4239,23 +4264,23 @@ do
         accentPip.Name = "SectionAccentPip"
         accentPip.AnchorPoint = Vector2.new(0, 0.5)
         accentPip.Position = UDim2.new(0, 0, 0.5, 0)
-        accentPip.Size = UDim2.fromOffset(3, 11)
+        accentPip.Size = UDim2.fromOffset(2, 10)
         accentPip.BackgroundColor3 = Theme.Accent
         accentPip.BorderSizePixel = 0
         accentPip.ZIndex = 16
         accentPip.Parent = titleBg
-        addCorner(accentPip, 99)
         registerAccentObject(accentPip, "BackgroundColor3")
 
         local titleLbl = Instance.new("TextLabel")
         titleLbl.Name = "SectionTitleLabel"
-        titleLbl.Position = UDim2.fromOffset(9, 0)
-        titleLbl.Size = UDim2.new(1, -30, 1, 0)
+        titleLbl.Position = UDim2.fromOffset(7, 0)
+        titleLbl.Size = UDim2.new(1, -28, 1, 0)
         titleLbl.BackgroundTransparency = 1
-        titleLbl.Font = Enum.Font.GothamBold
+        titleLbl.Font = Enum.Font.Code
         titleLbl.Text = tostring(sectionTitle)
-        titleLbl.TextColor3 = Theme.White
-        titleLbl.TextSize = 11
+        titleLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+        titleLbl.TextStrokeTransparency = 0.5
+        titleLbl.TextSize = 12
         titleLbl.TextXAlignment = Enum.TextXAlignment.Left
         titleLbl.ZIndex = 15
         titleLbl.Parent = titleBg
@@ -4267,32 +4292,25 @@ do
         collapseBtn.Size = UDim2.fromOffset(18, 18)
         collapseBtn.BackgroundTransparency = 1
         collapseBtn.AutoButtonColor = false
-        collapseBtn.Font = Enum.Font.GothamBold
+        collapseBtn.Font = Enum.Font.Code
         collapseBtn.Text = "▾"
-        collapseBtn.TextColor3 = Theme.Muted
+        collapseBtn.TextColor3 = Color3.fromRGB(90, 90, 90)
         collapseBtn.TextSize = 11
         collapseBtn.ZIndex = 16
         collapseBtn.Parent = titleBg
 
         local headerLine = Instance.new("Frame")
         headerLine.Name = "SectionHeaderDivider"
-        headerLine.Position = UDim2.fromOffset(10, 26)
-        headerLine.Size = UDim2.new(1, -20, 0, 1)
-        headerLine.BackgroundColor3 = Theme.Border
+        headerLine.Position = UDim2.fromOffset(8, 24)
+        headerLine.Size = UDim2.new(1, -16, 0, 1)
+        headerLine.BackgroundColor3 = Color3.fromRGB(42, 42, 42)
         headerLine.BorderSizePixel = 0
         headerLine.ZIndex = 15
         headerLine.Parent = wrapper
-        local headerLineGrad = Instance.new("UIGradient")
-        headerLineGrad.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0.0, 0.35),
-            NumberSequenceKeypoint.new(0.5, 0.55),
-            NumberSequenceKeypoint.new(1.0, 0.92),
-        })
-        headerLineGrad.Parent = headerLine
 
         local content = Instance.new("Frame")
         content.Name = "SectionContent"
-        content.Position = UDim2.fromOffset(0, 28)
+        content.Position = UDim2.fromOffset(0, 26)
         content.Size = UDim2.new(1, 0, 0, 10)
         content.AutomaticSize = Enum.AutomaticSize.Y
         content.BackgroundTransparency = 1
@@ -4305,25 +4323,27 @@ do
             content.Visible = not isCollapsed
             headerLine.Visible = not isCollapsed
             collapseBtn.Text = isCollapsed and "▸" or "▾"
-            collapseBtn.TextColor3 = isCollapsed and Theme.Accent or Theme.Muted
+            collapseBtn.TextColor3 = isCollapsed and Theme.Accent or Color3.fromRGB(90, 90, 90)
         end)
 
         wrapper.MouseEnter:Connect(function()
-            tween(wrapperStroke, FastTween, { Color = Theme.Accent, Transparency = 0.35 })
+            wrapper.BorderColor3 = Color3.fromRGB(72, 72, 72)
+            tween(wrapperStroke, FastTween, { Color = Color3.fromRGB(8, 8, 8), Transparency = 0 })
         end)
         wrapper.MouseLeave:Connect(function()
-            tween(wrapperStroke, FastTween, { Color = Theme.Border, Transparency = 0.22 })
+            wrapper.BorderColor3 = Color3.fromRGB(56, 56, 56)
+            tween(wrapperStroke, FastTween, { Color = Color3.fromRGB(8, 8, 8), Transparency = 0 })
         end)
 
         local pad = Instance.new("UIPadding")
-        pad.PaddingTop = UDim.new(0, 3)
-        pad.PaddingBottom = UDim.new(0, 10)
+        pad.PaddingTop = UDim.new(0, 4)
+        pad.PaddingBottom = UDim.new(0, 8)
         pad.PaddingLeft = UDim.new(0, 8)
         pad.PaddingRight = UDim.new(0, 8)
         pad.Parent = content
 
         local list = Instance.new("UIListLayout")
-        list.Padding = UDim.new(0, 6)
+        list.Padding = UDim.new(0, 5)
         list.SortOrder = Enum.SortOrder.LayoutOrder
         list.Parent = content
 
@@ -4333,20 +4353,20 @@ do
     UI.createColorRow = function(page, text, defaultColor, callback)
         local row = Instance.new("Frame")
         row.Name = "ColorRow_" .. tostring(text)
-        row.Size = UDim2.new(1, 0, 0, 34)
-        row.BackgroundColor3 = Theme.Surface
+        row.Size = UDim2.new(1, 0, 0, 24)
+        row.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+        row.BackgroundTransparency = 1
         row.ZIndex = 14
         row.Parent = page
-        addCorner(row, 8)
-        addStroke(row, Theme.Border, 1, 0.2)
 
         local lbl = Instance.new("TextLabel")
-        lbl.Position = UDim2.fromOffset(14, 0)
-        lbl.Size = UDim2.new(1, -64, 1, 0)
+        lbl.Position = UDim2.fromOffset(4, 0)
+        lbl.Size = UDim2.new(1, -54, 1, 0)
         lbl.BackgroundTransparency = 1
-        lbl.Font = Enum.Font.GothamMedium
+        lbl.Font = Enum.Font.Code
         lbl.Text = text
-        lbl.TextColor3 = Theme.Silver
+        lbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+        lbl.TextStrokeTransparency = 0.5
         lbl.TextSize = 12
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = 15
@@ -4355,15 +4375,16 @@ do
         local swatchBtn = Instance.new("TextButton")
         swatchBtn.Name = "ColorSwatch_" .. tostring(text)
         swatchBtn.AnchorPoint = Vector2.new(1, 0.5)
-        swatchBtn.Position = UDim2.new(1, -12, 0.5, 0)
-        swatchBtn.Size = UDim2.fromOffset(26, 17)
+        swatchBtn.Position = UDim2.new(1, -4, 0.5, 0)
+        swatchBtn.Size = UDim2.fromOffset(20, 11)
+        swatchBtn.BorderColor3 = Color3.fromRGB(56, 56, 56)
+        swatchBtn.BorderSizePixel = 1
         swatchBtn.AutoButtonColor = false
         swatchBtn.Text = " "
         swatchBtn.TextTransparency = 1
         swatchBtn.ZIndex = 16
         swatchBtn.Parent = row
-        addCorner(swatchBtn, 5)
-        addStroke(swatchBtn, Theme.White, 1, 0.45)
+        addStroke(swatchBtn, Color3.fromRGB(8, 8, 8), 1, 0)
 
         local setCol, getCol = attachSwatchCyclers(swatchBtn, defaultColor, callback)
         return { SetColor = setCol, GetColor = getCol, SwatchBtn = swatchBtn, Row = row }
@@ -4399,62 +4420,79 @@ State.syncKeybindBadgesVisibility = syncKeybindBadgesVisibility
 
 local function createToggle(page, text, defaultVal, callback, extraOpts)
     local row = Instance.new("TextButton")
-    row.Size = UDim2.new(1, 0, 0, 40)
-    row.BackgroundColor3 = defaultVal and Theme.Elevated or Theme.Surface
+    row.Size = UDim2.new(1, 0, 0, 24)
+    row.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    row.BackgroundTransparency = 1
     row.AutoButtonColor = false
     row.Text = ""
-    row.ClipsDescendants = true
+    row.ClipsDescendants = false
     row.ZIndex = 14
     row.Parent = page
-    addCorner(row, 8)
-    local st = addStroke(row, defaultVal and Theme.Accent or Theme.Border, 1, defaultVal and 0.32 or 0)
+    local st = addStroke(row, Theme.Border, 1, 1)
 
     local statusBar = Instance.new("Frame")
     statusBar.AnchorPoint = Vector2.new(0, 0.5)
     statusBar.Position = UDim2.new(0, 0, 0.5, 0)
-    statusBar.Size = UDim2.fromOffset(3, defaultVal and 22 or 0)
+    statusBar.Size = UDim2.fromOffset(2, defaultVal and 18 or 0)
     statusBar.BackgroundColor3 = Theme.Accent
     statusBar.BorderSizePixel = 0
     statusBar.ZIndex = 15
     statusBar.Parent = row
-    addCorner(statusBar, 99)
     registerAccentObject(statusBar, "BackgroundColor3")
 
+    -- Vaderpaste 12x12 Double-Bordered Square Checkbox (outline -> inline fill + glow)
+    local pill = Instance.new("Frame")
+    pill.Name = "VaderToggleOutline"
+    pill.AnchorPoint = Vector2.new(0, 0.5)
+    pill.Position = UDim2.new(0, 4, 0.5, 0)
+    pill.Size = UDim2.fromOffset(12, 12)
+    pill.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
+    pill.BorderSizePixel = 0
+    pill.ZIndex = 15
+    pill.Parent = row
+
+    local dot = Instance.new("Frame")
+    dot.Name = "VaderToggleFill"
+    dot.Position = UDim2.new(0, 1, 0, 1)
+    dot.Size = UDim2.new(1, -2, 1, -2)
+    dot.BackgroundColor3 = defaultVal and Theme.Accent or Color3.fromRGB(22, 22, 22)
+    dot.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    dot.BorderSizePixel = 1
+    dot.ZIndex = 16
+    dot.Parent = pill
+
+    local toggleGlow = Instance.new("ImageLabel")
+    toggleGlow.Name = "VaderToggleGlow"
+    toggleGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+    toggleGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    toggleGlow.Size = UDim2.new(1, 12, 1, 12)
+    toggleGlow.BackgroundTransparency = 1
+    toggleGlow.Image = "http://www.roblox.com/asset/?id=18245826428"
+    toggleGlow.ImageColor3 = Theme.Accent
+    toggleGlow.ImageTransparency = defaultVal and 0.85 or 1
+    toggleGlow.ScaleType = Enum.ScaleType.Slice
+    pcall(function() toggleGlow.SliceCenter = Rect.new(Vector2.new(21, 21), Vector2.new(79, 79)) end)
+    toggleGlow.ZIndex = 15
+    toggleGlow.Parent = dot
+    registerAccentObject(toggleGlow, "ImageColor3")
+
     local lbl = Instance.new("TextLabel")
-    lbl.Position = UDim2.fromOffset(14, 0)
-    lbl.Size = UDim2.new(1, -140, 1, 0)
+    lbl.Position = UDim2.fromOffset(22, 0)
+    lbl.Size = UDim2.new(1, -110, 1, 0)
     lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.GothamMedium
+    lbl.Font = Enum.Font.Code
     lbl.Text = text
-    lbl.TextColor3 = defaultVal and Theme.White or Theme.Silver
+    lbl.TextColor3 = defaultVal and Color3.fromRGB(170, 170, 170) or Color3.fromRGB(90, 90, 90)
+    lbl.TextStrokeTransparency = 0.5
     lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 15
     lbl.Parent = row
 
-    local pill = Instance.new("Frame")
-    pill.AnchorPoint = Vector2.new(1, 0.5)
-    pill.Position = UDim2.new(1, -12, 0.5, 0)
-    pill.Size = UDim2.fromOffset(42, 22)
-    pill.BackgroundColor3 = defaultVal and Theme.Accent or Theme.Deep
-    pill.ZIndex = 15
-    pill.Parent = row
-    addCorner(pill, 99)
-    local pillStroke = addStroke(pill, defaultVal and Theme.Accent or Theme.Border, 1, 0)
-
-    local dot = Instance.new("Frame")
-    dot.AnchorPoint = Vector2.new(0, 0.5)
-    dot.Position = defaultVal and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
-    dot.Size = UDim2.fromOffset(16, 16)
-    dot.BackgroundColor3 = defaultVal and Theme.Black or Theme.Muted
-    dot.ZIndex = 16
-    dot.Parent = pill
-    addCorner(dot, 99)
-
     local state = defaultVal
     local setState
 
-    local rightOffset = 62
+    local rightOffset = 4
     local swatch1Set, swatch2Set
     local keybindEntry
     if type(extraOpts) == "table" then
@@ -4463,45 +4501,48 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
             sw2.Name = "ColorSwatch2_" .. tostring(text)
             sw2.AnchorPoint = Vector2.new(1, 0.5)
             sw2.Position = UDim2.new(1, -rightOffset, 0.5, 0)
-            sw2.Size = UDim2.fromOffset(22, 15)
+            sw2.Size = UDim2.fromOffset(18, 10)
+            sw2.BorderColor3 = Color3.fromRGB(56, 56, 56)
+            sw2.BorderSizePixel = 1
             sw2.AutoButtonColor = false
             sw2.Text = " "
             sw2.TextTransparency = 1
             sw2.ZIndex = 16
             sw2.Parent = row
-            addCorner(sw2, 4)
-            addStroke(sw2, Theme.Border, 1, 0)
+            addStroke(sw2, Color3.fromRGB(8, 8, 8), 1, 0)
             swatch2Set = UI.attachSwatchCyclers(sw2, extraOpts.SwatchColor2, extraOpts.OnColorChange2 or extraOpts.OnColor2Change)
-            rightOffset = rightOffset + 28
+            rightOffset = rightOffset + 24
         end
         if extraOpts.SwatchColor then
             local sw1 = Instance.new("TextButton")
             sw1.Name = "ColorSwatch_" .. tostring(text)
             sw1.AnchorPoint = Vector2.new(1, 0.5)
             sw1.Position = UDim2.new(1, -rightOffset, 0.5, 0)
-            sw1.Size = UDim2.fromOffset(22, 15)
+            sw1.Size = UDim2.fromOffset(18, 10)
+            sw1.BorderColor3 = Color3.fromRGB(56, 56, 56)
+            sw1.BorderSizePixel = 1
             sw1.AutoButtonColor = false
             sw1.Text = " "
             sw1.TextTransparency = 1
             sw1.ZIndex = 16
             sw1.Parent = row
-            addCorner(sw1, 4)
-            addStroke(sw1, Theme.Border, 1, 0)
+            addStroke(sw1, Color3.fromRGB(8, 8, 8), 1, 0)
             swatch1Set = UI.attachSwatchCyclers(sw1, extraOpts.SwatchColor, extraOpts.OnColorChange)
-            rightOffset = rightOffset + 28
+            rightOffset = rightOffset + 24
         end
         if extraOpts.ShowKeybindBadge then
             local kbBtn = Instance.new("TextButton")
             kbBtn.Name = "KeybindBadge_" .. tostring(text)
             kbBtn.AnchorPoint = Vector2.new(1, 0.5)
             kbBtn.Position = UDim2.new(1, -rightOffset, 0.5, 0)
-            kbBtn.Size = UDim2.fromOffset(30, 18)
+            kbBtn.Size = UDim2.fromOffset(32, 16)
             kbBtn.BackgroundTransparency = 1
             kbBtn.AutoButtonColor = false
             kbBtn.Font = Enum.Font.Code
             kbBtn.Text = "[...]"
-            kbBtn.TextColor3 = Theme.Muted
-            kbBtn.TextSize = 10
+            kbBtn.TextColor3 = Color3.fromRGB(90, 90, 90)
+            kbBtn.TextStrokeTransparency = 0.5
+            kbBtn.TextSize = 11
             kbBtn.Visible = isPCDevice()
             kbBtn.ZIndex = 17
             kbBtn.Parent = row
@@ -4527,12 +4568,12 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
                 if State.listeningKeybindEntry == keybindEntry then
                     State.listeningKeybindEntry = nil
                     kbBtn.Text = keybindEntry.KeyName and ("[" .. keybindEntry.KeyName .. "]") or "[...]"
-                    kbBtn.TextColor3 = keybindEntry.KeyName and Theme.Accent or Theme.Muted
+                    kbBtn.TextColor3 = keybindEntry.KeyName and Theme.Accent or Color3.fromRGB(90, 90, 90)
                 else
                     if State.listeningKeybindEntry and State.listeningKeybindEntry.Button then
                         local prev = State.listeningKeybindEntry
                         prev.Button.Text = prev.KeyName and ("[" .. prev.KeyName .. "]") or "[...]"
-                        prev.Button.TextColor3 = prev.KeyName and Theme.Accent or Theme.Muted
+                        prev.Button.TextColor3 = prev.KeyName and Theme.Accent or Color3.fromRGB(90, 90, 90)
                     end
                     State.listeningKeybindEntry = keybindEntry
                     kbBtn.Text = "[...]"
@@ -4544,18 +4585,15 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
 
     setState = function(newVal, fireCallback)
         state = newVal
-        tween(row, FastTween, { BackgroundColor3 = state and Theme.Elevated or Theme.Surface })
-        tween(lbl, FastTween, { TextColor3 = state and Theme.White or Theme.Silver })
-        tween(st, FastTween, {
-            Color = state and Theme.Accent or Theme.Border,
-            Transparency = state and 0.32 or 0,
+        tween(lbl, FastTween, {
+            TextColor3 = state and Color3.fromRGB(170, 170, 170) or Color3.fromRGB(90, 90, 90),
         })
-        tween(statusBar, SpringTween, { Size = UDim2.fromOffset(3, state and 22 or 0) })
-        tween(pill, FastTween, { BackgroundColor3 = state and Theme.Accent or Theme.Deep })
-        tween(pillStroke, FastTween, { Color = state and Theme.Accent or Theme.Border })
-        tween(dot, SpringTween, {
-            Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
-            BackgroundColor3 = state and Theme.Black or Theme.Muted,
+        tween(statusBar, SpringTween, { Size = UDim2.fromOffset(2, state and 18 or 0) })
+        tween(dot, FastTween, {
+            BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(22, 22, 22),
+        })
+        tween(toggleGlow, FastTween, {
+            ImageTransparency = state and 0.85 or 1,
         })
         if fireCallback ~= false then
             callback(state)
@@ -4563,21 +4601,18 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
     end
 
     row.MouseEnter:Connect(function()
-        tween(st, FastTween, {
-            Color = state and Theme.Accent or Theme.Silver,
-            Transparency = state and 0.15 or 0.35,
-        })
+        if not state then
+            tween(lbl, FastTween, { TextColor3 = Color3.fromRGB(140, 140, 140) })
+        end
     end)
 
     row.MouseLeave:Connect(function()
-        tween(st, FastTween, {
-            Color = state and Theme.Accent or Theme.Border,
-            Transparency = state and 0.32 or 0,
-        })
+        if not state then
+            tween(lbl, FastTween, { TextColor3 = Color3.fromRGB(90, 90, 90) })
+        end
     end)
 
     row.MouseButton1Click:Connect(function()
-        spawnRipple(row)
         setState(not state, true)
     end)
 
@@ -4589,20 +4624,21 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
     local currentVal = defaultVal
     local card = Instance.new("Frame")
     card.Name = "SliderCard_" .. tostring(text)
-    card.Size = UDim2.new(1, 0, 0, 54)
-    card.BackgroundColor3 = Theme.Surface
+    card.Size = UDim2.new(1, 0, 0, 36)
+    card.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    card.BackgroundTransparency = 1
     card.ZIndex = 14
     card.Parent = page
-    addCorner(card, 8)
-    local st = addStroke(card, Theme.Border, 1, 0)
+    local st = addStroke(card, Theme.Border, 1, 1)
 
     local lbl = Instance.new("TextLabel")
-    lbl.Position = UDim2.fromOffset(14, 7)
-    lbl.Size = UDim2.new(0.65, 0, 0, 18)
+    lbl.Position = UDim2.fromOffset(4, 0)
+    lbl.Size = UDim2.new(0.65, 0, 0, 16)
     lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.GothamMedium
+    lbl.Font = Enum.Font.Code
     lbl.Text = text
-    lbl.TextColor3 = Theme.Silver
+    lbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    lbl.TextStrokeTransparency = 0.5
     lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 15
@@ -4611,52 +4647,57 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
     local valBadge = Instance.new("TextLabel")
     valBadge.Name = "SliderValueLabel"
     valBadge.AnchorPoint = Vector2.new(1, 0)
-    valBadge.Position = UDim2.new(1, -14, 0, 7)
-    valBadge.Size = UDim2.fromOffset(80, 18)
+    valBadge.Position = UDim2.new(1, -4, 0, 0)
+    valBadge.Size = UDim2.fromOffset(90, 16)
     valBadge.BackgroundTransparency = 1
     valBadge.Font = Enum.Font.Code
     valBadge.Text = tostring(defaultVal) .. suffix
-    valBadge.TextColor3 = Theme.White
-    valBadge.TextSize = 11
+    valBadge.TextColor3 = Color3.fromRGB(170, 170, 170)
+    valBadge.TextStrokeTransparency = 0.5
+    valBadge.TextSize = 12
     valBadge.TextXAlignment = Enum.TextXAlignment.Right
     valBadge.ZIndex = 15
     valBadge.Parent = card
 
     local minusBtn = Instance.new("TextButton")
     minusBtn.Name = "SliderMinusBtn"
-    minusBtn.Position = UDim2.fromOffset(10, 29)
-    minusBtn.Size = UDim2.fromOffset(16, 16)
+    minusBtn.Position = UDim2.fromOffset(2, 18)
+    minusBtn.Size = UDim2.fromOffset(14, 14)
     minusBtn.BackgroundTransparency = 1
     minusBtn.AutoButtonColor = false
     minusBtn.Font = Enum.Font.Code
     minusBtn.Text = "-"
-    minusBtn.TextColor3 = Theme.Muted
-    minusBtn.TextSize = 13
+    minusBtn.TextColor3 = Color3.fromRGB(120, 120, 120)
+    minusBtn.TextStrokeTransparency = 0.5
+    minusBtn.TextSize = 12
     minusBtn.ZIndex = 16
     minusBtn.Parent = card
 
     local plusBtn = Instance.new("TextButton")
     plusBtn.Name = "SliderPlusBtn"
     plusBtn.AnchorPoint = Vector2.new(1, 0)
-    plusBtn.Position = UDim2.new(1, -10, 0, 29)
-    plusBtn.Size = UDim2.fromOffset(16, 16)
+    plusBtn.Position = UDim2.new(1, -2, 0, 18)
+    plusBtn.Size = UDim2.fromOffset(14, 14)
     plusBtn.BackgroundTransparency = 1
     plusBtn.AutoButtonColor = false
     plusBtn.Font = Enum.Font.Code
     plusBtn.Text = "+"
-    plusBtn.TextColor3 = Theme.Muted
-    plusBtn.TextSize = 13
+    plusBtn.TextColor3 = Color3.fromRGB(120, 120, 120)
+    plusBtn.TextStrokeTransparency = 0.5
+    plusBtn.TextSize = 12
     plusBtn.ZIndex = 16
     plusBtn.Parent = card
 
+    -- Vaderpaste 10px Double-Bordered Bar Track
     local track = Instance.new("Frame")
-    track.Position = UDim2.fromOffset(30, 34)
-    track.Size = UDim2.new(1, -60, 0, 6)
-    track.BackgroundColor3 = Theme.Deep
-    track.BorderSizePixel = 0
+    track.Position = UDim2.fromOffset(18, 20)
+    track.Size = UDim2.new(1, -36, 0, 10)
+    track.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    track.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    track.BorderSizePixel = 1
     track.ZIndex = 15
     track.Parent = card
-    addCorner(track, 99)
+    addStroke(track, Color3.fromRGB(8, 8, 8), 1, 0)
 
     local initPct = math.clamp((defaultVal - minVal) / math.max(maxVal - minVal, 0.0001), 0, 1)
     local fill = Instance.new("Frame")
@@ -4665,17 +4706,31 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
     fill.BorderSizePixel = 0
     fill.ZIndex = 16
     fill.Parent = track
-    addCorner(fill, 99)
     registerAccentObject(fill, "BackgroundColor3")
+
+    local fillGlow = Instance.new("ImageLabel")
+    fillGlow.Name = "VaderSliderGlow"
+    fillGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+    fillGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    fillGlow.Size = UDim2.new(1, 14, 1, 14)
+    fillGlow.BackgroundTransparency = 1
+    fillGlow.Image = "http://www.roblox.com/asset/?id=18245826428"
+    fillGlow.ImageColor3 = Theme.Accent
+    fillGlow.ImageTransparency = 0.89
+    fillGlow.ScaleType = Enum.ScaleType.Slice
+    pcall(function() fillGlow.SliceCenter = Rect.new(Vector2.new(21, 21), Vector2.new(79, 79)) end)
+    fillGlow.ZIndex = 15
+    fillGlow.Parent = fill
+    registerAccentObject(fillGlow, "ImageColor3")
 
     local knob = Instance.new("Frame")
     knob.AnchorPoint = Vector2.new(0.5, 0.5)
     knob.Position = UDim2.fromScale(initPct, 0.5)
-    knob.Size = UDim2.fromOffset(13, 13)
+    knob.Size = UDim2.fromOffset(2, 10)
     knob.BackgroundColor3 = Theme.White
+    knob.BorderSizePixel = 0
     knob.ZIndex = 17
     knob.Parent = track
-    addCorner(knob, 99)
 
     local dragging = false
 
@@ -4707,25 +4762,10 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
         setValue(raw, true)
     end
 
-    card.MouseEnter:Connect(function()
-        if not dragging then
-            tween(st, FastTween, { Color = Theme.Silver, Transparency = 0.35 })
-            tween(knob, FastTween, { Size = UDim2.fromOffset(15, 15) })
-        end
-    end)
-
-    card.MouseLeave:Connect(function()
-        if not dragging then
-            tween(st, FastTween, { Color = Theme.Border, Transparency = 0 })
-            tween(knob, FastTween, { Size = UDim2.fromOffset(13, 13) })
-        end
-    end)
-
     track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            tween(st, FastTween, { Color = Theme.Accent, Transparency = 0.15 })
-            tween(knob, SpringTween, { Size = UDim2.fromOffset(16, 16) })
+            track.BorderColor3 = Theme.Accent
             updateFromInput(input)
         end
     end)
@@ -4740,8 +4780,7 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             if dragging then
                 dragging = false
-                tween(st, FastTween, { Color = Theme.Border, Transparency = 0 })
-                tween(knob, FastTween, { Size = UDim2.fromOffset(13, 13) })
+                track.BorderColor3 = Color3.fromRGB(56, 56, 56)
             end
         end
     end)
@@ -4751,57 +4790,58 @@ end
 
 local function createTextInputRow(page, labelText, placeholder, defaultText, onCommit)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 42)
-    row.BackgroundColor3 = Theme.Surface
+    row.Size = UDim2.new(1, 0, 0, 38)
+    row.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    row.BackgroundTransparency = 1
     row.ZIndex = 14
     row.Parent = page
-    addCorner(row, 8)
-    local st = addStroke(row, Theme.Border, 1, 0)
 
     local lbl = Instance.new("TextLabel")
-    lbl.Position = UDim2.fromOffset(14, 0)
-    lbl.Size = UDim2.new(0.45, -14, 1, 0)
+    lbl.Position = UDim2.fromOffset(4, 0)
+    lbl.Size = UDim2.new(1, -8, 0, 15)
     lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.GothamMedium
+    lbl.Font = Enum.Font.Code
     lbl.Text = labelText
-    lbl.TextColor3 = Theme.Silver
+    lbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    lbl.TextStrokeTransparency = 0.5
     lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 15
     lbl.Parent = row
 
     local boxHolder = Instance.new("Frame")
-    boxHolder.AnchorPoint = Vector2.new(1, 0.5)
-    boxHolder.Position = UDim2.new(1, -10, 0.5, 0)
-    boxHolder.Size = UDim2.new(0.52, 0, 0, 28)
-    boxHolder.BackgroundColor3 = Theme.Deep
+    boxHolder.Position = UDim2.fromOffset(4, 17)
+    boxHolder.Size = UDim2.new(1, -8, 0, 19)
+    boxHolder.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    boxHolder.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    boxHolder.BorderSizePixel = 1
     boxHolder.ZIndex = 15
     boxHolder.Parent = row
-    addCorner(boxHolder, 6)
-    local boxStroke = addStroke(boxHolder, Theme.Border, 1, 0)
+    local boxStroke = addStroke(boxHolder, Color3.fromRGB(8, 8, 8), 1, 0)
 
     local box = Instance.new("TextBox")
-    box.Position = UDim2.fromOffset(10, 0)
-    box.Size = UDim2.new(1, -20, 1, 0)
+    box.Position = UDim2.fromOffset(6, 0)
+    box.Size = UDim2.new(1, -12, 1, 0)
     box.BackgroundTransparency = 1
     box.Font = Enum.Font.Code
     box.PlaceholderText = placeholder or ""
-    box.PlaceholderColor3 = Theme.Muted
+    box.PlaceholderColor3 = Color3.fromRGB(90, 90, 90)
     box.Text = defaultText or ""
-    box.TextColor3 = Theme.White
-    box.TextSize = 11
+    box.TextColor3 = Color3.fromRGB(170, 170, 170)
+    box.TextStrokeTransparency = 0.5
+    box.TextSize = 12
     box.ClearTextOnFocus = false
     box.TextXAlignment = Enum.TextXAlignment.Left
     box.ZIndex = 16
     box.Parent = boxHolder
 
     box.Focused:Connect(function()
+        boxHolder.BorderColor3 = Theme.Accent
         tween(boxStroke, FastTween, { Color = Theme.Accent })
-        tween(st, FastTween, { Color = Theme.Accent })
     end)
     box.FocusLost:Connect(function()
-        tween(boxStroke, FastTween, { Color = Theme.Border })
-        tween(st, FastTween, { Color = Theme.Border })
+        boxHolder.BorderColor3 = Color3.fromRGB(56, 56, 56)
+        tween(boxStroke, FastTween, { Color = Color3.fromRGB(8, 8, 8) })
         if onCommit then
             onCommit(box.Text)
         end
@@ -4815,68 +4855,77 @@ local function createDropdown(page, text, options, defaultOpt, callback)
     local selected = defaultOpt or options[1]
 
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 40)
-    container.BackgroundColor3 = Theme.Surface
+    container.Size = UDim2.new(1, 0, 0, 38)
+    container.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    container.BackgroundTransparency = 1
     container.ClipsDescendants = true
     container.ZIndex = 14
     container.Parent = page
-    addCorner(container, 8)
-    local st = addStroke(container, Theme.Border, 1, 0)
-
-    local headerBtn = Instance.new("TextButton")
-    headerBtn.Size = UDim2.new(1, 0, 0, 40)
-    headerBtn.BackgroundTransparency = 1
-    headerBtn.Text = ""
-    headerBtn.ZIndex = 15
-    headerBtn.Parent = container
+    local st = addStroke(container, Theme.Border, 1, 1)
 
     local titleLbl = Instance.new("TextLabel")
-    titleLbl.Position = UDim2.fromOffset(14, 0)
-    titleLbl.Size = UDim2.new(0.52, 0, 1, 0)
+    titleLbl.Position = UDim2.fromOffset(4, 0)
+    titleLbl.Size = UDim2.new(1, -8, 0, 15)
     titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = Enum.Font.GothamMedium
+    titleLbl.Font = Enum.Font.Code
     titleLbl.Text = text
-    titleLbl.TextColor3 = Theme.Silver
+    titleLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    titleLbl.TextStrokeTransparency = 0.5
     titleLbl.TextSize = 12
     titleLbl.TextXAlignment = Enum.TextXAlignment.Left
     titleLbl.ZIndex = 15
-    titleLbl.Parent = headerBtn
+    titleLbl.Parent = container
+
+    local headerBtn = Instance.new("TextButton")
+    headerBtn.Position = UDim2.fromOffset(4, 17)
+    headerBtn.Size = UDim2.new(1, -8, 0, 19)
+    headerBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    headerBtn.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    headerBtn.BorderSizePixel = 1
+    headerBtn.AutoButtonColor = false
+    headerBtn.Text = ""
+    headerBtn.ZIndex = 15
+    headerBtn.Parent = container
+    addStroke(headerBtn, Color3.fromRGB(8, 8, 8), 1, 0)
 
     local optLbl = Instance.new("TextLabel")
-    optLbl.AnchorPoint = Vector2.new(1, 0)
-    optLbl.Position = UDim2.new(1, -28, 0, 0)
-    optLbl.Size = UDim2.new(0.44, 0, 1, 0)
+    optLbl.Position = UDim2.fromOffset(6, 0)
+    optLbl.Size = UDim2.new(1, -24, 1, 0)
     optLbl.BackgroundTransparency = 1
     optLbl.Font = Enum.Font.Code
     optLbl.Text = tostring(selected)
-    optLbl.TextColor3 = Theme.White
-    optLbl.TextSize = 11
+    optLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    optLbl.TextStrokeTransparency = 0.5
+    optLbl.TextSize = 12
     optLbl.TextTruncate = Enum.TextTruncate.AtEnd
-    optLbl.TextXAlignment = Enum.TextXAlignment.Right
-    optLbl.ZIndex = 15
+    optLbl.TextXAlignment = Enum.TextXAlignment.Left
+    optLbl.ZIndex = 16
     optLbl.Parent = headerBtn
 
     local arrow = Instance.new("TextLabel")
     arrow.AnchorPoint = Vector2.new(1, 0.5)
-    arrow.Position = UDim2.new(1, -12, 0.5, 0)
+    arrow.Position = UDim2.new(1, -6, 0.5, 0)
     arrow.Size = UDim2.fromOffset(12, 12)
     arrow.BackgroundTransparency = 1
-    arrow.Font = Enum.Font.GothamBold
-    arrow.Text = "▾"
-    arrow.TextColor3 = Theme.Muted
+    arrow.Font = Enum.Font.Code
+    arrow.Text = "+"
+    arrow.TextColor3 = Color3.fromRGB(170, 170, 170)
+    arrow.TextStrokeTransparency = 0.5
     arrow.TextSize = 12
-    arrow.ZIndex = 15
+    arrow.ZIndex = 16
     arrow.Parent = headerBtn
 
     local listHolder = Instance.new("Frame")
-    listHolder.Position = UDim2.fromOffset(8, 42)
-    listHolder.Size = UDim2.new(1, -16, 0, #options * 28)
-    listHolder.BackgroundTransparency = 1
+    listHolder.Position = UDim2.fromOffset(4, 38)
+    listHolder.Size = UDim2.new(1, -8, 0, #options * 20)
+    listHolder.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    listHolder.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    listHolder.BorderSizePixel = 1
     listHolder.ZIndex = 15
     listHolder.Parent = container
 
     local listLayout = Instance.new("UIListLayout")
-    listLayout.Padding = UDim.new(0, 4)
+    listLayout.Padding = UDim.new(0, 1)
     listLayout.SortOrder = Enum.SortOrder.LayoutOrder
     listLayout.Parent = listHolder
 
@@ -4894,26 +4943,31 @@ local function createDropdown(page, text, options, defaultOpt, callback)
         for i, opt in ipairs(options) do
             local optBtn = Instance.new("TextButton")
             optBtn.LayoutOrder = i
-            optBtn.Size = UDim2.new(1, 0, 0, 26)
-            optBtn.BackgroundColor3 = (opt == selected) and Theme.Accent or Theme.Deep
+            optBtn.Size = UDim2.new(1, 0, 0, 19)
+            optBtn.BackgroundColor3 = (opt == selected) and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(22, 22, 22)
+            optBtn.BorderSizePixel = 0
             optBtn.AutoButtonColor = false
             optBtn.Font = Enum.Font.Code
             optBtn.Text = tostring(opt)
-            optBtn.TextColor3 = (opt == selected) and Theme.Black or Theme.Silver
-            optBtn.TextSize = 11
+            optBtn.TextColor3 = (opt == selected) and Theme.Accent or Color3.fromRGB(170, 170, 170)
+            optBtn.TextStrokeTransparency = 0.5
+            optBtn.TextSize = 12
+            optBtn.TextXAlignment = Enum.TextXAlignment.Left
             optBtn.ZIndex = 16
             optBtn.Parent = listHolder
-            addCorner(optBtn, 6)
+            local optPad = Instance.new("UIPadding")
+            optPad.PaddingLeft = UDim.new(0, 6)
+            optPad.Parent = optBtn
             table.insert(optionButtons, optBtn)
 
             optBtn.MouseEnter:Connect(function()
                 if opt ~= selected then
-                    tween(optBtn, FastTween, { BackgroundColor3 = Theme.Elevated, TextColor3 = Theme.White })
+                    tween(optBtn, FastTween, { BackgroundColor3 = Color3.fromRGB(28, 28, 28), TextColor3 = Theme.White })
                 end
             end)
             optBtn.MouseLeave:Connect(function()
                 if opt ~= selected then
-                    tween(optBtn, FastTween, { BackgroundColor3 = Theme.Deep, TextColor3 = Theme.Silver })
+                    tween(optBtn, FastTween, { BackgroundColor3 = Color3.fromRGB(22, 22, 22), TextColor3 = Color3.fromRGB(170, 170, 170) })
                 end
             end)
 
@@ -4923,8 +4977,8 @@ local function createDropdown(page, text, options, defaultOpt, callback)
                 for _, otherBtn in ipairs(optionButtons) do
                     local isSel = (otherBtn == optBtn)
                     tween(otherBtn, FastTween, {
-                        BackgroundColor3 = isSel and Theme.Accent or Theme.Deep,
-                        TextColor3 = isSel and Theme.Black or Theme.Silver,
+                        BackgroundColor3 = isSel and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(22, 22, 22),
+                        TextColor3 = isSel and Theme.Accent or Color3.fromRGB(170, 170, 170),
                     })
                 end
                 callback(opt)
@@ -4935,13 +4989,14 @@ local function createDropdown(page, text, options, defaultOpt, callback)
     rebuildOptions(options)
 
     headerBtn.MouseButton1Click:Connect(function()
-        spawnRipple(headerBtn)
         isOpen = not isOpen
-        local openHeight = 46 + (#options * 30)
+        local openHeight = 40 + (#options * 20)
+        listHolder.Size = UDim2.new(1, -8, 0, #options * 20)
         tween(container, SmoothTween, {
-            Size = UDim2.new(1, 0, 0, isOpen and openHeight or 40),
+            Size = UDim2.new(1, 0, 0, isOpen and openHeight or 38),
         })
-        tween(arrow, FastTween, { Rotation = isOpen and 180 or 0 })
+        arrow.Text = isOpen and "-" or "+"
+        headerBtn.BorderColor3 = isOpen and Theme.Accent or Color3.fromRGB(56, 56, 56)
         tween(st, FastTween, { Color = isOpen and Theme.Accent or Theme.Border })
     end)
 
@@ -4952,8 +5007,9 @@ local function createDropdown(page, text, options, defaultOpt, callback)
                 optLbl.Text = tostring(selected)
             end
             rebuildOptions(newOptions)
+            listHolder.Size = UDim2.new(1, -8, 0, #newOptions * 20)
             if isOpen then
-                local openHeight = 46 + (#newOptions * 30)
+                local openHeight = 40 + (#newOptions * 20)
                 container.Size = UDim2.new(1, 0, 0, openHeight)
             end
         end,
@@ -4968,68 +5024,77 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
     end
 
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 40)
-    container.BackgroundColor3 = Theme.Surface
+    container.Size = UDim2.new(1, 0, 0, 38)
+    container.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    container.BackgroundTransparency = 1
     container.ClipsDescendants = true
     container.ZIndex = 14
     container.Parent = page
-    addCorner(container, 8)
-    local st = addStroke(container, Theme.Border, 1, 0)
-
-    local headerBtn = Instance.new("TextButton")
-    headerBtn.Size = UDim2.new(1, 0, 0, 40)
-    headerBtn.BackgroundTransparency = 1
-    headerBtn.Text = ""
-    headerBtn.ZIndex = 15
-    headerBtn.Parent = container
+    local st = addStroke(container, Theme.Border, 1, 1)
 
     local titleLbl = Instance.new("TextLabel")
-    titleLbl.Position = UDim2.fromOffset(14, 0)
-    titleLbl.Size = UDim2.new(0.46, 0, 1, 0)
+    titleLbl.Position = UDim2.fromOffset(4, 0)
+    titleLbl.Size = UDim2.new(1, -8, 0, 15)
     titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = Enum.Font.GothamMedium
+    titleLbl.Font = Enum.Font.Code
     titleLbl.Text = text
-    titleLbl.TextColor3 = Theme.Silver
+    titleLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    titleLbl.TextStrokeTransparency = 0.5
     titleLbl.TextSize = 12
     titleLbl.TextXAlignment = Enum.TextXAlignment.Left
     titleLbl.ZIndex = 15
-    titleLbl.Parent = headerBtn
+    titleLbl.Parent = container
+
+    local headerBtn = Instance.new("TextButton")
+    headerBtn.Position = UDim2.fromOffset(4, 17)
+    headerBtn.Size = UDim2.new(1, -8, 0, 19)
+    headerBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    headerBtn.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    headerBtn.BorderSizePixel = 1
+    headerBtn.AutoButtonColor = false
+    headerBtn.Text = ""
+    headerBtn.ZIndex = 15
+    headerBtn.Parent = container
+    addStroke(headerBtn, Color3.fromRGB(8, 8, 8), 1, 0)
 
     local optLbl = Instance.new("TextLabel")
-    optLbl.AnchorPoint = Vector2.new(1, 0)
-    optLbl.Position = UDim2.new(1, -28, 0, 0)
-    optLbl.Size = UDim2.new(0.50, 0, 1, 0)
+    optLbl.Position = UDim2.fromOffset(6, 0)
+    optLbl.Size = UDim2.new(1, -24, 1, 0)
     optLbl.BackgroundTransparency = 1
     optLbl.Font = Enum.Font.Code
     optLbl.Text = #selectedList > 0 and table.concat(selectedList, ", ") or "None"
-    optLbl.TextColor3 = Theme.White
-    optLbl.TextSize = 10
+    optLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+    optLbl.TextStrokeTransparency = 0.5
+    optLbl.TextSize = 12
     optLbl.TextTruncate = Enum.TextTruncate.AtEnd
-    optLbl.TextXAlignment = Enum.TextXAlignment.Right
-    optLbl.ZIndex = 15
+    optLbl.TextXAlignment = Enum.TextXAlignment.Left
+    optLbl.ZIndex = 16
     optLbl.Parent = headerBtn
 
     local arrow = Instance.new("TextLabel")
     arrow.AnchorPoint = Vector2.new(1, 0.5)
-    arrow.Position = UDim2.new(1, -12, 0.5, 0)
+    arrow.Position = UDim2.new(1, -6, 0.5, 0)
     arrow.Size = UDim2.fromOffset(12, 12)
     arrow.BackgroundTransparency = 1
-    arrow.Font = Enum.Font.GothamBold
-    arrow.Text = "▾"
-    arrow.TextColor3 = Theme.Muted
+    arrow.Font = Enum.Font.Code
+    arrow.Text = "+"
+    arrow.TextColor3 = Color3.fromRGB(170, 170, 170)
+    arrow.TextStrokeTransparency = 0.5
     arrow.TextSize = 12
-    arrow.ZIndex = 15
+    arrow.ZIndex = 16
     arrow.Parent = headerBtn
 
     local listHolder = Instance.new("Frame")
-    listHolder.Position = UDim2.fromOffset(8, 42)
-    listHolder.Size = UDim2.new(1, -16, 0, #options * 28)
-    listHolder.BackgroundTransparency = 1
+    listHolder.Position = UDim2.fromOffset(4, 38)
+    listHolder.Size = UDim2.new(1, -8, 0, #options * 20)
+    listHolder.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    listHolder.BorderColor3 = Color3.fromRGB(56, 56, 56)
+    listHolder.BorderSizePixel = 1
     listHolder.ZIndex = 15
     listHolder.Parent = container
 
     local listLayout = Instance.new("UIListLayout")
-    listLayout.Padding = UDim.new(0, 4)
+    listLayout.Padding = UDim.new(0, 1)
     listLayout.SortOrder = Enum.SortOrder.LayoutOrder
     listLayout.Parent = listHolder
 
@@ -5049,8 +5114,8 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
         for _, item in ipairs(optionButtons) do
             local active = isOptionSelected(item.Value)
             tween(item.Btn, FastTween, {
-                BackgroundColor3 = active and Theme.Accent or Theme.Deep,
-                TextColor3 = active and Theme.Black or Theme.Silver,
+                BackgroundColor3 = active and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(22, 22, 22),
+                TextColor3 = active and Theme.Accent or Color3.fromRGB(170, 170, 170),
             })
         end
     end
@@ -5074,16 +5139,21 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
             local active = isOptionSelected(opt)
             local optBtn = Instance.new("TextButton")
             optBtn.LayoutOrder = i
-            optBtn.Size = UDim2.new(1, 0, 0, 26)
-            optBtn.BackgroundColor3 = active and Theme.Accent or Theme.Deep
+            optBtn.Size = UDim2.new(1, 0, 0, 19)
+            optBtn.BackgroundColor3 = active and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(22, 22, 22)
+            optBtn.BorderSizePixel = 0
             optBtn.AutoButtonColor = false
             optBtn.Font = Enum.Font.Code
             optBtn.Text = tostring(opt)
-            optBtn.TextColor3 = active and Theme.Black or Theme.Silver
-            optBtn.TextSize = 11
+            optBtn.TextColor3 = active and Theme.Accent or Color3.fromRGB(170, 170, 170)
+            optBtn.TextStrokeTransparency = 0.5
+            optBtn.TextSize = 12
+            optBtn.TextXAlignment = Enum.TextXAlignment.Left
             optBtn.ZIndex = 16
             optBtn.Parent = listHolder
-            addCorner(optBtn, 6)
+            local optPad = Instance.new("UIPadding")
+            optPad.PaddingLeft = UDim.new(0, 6)
+            optPad.Parent = optBtn
 
             table.insert(optionButtons, { Btn = optBtn, Value = opt })
 
@@ -5108,21 +5178,23 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
     rebuildMultiOptions(options, selectedList)
 
     headerBtn.MouseButton1Click:Connect(function()
-        spawnRipple(headerBtn)
         isOpen = not isOpen
-        local openHeight = 46 + (#options * 30)
+        local openHeight = 40 + (#options * 20)
+        listHolder.Size = UDim2.new(1, -8, 0, #options * 20)
         tween(container, SmoothTween, {
-            Size = UDim2.new(1, 0, 0, isOpen and openHeight or 40),
+            Size = UDim2.new(1, 0, 0, isOpen and openHeight or 38),
         })
-        tween(arrow, FastTween, { Rotation = isOpen and 180 or 0 })
+        arrow.Text = isOpen and "-" or "+"
+        headerBtn.BorderColor3 = isOpen and Theme.Accent or Color3.fromRGB(56, 56, 56)
         tween(st, FastTween, { Color = isOpen and Theme.Accent or Theme.Border })
     end)
 
     return {
         Refresh = function(newOptions, newSelectedList)
             rebuildMultiOptions(newOptions, newSelectedList)
+            listHolder.Size = UDim2.new(1, -8, 0, #options * 20)
             if isOpen then
-                local openHeight = 46 + (#options * 30)
+                local openHeight = 40 + (#options * 20)
                 container.Size = UDim2.new(1, 0, 0, openHeight)
             end
         end,
@@ -12507,16 +12579,28 @@ do
 
     local BUILTIN_FULL_THEMES = {
         ["Default"] = {
-            Bg = Color3.fromRGB(10, 10, 14),
-            Elem = Color3.fromRGB(16, 16, 22),
-            Border = Color3.fromRGB(45, 45, 56),
-            Accent = Color3.fromRGB(115, 95, 255),
-            Glow = Color3.fromRGB(115, 95, 255),
-            Outline = Color3.fromRGB(35, 35, 48),
-            Inline = Color3.fromRGB(24, 24, 32),
-            Grad = Color3.fromRGB(150, 130, 255),
-            Font = Color3.fromRGB(255, 255, 255),
-            FontOut = Color3.fromRGB(5, 5, 7),
+            Bg = Color3.fromRGB(19, 19, 19),
+            Elem = Color3.fromRGB(22, 22, 22),
+            Border = Color3.fromRGB(56, 56, 56),
+            Accent = Color3.fromRGB(100, 100, 255),
+            Glow = Color3.fromRGB(100, 100, 255),
+            Outline = Color3.fromRGB(8, 8, 8),
+            Inline = Color3.fromRGB(26, 26, 26),
+            Grad = Color3.fromRGB(130, 130, 255),
+            Font = Color3.fromRGB(170, 170, 170),
+            FontOut = Color3.fromRGB(0, 0, 0),
+        },
+        ["Vaderpaste"] = {
+            Bg = Color3.fromRGB(19, 19, 19),
+            Elem = Color3.fromRGB(22, 22, 22),
+            Border = Color3.fromRGB(56, 56, 56),
+            Accent = Color3.fromRGB(100, 100, 255),
+            Glow = Color3.fromRGB(100, 100, 255),
+            Outline = Color3.fromRGB(8, 8, 8),
+            Inline = Color3.fromRGB(26, 26, 26),
+            Grad = Color3.fromRGB(130, 130, 255),
+            Font = Color3.fromRGB(170, 170, 170),
+            FontOut = Color3.fromRGB(0, 0, 0),
         },
         ["Pure Monochrome"] = {
             Bg = Color3.fromRGB(8, 8, 10),
@@ -12575,7 +12659,7 @@ do
     end
 
     local function getThemeDropdownNames()
-        local list = { "Default", "Pure Monochrome", "Cyber Cyan", "Crimson Ops", "Emerald Matrix" }
+        local list = { "Default", "Vaderpaste", "Pure Monochrome", "Cyber Cyan", "Crimson Ops", "Emerald Matrix" }
         for k in pairs(savedCustomThemes) do
             if not table.find(list, k) then
                 table.insert(list, k)
@@ -12677,6 +12761,7 @@ do
     local RSliderCtrl, GSliderCtrl, BSliderCtrl
 
     local ThemePresets = {
+        ["Vaderpaste"] = { 100, 100, 255 },
         ["Pure Monochrome"] = { 255, 255, 255 },
         ["Obsidian Silver"] = { 190, 195, 210 },
         ["Cyber Cyan"] = { 75, 225, 255 },
@@ -12686,13 +12771,14 @@ do
     }
 
     createDropdown(SettingsTab, "Theme Preset", {
+        "Vaderpaste",
         "Pure Monochrome",
         "Obsidian Silver",
         "Cyber Cyan",
         "Crimson Ops",
         "Emerald Matrix",
         "Royal Amethyst",
-    }, "Pure Monochrome", function(presetName)
+    }, "Vaderpaste", function(presetName)
         ConfigState.ThemePreset = presetName
         local rgb = ThemePresets[presetName]
         if rgb then
@@ -12706,17 +12792,17 @@ do
         end
     end)
 
-    RSliderCtrl = createSlider(SettingsTab, "Accent Red (R)", 0, 255, 255, 1, "", function(val)
+    RSliderCtrl = createSlider(SettingsTab, "Accent Red (R)", 0, 255, 100, 1, "", function(val)
         updateAccentColor(val, ConfigState.AccentG, ConfigState.AccentB)
     end)
-    GSliderCtrl = createSlider(SettingsTab, "Accent Green (G)", 0, 255, 255, 1, "", function(val)
+    GSliderCtrl = createSlider(SettingsTab, "Accent Green (G)", 0, 255, 100, 1, "", function(val)
         updateAccentColor(ConfigState.AccentR, val, ConfigState.AccentB)
     end)
     BSliderCtrl = createSlider(SettingsTab, "Accent Blue (B)", 0, 255, 255, 1, "", function(val)
         updateAccentColor(ConfigState.AccentR, ConfigState.AccentG, val)
     end)
 
-    createSlider(SettingsTab, "Window Background Transparency", 0, 0.45, 0.03, 0.01, "", function(val)
+    createSlider(SettingsTab, "Window Background Transparency", 0, 0.45, 0, 0.01, "", function(val)
         ConfigState.WindowTransparency = val
         UI.MainWindow.BackgroundTransparency = val
         if State.syncMusicPlayerDock then
