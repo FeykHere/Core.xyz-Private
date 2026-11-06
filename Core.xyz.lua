@@ -870,6 +870,10 @@ local ConfigState = {
     TeamCheck = false,
     UseWhitelist = false,
     TargetPart = "Head",
+    FovTargetMode = "Closest to Crosshair",
+    FovVisualMode = "Still",
+    FovColor = Color3.fromRGB(255, 255, 255),
+    FovGradientColor = Color3.fromRGB(70, 70, 82),
     HitboxExpander = false,
     HitboxSize = 10,
     HitboxTransparency = 0.7,
@@ -1058,8 +1062,8 @@ local ConfigState = {
     ServerHopMode = "Lowest Players",
     TargetJobId = "",
     AntiAFK = false,
-    -- Performance Settings Suite
-    PerformanceProfile = "Auto",
+    -- Performance & Optimization Suite (In World Tab; Default = Zero Optimization)
+    PerformanceProfile = "Default",
     LowGraphicsEnabled = false,
     OptimizeModeEnabled = false,
     PauseRenderOnTabOut = false,
@@ -1159,6 +1163,9 @@ local State = {
     musicTrackLength = 184,
     musicWaveClock = 0,
     musicCachedAssets = {},
+    pageColumns = {},
+    rebuildSpotifyTrackRows = nil,
+    refreshMusicTrackDropdown = nil,
     syncMusicPlayerDock = nil,
     setMusicPlaying = nil,
     syncPlayToggleUI = nil,
@@ -1302,7 +1309,7 @@ local function updateAccentColor(r, g, b)
     local edgeCol = ConfigState.ThemeBorderColor or Theme.Border
     local peakCol = ConfigState.ThemeGradientColor or Theme.Accent
     for _, item in ipairs(State.liveGradients) do
-        if item.Gradient and item.Gradient.Parent then
+        if item.Gradient and item.Gradient.Parent and item.Gradient ~= UI.FovGradient then
             pcall(function()
                 item.Gradient.Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0.0, edgeCol),
@@ -1506,10 +1513,11 @@ do
     FovCircle.ZIndex = 5
     FovCircle.Parent = OverlayContainer
     addCorner(FovCircle, 9999)
-    local FovOuterStroke = addLiveBorder(FovCircle, 1.8, 135, 0.05)
+    local FovOuterStroke, FovGradient = addLiveBorder(FovCircle, 1.8, 135, 0.05)
 
     UI.FovCircle = FovCircle
     UI.FovOuterStroke = FovOuterStroke
+    UI.FovGradient = FovGradient
 
     local CrosshairContainer = Instance.new("Frame")
     CrosshairContainer.Name = "CrosshairContainer"
@@ -3196,29 +3204,40 @@ do
     local function applyFeatureSearchFilter(rawQuery)
         local q = string.lower(string.gsub(tostring(rawQuery or ""), "^%s*(.-)%s*$", "%1"))
         HeaderSearchClearBtn.Visible = (#q > 0)
+        local function filterGuiNode(node)
+            local isGuiElem = node:IsA("GuiObject")
+                or node:IsA("Frame")
+                or node:IsA("TextButton")
+                or node:IsA("TextLabel")
+                or node:IsA("TextBox")
+                or node:IsA("ScrollingFrame")
+            if not isGuiElem then
+                return
+            end
+            if node.Name == "LeftColumn" or node.Name == "RightColumn" then
+                node.Visible = true
+                for _, secChild in ipairs(node:GetChildren()) do
+                    filterGuiNode(secChild)
+                end
+                return
+            end
+            if #q == 0 then
+                node.Visible = true
+            else
+                local matched = nodeMatchesQuery(node, q)
+                node.Visible = matched
+                if matched then
+                    local secContent = node:FindFirstChild("SectionContent")
+                    if secContent then
+                        secContent.Visible = true
+                    end
+                end
+            end
+        end
         for _, tab in ipairs(State.Tabs) do
             if tab.Page then
                 for _, child in ipairs(tab.Page:GetChildren()) do
-                    local isGuiElem = child:IsA("GuiObject")
-                        or child:IsA("Frame")
-                        or child:IsA("TextButton")
-                        or child:IsA("TextLabel")
-                        or child:IsA("TextBox")
-                        or child:IsA("ScrollingFrame")
-                    if isGuiElem then
-                        if #q == 0 then
-                            child.Visible = true
-                        else
-                            local matched = nodeMatchesQuery(child, q)
-                            child.Visible = matched
-                            if matched then
-                                local secContent = child:FindFirstChild("SectionContent")
-                                if secContent then
-                                    secContent.Visible = true
-                                end
-                            end
-                        end
-                    end
+                    filterGuiNode(child)
                 end
             end
         end
@@ -3428,23 +3447,76 @@ local function createTab(name, order)
     pad.PaddingRight = UDim.new(0, 8)
     pad.Parent = page
 
-    local list = Instance.new("UIListLayout")
-    if not State.fullWidthPages[page] then
-        pcall(function() list.FillDirection = Enum.FillDirection.Horizontal end)
-        pcall(function() list.Wraps = true end)
-        pcall(function() list.HorizontalAlignment = Enum.HorizontalAlignment.Left end)
-        pcall(function() list.VerticalAlignment = Enum.VerticalAlignment.Top end)
-    end
-    list.Padding = UDim.new(0, 8)
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-    list.Parent = page
+    if State.fullWidthPages[page] then
+        local list = Instance.new("UIListLayout")
+        list.Padding = UDim.new(0, 8)
+        list.SortOrder = Enum.SortOrder.LayoutOrder
+        list.Parent = page
 
-    if list.GetPropertyChangedSignal then
-        pcall(function()
-            list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                page.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 24)
+        if list.GetPropertyChangedSignal then
+            pcall(function()
+                list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                    page.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 24)
+                end)
             end)
-        end)
+        end
+    else
+        local colsRowLayout = Instance.new("UIListLayout")
+        pcall(function() colsRowLayout.FillDirection = Enum.FillDirection.Horizontal end)
+        pcall(function() colsRowLayout.Wraps = false end)
+        pcall(function() colsRowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left end)
+        pcall(function() colsRowLayout.VerticalAlignment = Enum.VerticalAlignment.Top end)
+        colsRowLayout.Padding = UDim.new(0, 8)
+        colsRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        colsRowLayout.Parent = page
+
+        local leftCol = Instance.new("Frame")
+        leftCol.Name = "LeftColumn"
+        leftCol.LayoutOrder = 1
+        leftCol.Size = UDim2.new(0.5, -4, 0, 0)
+        leftCol.AutomaticSize = Enum.AutomaticSize.Y
+        leftCol.BackgroundTransparency = 1
+        leftCol.BorderSizePixel = 0
+        leftCol.ZIndex = 13
+        leftCol.Parent = page
+
+        local leftList = Instance.new("UIListLayout")
+        leftList.Padding = UDim.new(0, 10)
+        leftList.SortOrder = Enum.SortOrder.LayoutOrder
+        leftList.Parent = leftCol
+
+        local rightCol = Instance.new("Frame")
+        rightCol.Name = "RightColumn"
+        rightCol.LayoutOrder = 2
+        rightCol.Size = UDim2.new(0.5, -4, 0, 0)
+        rightCol.AutomaticSize = Enum.AutomaticSize.Y
+        rightCol.BackgroundTransparency = 1
+        rightCol.BorderSizePixel = 0
+        rightCol.ZIndex = 13
+        rightCol.Parent = page
+
+        local rightList = Instance.new("UIListLayout")
+        rightList.Padding = UDim.new(0, 10)
+        rightList.SortOrder = Enum.SortOrder.LayoutOrder
+        rightList.Parent = rightCol
+
+        local function syncDualColCanvas()
+            local hLeft = (leftList.AbsoluteContentSize and leftList.AbsoluteContentSize.Y) or 0
+            local hRight = (rightList.AbsoluteContentSize and rightList.AbsoluteContentSize.Y) or 0
+            page.CanvasSize = UDim2.new(0, 0, 0, math.max(hLeft, hRight) + 28)
+        end
+        if leftList.GetPropertyChangedSignal then
+            pcall(function()
+                leftList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncDualColCanvas)
+                rightList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncDualColCanvas)
+            end)
+        end
+
+        State.pageColumns[page] = {
+            Left = leftCol,
+            Right = rightCol,
+            Count = 0,
+        }
     end
 
     local tabObj = {
@@ -3520,9 +3592,9 @@ local function createTab(name, order)
     return page
 end
 
-local function createLabel(page, text)
+local function createLabel(page, text, explicitColumn)
     if page and not State.fullWidthPages[page] and UI.createSectionBox then
-        local secContent = UI.createSectionBox(page, text)
+        local secContent = UI.createSectionBox(page, text, explicitColumn)
         State.activeSectionForPage[page] = secContent
         return secContent
     end
@@ -4323,29 +4395,51 @@ do
     UI.attachSwatchCyclers = attachSwatchCyclers
 
     -- 2-Column Groupbox Section with Cut-In Top Border Legend Title (Matches Reference IMG_20261106_054235.jpg)
-    UI.createSectionBox = function(page, sectionTitle)
+    UI.createSectionBox = function(page, sectionTitle, explicitColumn)
         if State.activeSectionForPage then
             State.activeSectionForPage[page] = nil
         end
-        local isTwoCol = page and not State.fullWidthPages[page]
+        local cols = page and State.pageColumns and State.pageColumns[page]
+        local sectionParent = page
+        if cols then
+            cols.Count = (cols.Count or 0) + 1
+            if explicitColumn == "Left" then
+                sectionParent = cols.Left
+            elseif explicitColumn == "Right" then
+                sectionParent = cols.Right
+            else
+                sectionParent = (cols.Count % 2 == 1) and cols.Left or cols.Right
+            end
+        end
         local wrapper = Instance.new("Frame")
         wrapper.Name = "SectionBox_" .. tostring(sectionTitle)
-        wrapper.Size = isTwoCol and UDim2.new(0.5, -5, 0, 28) or UDim2.new(1, 0, 0, 28)
+        wrapper.LayoutOrder = cols and cols.Count or 1
+        wrapper.Size = UDim2.new(1, 0, 0, 28)
         wrapper.AutomaticSize = Enum.AutomaticSize.Y
-        wrapper.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-        wrapper.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        wrapper.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        wrapper.BorderColor3 = Color3.fromRGB(62, 62, 62)
         wrapper.BorderSizePixel = 1
         wrapper.BackgroundTransparency = 0
         wrapper.ClipsDescendants = false
         wrapper.ZIndex = 14
-        wrapper.Parent = page
-        local wrapperStroke = addStroke(wrapper, Color3.fromRGB(4, 4, 4), 1, 0)
+        wrapper.Parent = sectionParent
+
+        -- Full 4-Sided White-to-Dark-Gray Gradient Border on Section Box
+        local wrapperStroke = addStroke(wrapper, Color3.fromRGB(255, 255, 255), 1, 0)
+        local wrapperGrad = Instance.new("UIGradient")
+        wrapperGrad.Rotation = 90
+        wrapperGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0.0, Color3.fromRGB(115, 115, 115)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(72, 72, 72)),
+            ColorSequenceKeypoint.new(1.0, Color3.fromRGB(48, 48, 48)),
+        })
+        wrapperGrad.Parent = wrapperStroke
 
         -- Subtle top gradient border highlight
         local topAccentLine = Instance.new("Frame")
         topAccentLine.Name = "VaderSectionTopLine"
         topAccentLine.Size = UDim2.new(1, 0, 0, 1)
-        topAccentLine.BackgroundColor3 = Color3.fromRGB(68, 68, 68)
+        topAccentLine.BackgroundColor3 = Color3.fromRGB(92, 92, 92)
         topAccentLine.BorderSizePixel = 0
         topAccentLine.ZIndex = 15
         topAccentLine.Parent = wrapper
@@ -4418,12 +4512,12 @@ do
         end)
 
         wrapper.MouseEnter:Connect(function()
-            wrapper.BorderColor3 = Color3.fromRGB(80, 80, 80)
-            tween(wrapperStroke, FastTween, { Color = Color3.fromRGB(4, 4, 4), Transparency = 0 })
+            wrapper.BorderColor3 = Color3.fromRGB(130, 130, 130)
+            tween(wrapperStroke, FastTween, { Color = Color3.fromRGB(255, 255, 255), Transparency = 0 })
         end)
         wrapper.MouseLeave:Connect(function()
-            wrapper.BorderColor3 = Color3.fromRGB(48, 48, 48)
-            tween(wrapperStroke, FastTween, { Color = Color3.fromRGB(4, 4, 4), Transparency = 0 })
+            wrapper.BorderColor3 = Color3.fromRGB(62, 62, 62)
+            tween(wrapperStroke, FastTween, { Color = Color3.fromRGB(255, 255, 255), Transparency = 0 })
         end)
 
         local pad = Instance.new("UIPadding")
@@ -6513,10 +6607,14 @@ local function getSafeRaycastExcludeList()
 end
 
 local function getClosestTarget(camera)
-    local closestNormal, shortestNormal = nil, ConfigState.FOVRadius
-    local closestPriority, shortestPriority = nil, ConfigState.FOVRadius
+    local closestNormal, bestNormalScore = nil, math.huge
+    local closestPriority, bestPriorityScore = nil, math.huge
     local center = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
     local useWallCheck = ConfigState.AimbotWallCheck
+    local targetMode = ConfigState.FovTargetMode or "Closest to Crosshair"
+    local myChar = LocalPlayer and LocalPlayer.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local originPos = (myHRP and myHRP.Position) or (camera.CFrame and camera.CFrame.Position) or Vector3.zero
 
     if useWallCheck then
         rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
@@ -6532,8 +6630,8 @@ local function getClosestTarget(camera)
                 local screenPos, onScreen = camera:WorldToViewportPoint(checkPart.Position)
                 local isFront = (not screenPos.Z) or (screenPos.Z > 0)
                 if onScreen and isFront then
-                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                    if dist <= ConfigState.FOVRadius then
+                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if screenDist <= ConfigState.FOVRadius then
                         local visiblePass = true
                         if useWallCheck then
                             local dir = checkPart.Position - camera.CFrame.Position
@@ -6541,14 +6639,20 @@ local function getClosestTarget(camera)
                             visiblePass = (ray and ray.Instance and ray.Instance:IsDescendantOf(player.Character)) and true or false
                         end
                         if visiblePass then
+                            local score = screenDist
+                            if targetMode == "Closest To User" or targetMode == "Closest to User" then
+                                score = (checkPart.Position - originPos).Magnitude
+                            elseif targetMode == "Lowest Health" or targetMode == "lowest Health" then
+                                score = (tonumber(humanoid.Health) or 100) * 1000 + (screenDist * 0.01)
+                            end
                             if State.prioritizedPlayers[player.Name] then
-                                if dist <= shortestPriority then
-                                    shortestPriority = dist
+                                if score <= bestPriorityScore then
+                                    bestPriorityScore = score
                                     closestPriority = checkPart
                                 end
                             else
-                                if dist <= shortestNormal then
-                                    shortestNormal = dist
+                                if score <= bestNormalScore then
+                                    bestNormalScore = score
                                     closestNormal = checkPart
                                 end
                             end
@@ -7790,13 +7894,16 @@ do
             Id = "Snowman (Slowed + Reverb) — Sia",
             Title = "Snowman (Slowed + Reverb)",
             Artist = "Sia",
+            GitHubBaseName = "sia - snowman (slowed + reverb) [with lyrics]",
             FileName = "sia_snowman_slowed.mp3",
-            CoverFileName = "ab67616d0000b2738c5d0e3697c5c9191cc8c1bf.jpeg",
+            CoverFileName = "sia - snowman (slowed + reverb) [with lyrics].jpeg",
             DefaultDuration = 184,
             FallbackSoundId = "rbxasset://sounds/uuhhh.mp3",
             CoverUrls = {
+                "https://raw.githubusercontent.com/FeykHere/Core.xyz.music/main/sia%20-%20snowman%20(slowed%20%2B%20reverb)%20%5Bwith%20lyrics%5D.jpeg",
+                "https://raw.githubusercontent.com/FeykHere/Core.xyz.music/main/sia%20-%20snowman%20(slowed%20+%20reverb)%20[with%20lyrics].jpeg",
+                "https://github.com/FeykHere/Core.xyz.music/blob/main/sia%20-%20snowman%20(slowed%20%2B%20reverb)%20%5Bwith%20lyrics%5D.jpeg?raw=true",
                 "https://raw.githubusercontent.com/FeykHere/Core.xyz.music/main/ab67616d0000b2738c5d0e3697c5c9191cc8c1bf.jpeg",
-                "https://github.com/FeykHere/Core.xyz.music/blob/main/ab67616d0000b2738c5d0e3697c5c9191cc8c1bf.jpeg?raw=true",
             },
             Urls = {
                 "https://raw.githubusercontent.com/FeykHere/Core.xyz.music/main/sia%20-%20snowman%20(slowed%20%2B%20reverb)%20%5Bwith%20lyrics%5D.mp3",
@@ -7812,14 +7919,186 @@ do
 
     local TRACK_DROPDOWN_OPTIONS = {}
     local TRACK_BY_ID = {}
-    for idx, tr in ipairs(MUSIC_TRACK_LIST) do
-        tr.Index = idx
-        table.insert(TRACK_DROPDOWN_OPTIONS, tr.Id)
-        TRACK_BY_ID[tr.Id] = tr
+    local function syncTrackRegistryTables()
+        table.clear(TRACK_DROPDOWN_OPTIONS)
+        table.clear(TRACK_BY_ID)
+        for idx, tr in ipairs(MUSIC_TRACK_LIST) do
+            tr.Index = idx
+            table.insert(TRACK_DROPDOWN_OPTIONS, tr.Id)
+            TRACK_BY_ID[tr.Id] = tr
+        end
+        State.musicTrackOptions = TRACK_DROPDOWN_OPTIONS
+        State.musicTrackList = MUSIC_TRACK_LIST
     end
-    State.musicTrackOptions = TRACK_DROPDOWN_OPTIONS
-    State.musicTrackList = MUSIC_TRACK_LIST
+    syncTrackRegistryTables()
     State.musicCachedCovers = State.musicCachedCovers or {}
+
+    -- Universal Audio & Image Extension Support for Auto-Fetch from FeykHere/Core.xyz.music
+    local SUPPORTED_AUDIO_EXTS = {
+        mp3 = true, mp4 = true, ogg = true, wav = true, flac = true, m4a = true, aac = true, webm = true,
+    }
+    local SUPPORTED_IMAGE_EXTS = {
+        jpeg = true, jpg = true, png = true, webp = true, bmp = true, gif = true, img = true, jfif = true, avif = true, tiff = true, svg = true,
+    }
+
+    local function splitFileBaseAndExt(fileName)
+        local clean = tostring(fileName or "")
+        local base, ext = string.match(clean, "^(.+)%.([^%.]+)$")
+        if not base or not ext then
+            return clean, ""
+        end
+        return base, string.lower(ext)
+    end
+
+    local function encodeGitHubPathSegment(name)
+        local s = tostring(name or "")
+        s = string.gsub(s, "%%", "%%25")
+        s = string.gsub(s, " ", "%%20")
+        s = string.gsub(s, "%+", "%%2B")
+        s = string.gsub(s, "%[", "%%5B")
+        s = string.gsub(s, "%]", "%%5D")
+        s = string.gsub(s, "#", "%%23")
+        return s
+    end
+
+    local function formatDisplayArtistAndTitle(rawBaseName)
+        local clean = tostring(rawBaseName or "")
+        -- Strip trailing tags like [with lyrics] for cleaner display title while keeping (slowed + reverb)
+        local stripped = string.gsub(clean, "%s*%[[wW]ith%s+[lL]yrics%]%s*", "")
+        local artistPart, titlePart = string.match(stripped, "^(.-)%s+%-%s+(.+)$")
+        local function smartTitleCase(str)
+            return string.gsub(str, "(%a)([%w_']*)", function(first, rest)
+                return string.upper(first) .. string.lower(rest)
+            end)
+        end
+        if artistPart and titlePart and #artistPart > 0 and #titlePart > 0 then
+            return smartTitleCase(titlePart), smartTitleCase(artistPart)
+        end
+        return smartTitleCase(stripped ~= "" and stripped or clean), "Core.xyz Music"
+    end
+
+    -- Auto-Fetch All Songs & Matching Same-Name Image Covers from FeykHere/Core.xyz.music
+    local function fetchGithubMusicCatalog()
+        task.spawn(function()
+            local apiUrl = "https://api.github.com/repos/FeykHere/Core.xyz.music/contents"
+            local okReq, rawJson = pcall(function()
+                if type(Env.request) == "function" then
+                    local r = Env.request({ Url = apiUrl, Method = "GET" })
+                    if r and r.StatusCode == 200 and type(r.Body) == "string" and #r.Body > 10 then
+                        return r.Body
+                    end
+                end
+                return game:HttpGet(apiUrl)
+            end)
+            if not okReq or type(rawJson) ~= "string" or #rawJson < 10 then
+                return
+            end
+            local decoded = safeJsonDecode(rawJson)
+            if type(decoded) ~= "table" then
+                return
+            end
+
+            local audioEntries = {}
+            local imageByLowerBase = {}
+
+            for _, item in ipairs(decoded) do
+                if type(item) == "table" and type(item.name) == "string" then
+                    local base, ext = splitFileBaseAndExt(item.name)
+                    local lowerBase = string.lower((base or ""):gsub("^%s*(.-)%s*$", "%1"))
+                    if lowerBase ~= "" and ext ~= "" then
+                        local rawUrl = (type(item.download_url) == "string" and item.download_url ~= "")
+                            and item.download_url
+                            or ("https://raw.githubusercontent.com/FeykHere/Core.xyz.music/main/" .. encodeGitHubPathSegment(item.name))
+                        local encodedRawUrl = "https://raw.githubusercontent.com/FeykHere/Core.xyz.music/main/" .. encodeGitHubPathSegment(item.name)
+                        if SUPPORTED_AUDIO_EXTS[ext] then
+                            table.insert(audioEntries, {
+                                Name = item.name,
+                                Base = base,
+                                LowerBase = lowerBase,
+                                Ext = ext,
+                                RawUrl = rawUrl,
+                                EncodedRawUrl = encodedRawUrl,
+                            })
+                        elseif SUPPORTED_IMAGE_EXTS[ext] then
+                            imageByLowerBase[lowerBase] = {
+                                Name = item.name,
+                                Base = base,
+                                LowerBase = lowerBase,
+                                Ext = ext,
+                                RawUrl = rawUrl,
+                                EncodedRawUrl = encodedRawUrl,
+                            }
+                        end
+                    end
+                end
+            end
+
+            local catalogChanged = false
+            for _, aud in ipairs(audioEntries) do
+                local matchedImg = imageByLowerBase[aud.LowerBase]
+                local existingTrack = nil
+                for _, tr in ipairs(MUSIC_TRACK_LIST) do
+                    local trBase = string.lower(tostring(tr.GitHubBaseName or ""))
+                    if trBase == aud.LowerBase or string.lower(tostring(tr.FileName or "")) == string.lower(aud.Name) then
+                        existingTrack = tr
+                        break
+                    end
+                end
+
+                if existingTrack then
+                    if matchedImg then
+                        existingTrack.CoverFileName = matchedImg.Name
+                        existingTrack.CoverUrls = {
+                            matchedImg.EncodedRawUrl,
+                            matchedImg.RawUrl,
+                            "https://raw.githubusercontent.com/FeykHere/Core.xyz.music/main/ab67616d0000b2738c5d0e3697c5c9191cc8c1bf.jpeg",
+                        }
+                    end
+                else
+                    local dispTitle, dispArtist = formatDisplayArtistAndTitle(aud.Base)
+                    local trackId = dispTitle .. " — " .. dispArtist
+                    if TRACK_BY_ID[trackId] then
+                        trackId = trackId .. " (" .. aud.Ext:upper() .. ")"
+                    end
+                    local safeLocalAudio = string.gsub(aud.LowerBase, "[^%w_%-]", "_") .. "." .. aud.Ext
+                    local coverUrls = {}
+                    local coverFileName = nil
+                    if matchedImg then
+                        coverFileName = matchedImg.Name
+                        coverUrls = {
+                            matchedImg.EncodedRawUrl,
+                            matchedImg.RawUrl,
+                        }
+                    end
+                    table.insert(MUSIC_TRACK_LIST, {
+                        Id = trackId,
+                        Title = dispTitle,
+                        Artist = dispArtist,
+                        GitHubBaseName = aud.LowerBase,
+                        FileName = safeLocalAudio,
+                        CoverFileName = coverFileName,
+                        DefaultDuration = 180,
+                        FallbackSoundId = "rbxasset://sounds/uuhhh.mp3",
+                        CoverUrls = coverUrls,
+                        Urls = {
+                            aud.EncodedRawUrl,
+                            aud.RawUrl,
+                        },
+                    })
+                    catalogChanged = true
+                end
+            end
+
+            syncTrackRegistryTables()
+            if State.refreshMusicTrackDropdown then
+                State.refreshMusicTrackDropdown(TRACK_DROPDOWN_OPTIONS, ConfigState.SelectedTrack)
+            end
+            if catalogChanged and State.rebuildSpotifyTrackRows then
+                State.rebuildSpotifyTrackRows()
+            end
+        end)
+    end
+    State.fetchGithubMusicCatalog = fetchGithubMusicCatalog
 
     local function ensureTrackCoverLoaded(track, onCoverReady)
         if not track or not track.CoverFileName then
@@ -10197,9 +10476,9 @@ do
     fetchDiscordInviteData(false)
 end
 
--- TAB 2: COMBAT (SINGLE AIMBOT TOGGLE WITH CLASSIC LOCK-IN + HITPART/WALLCHECK/TEAMCHECK/WHITELIST ABOVE HITBOX AREA)
+-- TAB 2: COMBAT (SINGLE AIMBOT TOGGLE WITH CLASSIC LOCK-IN + FOV TARGET PRIORITY + HITPART/WALLCHECK/TEAMCHECK/WHITELIST ABOVE HITBOX AREA)
 do
-    createLabel(CombatTab, "Aimbot & FOV Controller")
+    createLabel(CombatTab, "Aimbot & FOV Controller", "Left")
     createToggle(CombatTab, "Aimbot", false, function(val)
         ConfigState.Aimbot = val
         if not val then
@@ -10217,8 +10496,12 @@ do
     createSlider(CombatTab, "Aimbot Smoothness", 0.05, 1, 0.9, 0.01, "", function(val)
         ConfigState.Smoothness = val
     end)
+    createDropdown(CombatTab, "FOV Target", { "Closest to Crosshair", "Closest To User", "Lowest Health" }, ConfigState.FovTargetMode or "Closest to Crosshair", function(opt)
+        ConfigState.FovTargetMode = opt
+        State.cachedAimTarget = nil
+    end)
 
-    createLabel(CombatTab, "Targeting, Hitpart, Wall Check, Team Check & Whitelist")
+    createLabel(CombatTab, "Targeting, Hitpart, Wall Check, Team Check & Whitelist", "Left")
     createDropdown(CombatTab, "Hitpart", { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso" }, ConfigState.TargetPart or "Head", function(opt)
         ConfigState.TargetPart = opt
         State.cachedAimTarget = nil
@@ -10277,7 +10560,7 @@ do
         end
     end)
 
-    createLabel(CombatTab, "Universal Hitbox Expander")
+    createLabel(CombatTab, "Universal Hitbox Expander", "Right")
     createToggle(CombatTab, "Hitbox Expander", false, function(val)
         ConfigState.HitboxExpander = val
         if val then
@@ -10300,9 +10583,15 @@ do
     end)
 end
 
--- TAB 3: VISUALS (3D BOX + SKELETON + SCREEN RESOLUTION STRETCH + PRO CROSSHAIR + X-RAY + FREECAM)
+-- TAB 3: VISUALS (3D BOX + SKELETON + FOV VISUAL + SCREEN RESOLUTION STRETCH + PRO CROSSHAIR + X-RAY + FREECAM)
 do
     createLabel(VisualsTab, "3D ESP & Skeleton Overlays")
+    createDropdown(VisualsTab, "FOV Visual", { "Still", "Gradient", "Rainbow" }, ConfigState.FovVisualMode or "Still", function(opt)
+        ConfigState.FovVisualMode = opt
+    end)
+    UI.createColorRow(VisualsTab, "FOV Color", ConfigState.FovColor or Color3.fromRGB(255, 255, 255), function(col)
+        ConfigState.FovColor = col
+    end)
     createToggle(VisualsTab, "Player ESP (Highlight + Tag)", false, function(val)
         ConfigState.ESP = val
         if not val then
@@ -11845,22 +12134,158 @@ do
 
     rebuildWaypointsUI()
 
-    createLabel(WorldTab, "Performance & FPS Optimization")
-    createButton(WorldTab, "Activate Ultimate Deep FPS Booster", function()
+    local perfOptSec = UI.createSectionBox(WorldTab, "Performance & Optimization")
+
+    local function applyLowGraphics(enabled)
+        ConfigState.LowGraphicsEnabled = enabled and true or false
+        if enabled then
+            pcall(function()
+                Lighting.GlobalShadows = false
+            end)
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    if State.lowGraphicsCache[obj] == nil then
+                        State.lowGraphicsCache[obj] = {
+                            Material = obj.Material,
+                            Reflectance = obj.Reflectance or 0,
+                        }
+                    end
+                    pcall(function()
+                        obj.Material = Enum.Material.SmoothPlastic
+                        obj.Reflectance = 0
+                    end)
+                end
+            end
+        else
+            for obj, orig in pairs(State.lowGraphicsCache) do
+                if obj and obj.Parent then
+                    pcall(function()
+                        if orig.Material then obj.Material = orig.Material end
+                        if orig.Reflectance ~= nil then obj.Reflectance = orig.Reflectance end
+                    end)
+                end
+            end
+            table.clear(State.lowGraphicsCache)
+            if not ConfigState.LightingNoShadows then
+                pcall(function()
+                    Lighting.GlobalShadows = State.origLighting.GlobalShadows
+                end)
+            end
+        end
+    end
+    State.applyLowGraphics = applyLowGraphics
+
+    local function applyOptimizeMode(enabled)
+        ConfigState.OptimizeModeEnabled = enabled and true or false
+        if enabled then
+            if UI.MainParticleCanvas then
+                UI.MainParticleCanvas.Visible = false
+            end
+            ConfigState.ShimmerEnabled = false
+        else
+            if UI.MainParticleCanvas then
+                UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false)
+            end
+            ConfigState.ShimmerEnabled = true
+        end
+    end
+    State.applyOptimizeMode = applyOptimizeMode
+
+    local function applyPerformanceProfile(profile)
+        profile = profile or ConfigState.PerformanceProfile or "Default"
+        ConfigState.PerformanceProfile = profile
+        if State.syncKeybindBadgesVisibility then
+            State.syncKeybindBadgesVisibility()
+        end
+        State.effectivePerformanceMode = profile
+
+        if profile == "Default" then
+            -- Default = Zero optimization / untouched game settings
+            State.activeProfileFPSCap = ConfigState.UncapFPS and (ConfigState.CustomFPS or 240) or 60
+            if UI.MainParticleCanvas then
+                UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false) and not ConfigState.OptimizeModeEnabled
+            end
+            if not ConfigState.LowGraphicsEnabled and not ConfigState.LightingNoShadows then
+                pcall(function()
+                    Lighting.GlobalShadows = State.origLighting.GlobalShadows
+                end)
+            end
+            if ConfigState.UncapFPS and State.isWindowFocused ~= false and Env.setfpscap then
+                pcall(function()
+                    Env.setfpscap(ConfigState.CustomFPS or 240)
+                end)
+            end
+            return
+        elseif profile == "Performance" then
+            State.activeProfileFPSCap = 60
+            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = false end
+            pcall(function() Lighting.GlobalShadows = false end)
+        elseif profile == "Quality" then
+            State.activeProfileFPSCap = 240
+            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false) end
+            if not ConfigState.LowGraphicsEnabled and not ConfigState.LightingNoShadows then
+                pcall(function() Lighting.GlobalShadows = true end)
+            end
+        else
+            -- Balanced
+            State.activeProfileFPSCap = 120
+            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false) and not ConfigState.OptimizeModeEnabled end
+        end
+
+        if State.isWindowFocused ~= false and Env.setfpscap then
+            local targetCap = ConfigState.UncapFPS and (ConfigState.CustomFPS or State.activeProfileFPSCap) or State.activeProfileFPSCap
+            pcall(function()
+                Env.setfpscap(targetCap)
+            end)
+        end
+    end
+    State.applyPerformanceProfile = applyPerformanceProfile
+
+    createDropdown(perfOptSec, "Performance Profile", { "Default", "Quality", "Balanced", "Performance" }, ConfigState.PerformanceProfile or "Default", function(opt)
+        applyPerformanceProfile(opt)
+    end)
+
+    createToggle(perfOptSec, "Low Graphics", ConfigState.LowGraphicsEnabled == true, function(val)
+        applyLowGraphics(val)
+    end)
+
+    createToggle(perfOptSec, "Optimize Mode", ConfigState.OptimizeModeEnabled == true, function(val)
+        applyOptimizeMode(val)
+    end)
+
+    createToggle(perfOptSec, "Pause Rendering When Tabbed Out", ConfigState.PauseRenderOnTabOut == true, function(val)
+        ConfigState.PauseRenderOnTabOut = val
+        if not State.isWindowFocused then
+            UI.RenderSaverOverlay.Visible = val or (ConfigState.Disable3DRender == true)
+        end
+    end)
+
+    createSlider(perfOptSec, "FPS When Tabbed Out", 5, 60, ConfigState.FPSWhenTabbedOut or 15, 1, " fps", function(val)
+        ConfigState.FPSWhenTabbedOut = val
+        if not State.isWindowFocused and Env.setfpscap then
+            pcall(function()
+                Env.setfpscap(val)
+            end)
+        end
+    end)
+
+    applyPerformanceProfile(ConfigState.PerformanceProfile or "Default")
+
+    createButton(perfOptSec, "Activate Ultimate Deep FPS Booster", function()
         runUltimateFPSBooster()
     end)
 
-    createToggle(WorldTab, "Disable 3D Rendering (AFK GPU/Battery Saver)", false, function(val)
+    createToggle(perfOptSec, "Disable 3D Rendering (AFK GPU/Battery Saver)", false, function(val)
         ConfigState.Disable3DRender = val
         UI.RenderSaverOverlay.Visible = val
         notify("Core.xyz", val and "3D Rendering overlay saver active (Battery Saver On)." or "3D Rendering restored.", 3)
     end)
 
     local CustomFpsBox
-    createToggle(WorldTab, "Uncap FPS", false, function(val)
+    createToggle(perfOptSec, "Uncap FPS", false, function(val)
         ConfigState.UncapFPS = val
         if Env.setfpscap then
-            local targetCap = val and (tonumber(CustomFpsBox and CustomFpsBox.Text) or ConfigState.CustomFPS or 999) or 60
+            local targetCap = val and (tonumber(CustomFpsBox and CustomFpsBox.Text) or ConfigState.CustomFPS or 999) or (State.activeProfileFPSCap or 60)
             pcall(function()
                 Env.setfpscap(targetCap)
             end)
@@ -11870,7 +12295,7 @@ do
         end
     end)
 
-    CustomFpsBox = createTextInputRow(WorldTab, "Custom FPS Target", "e.g. 144, 240, 999", "144", function(txt)
+    CustomFpsBox = createTextInputRow(perfOptSec, "Custom FPS Target", "e.g. 144, 240, 999", "144", function(txt)
         local num = tonumber(txt)
         if num and num >= 15 then
             ConfigState.CustomFPS = math.floor(num)
@@ -12656,153 +13081,183 @@ end
     TrackScrollLayout.Parent = SpotifyTrackScroll
 
     local spotifyRowRefs = {}
-    for idx, tr in ipairs(State.musicTrackList or {}) do
-        local rowBtn = Instance.new("TextButton")
-        rowBtn.Name = "SpotifyTrackRow_" .. tostring(idx)
-        rowBtn.LayoutOrder = idx
-        rowBtn.Size = UDim2.new(1, 0, 0, 48)
-        rowBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        rowBtn.AutoButtonColor = false
-        rowBtn.Text = ""
-        rowBtn.ZIndex = 17
-        rowBtn.Parent = SpotifyTrackScroll
-        addCorner(rowBtn, 8)
-        local rowStroke = addStroke(rowBtn, Color3.fromRGB(255, 255, 255), 1, 0.35)
 
-        local activeLeftBar = Instance.new("Frame")
-        activeLeftBar.Name = "ActiveLeftIndicator"
-        activeLeftBar.AnchorPoint = Vector2.new(0, 0.5)
-        activeLeftBar.Position = UDim2.new(0, 4, 0.5, 0)
-        activeLeftBar.Size = UDim2.fromOffset(3, 24)
-        activeLeftBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        activeLeftBar.BorderSizePixel = 0
-        activeLeftBar.ZIndex = 18
-        activeLeftBar.Parent = rowBtn
-        addCorner(activeLeftBar, 999)
-
-        local thumbFrame = Instance.new("Frame")
-        thumbFrame.Name = "TrackRowThumbFrame"
-        thumbFrame.AnchorPoint = Vector2.new(0, 0.5)
-        thumbFrame.Position = UDim2.new(0, 12, 0.5, 0)
-        thumbFrame.Size = UDim2.fromOffset(34, 34)
-        thumbFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
-        thumbFrame.ClipsDescendants = true
-        thumbFrame.ZIndex = 18
-        thumbFrame.Parent = rowBtn
-        addCorner(thumbFrame, 6)
-        addStroke(thumbFrame, Color3.fromRGB(90, 90, 90), 1, 0.25)
-
-        local thumbImg = Instance.new("ImageLabel")
-        thumbImg.Name = "TrackRowCoverImage"
-        thumbImg.Size = UDim2.fromScale(1, 1)
-        thumbImg.BackgroundTransparency = 1
-        thumbImg.Image = ""
-        thumbImg.ScaleType = Enum.ScaleType.Crop
-        thumbImg.ZIndex = 19
-        thumbImg.Parent = thumbFrame
-        addCorner(thumbImg, 6)
-
-        -- Mini Geometric 3-Bar Equalizer Overlay on Active Track Thumbnail
-        local eqOverlay = Instance.new("Frame")
-        eqOverlay.Name = "TrackRowEqOverlay"
-        eqOverlay.Size = UDim2.fromScale(1, 1)
-        eqOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        eqOverlay.BackgroundTransparency = 0.45
-        eqOverlay.Visible = false
-        eqOverlay.ZIndex = 20
-        eqOverlay.Parent = thumbFrame
-
-        for bIdx = 1, 3 do
-            local eqBar = Instance.new("Frame")
-            eqBar.Name = "EqBar_" .. tostring(bIdx)
-            eqBar.AnchorPoint = Vector2.new(0.5, 1)
-            eqBar.Position = UDim2.new(0.28 + (bIdx - 1) * 0.22, 0, 0.78, 0)
-            eqBar.Size = UDim2.fromOffset(3, bIdx == 2 and 14 or 9)
-            eqBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            eqBar.BorderSizePixel = 0
-            eqBar.ZIndex = 21
-            eqBar.Parent = eqOverlay
-            addCorner(eqBar, 1)
-        end
-
-        local rowTitle = Instance.new("TextLabel")
-        rowTitle.Name = "TrackRowTitle"
-        rowTitle.Position = UDim2.fromOffset(54, 8)
-        rowTitle.Size = UDim2.new(1, -104, 0, 16)
-        rowTitle.BackgroundTransparency = 1
-        rowTitle.Font = Enum.Font.GothamBold
-        rowTitle.Text = tr.Title
-        rowTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-        rowTitle.TextSize = 12
-        rowTitle.TextTruncate = Enum.TextTruncate.AtEnd
-        rowTitle.TextXAlignment = Enum.TextXAlignment.Left
-        rowTitle.ZIndex = 18
-        rowTitle.Parent = rowBtn
-
-        local rowArtist = Instance.new("TextLabel")
-        rowArtist.Name = "TrackRowArtist"
-        rowArtist.Position = UDim2.fromOffset(54, 24)
-        rowArtist.Size = UDim2.new(1, -104, 0, 14)
-        rowArtist.BackgroundTransparency = 1
-        rowArtist.Font = Enum.Font.Code
-        rowArtist.Text = tr.Artist
-        rowArtist.TextColor3 = Color3.fromRGB(155, 155, 155)
-        rowArtist.TextSize = 10
-        rowArtist.TextTruncate = Enum.TextTruncate.AtEnd
-        rowArtist.TextXAlignment = Enum.TextXAlignment.Left
-        rowArtist.ZIndex = 18
-        rowArtist.Parent = rowBtn
-
-        local rowDur = Instance.new("TextLabel")
-        rowDur.Name = "TrackRowDuration"
-        rowDur.AnchorPoint = Vector2.new(1, 0.5)
-        rowDur.Position = UDim2.new(1, -12, 0.5, 0)
-        rowDur.Size = UDim2.fromOffset(42, 14)
-        rowDur.BackgroundTransparency = 1
-        rowDur.Font = Enum.Font.Code
-        rowDur.Text = State.formatTimeMMSS and State.formatTimeMMSS(tr.DefaultDuration or 184) or "03:04"
-        rowDur.TextColor3 = Color3.fromRGB(165, 165, 165)
-        rowDur.TextSize = 11
-        rowDur.TextXAlignment = Enum.TextXAlignment.Right
-        rowDur.ZIndex = 18
-        rowDur.Parent = rowBtn
-
-        spotifyRowRefs[tr.Id] = {
-            Track = tr,
-            Row = rowBtn,
-            Stroke = rowStroke,
-            LeftBar = activeLeftBar,
-            ThumbImg = thumbImg,
-            EqOverlay = eqOverlay,
-            Title = rowTitle,
-        }
-
-        rowBtn.MouseButton1Click:Connect(function()
-            if ConfigState.SelectedTrack == tr.Id then
-                if State.setMusicPlaying then
-                    State.setMusicPlaying(not State.musicIsPlaying)
-                end
-            else
-                ConfigState.SelectedTrack = tr.Id
-                State.musicSimulatedPos = 0
-                if State.seekMusicToRatio then
-                    State.seekMusicToRatio(0)
-                end
-                if State.setMusicPlaying then
-                    State.setMusicPlaying(true)
-                end
+    local function filterSpotifyTracks(queryText)
+        local q = string.lower((queryText or ""):gsub("^%s*(.-)%s*$", "%1"))
+        local visibleCount = 0
+        for _, ref in pairs(spotifyRowRefs) do
+            local match = (q == "")
+                or (string.find(string.lower(ref.Track.Title or ""), q, 1, true) ~= nil)
+                or (string.find(string.lower(ref.Track.Artist or ""), q, 1, true) ~= nil)
+            ref.Row.Visible = match
+            if match then
+                visibleCount = visibleCount + 1
             end
-        end)
+        end
+        TrackCountLbl.Text = tostring(visibleCount) .. (visibleCount == 1 and " song" or " songs")
+    end
 
-        if State.ensureTrackCoverLoaded then
-            State.ensureTrackCoverLoaded(tr, function(coverAsset)
-                thumbImg.Image = coverAsset
-                if ConfigState.SelectedTrack == tr.Id or idx == 1 then
-                    NowPlayingCoverImage.Image = coverAsset
+    local function rebuildSpotifyTrackRows()
+        for _, ref in pairs(spotifyRowRefs) do
+            if ref.Row and ref.Row.Parent then
+                ref.Row:Destroy()
+            end
+        end
+        table.clear(spotifyRowRefs)
+
+        for idx, tr in ipairs(State.musicTrackList or {}) do
+            local rowBtn = Instance.new("TextButton")
+            rowBtn.Name = "SpotifyTrackRow_" .. tostring(idx)
+            rowBtn.LayoutOrder = idx
+            rowBtn.Size = UDim2.new(1, 0, 0, 48)
+            rowBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            rowBtn.AutoButtonColor = false
+            rowBtn.Text = ""
+            rowBtn.ZIndex = 17
+            rowBtn.Parent = SpotifyTrackScroll
+            addCorner(rowBtn, 8)
+            local rowStroke = addStroke(rowBtn, Color3.fromRGB(255, 255, 255), 1, 0.35)
+
+            local activeLeftBar = Instance.new("Frame")
+            activeLeftBar.Name = "ActiveLeftIndicator"
+            activeLeftBar.AnchorPoint = Vector2.new(0, 0.5)
+            activeLeftBar.Position = UDim2.new(0, 4, 0.5, 0)
+            activeLeftBar.Size = UDim2.fromOffset(3, 24)
+            activeLeftBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            activeLeftBar.BorderSizePixel = 0
+            activeLeftBar.ZIndex = 18
+            activeLeftBar.Parent = rowBtn
+            addCorner(activeLeftBar, 999)
+
+            local thumbFrame = Instance.new("Frame")
+            thumbFrame.Name = "TrackRowThumbFrame"
+            thumbFrame.AnchorPoint = Vector2.new(0, 0.5)
+            thumbFrame.Position = UDim2.new(0, 12, 0.5, 0)
+            thumbFrame.Size = UDim2.fromOffset(34, 34)
+            thumbFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+            thumbFrame.ClipsDescendants = true
+            thumbFrame.ZIndex = 18
+            thumbFrame.Parent = rowBtn
+            addCorner(thumbFrame, 6)
+            addStroke(thumbFrame, Color3.fromRGB(90, 90, 90), 1, 0.25)
+
+            local thumbImg = Instance.new("ImageLabel")
+            thumbImg.Name = "TrackRowCoverImage"
+            thumbImg.Size = UDim2.fromScale(1, 1)
+            thumbImg.BackgroundTransparency = 1
+            thumbImg.Image = ""
+            thumbImg.ScaleType = Enum.ScaleType.Crop
+            thumbImg.ZIndex = 19
+            thumbImg.Parent = thumbFrame
+            addCorner(thumbImg, 6)
+
+            local eqOverlay = Instance.new("Frame")
+            eqOverlay.Name = "TrackRowEqOverlay"
+            eqOverlay.Size = UDim2.fromScale(1, 1)
+            eqOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            eqOverlay.BackgroundTransparency = 0.45
+            eqOverlay.Visible = false
+            eqOverlay.ZIndex = 20
+            eqOverlay.Parent = thumbFrame
+
+            for bIdx = 1, 3 do
+                local eqBar = Instance.new("Frame")
+                eqBar.Name = "EqBar_" .. tostring(bIdx)
+                eqBar.AnchorPoint = Vector2.new(0.5, 1)
+                eqBar.Position = UDim2.new(0.28 + (bIdx - 1) * 0.22, 0, 0.78, 0)
+                eqBar.Size = UDim2.fromOffset(3, bIdx == 2 and 14 or 9)
+                eqBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                eqBar.BorderSizePixel = 0
+                eqBar.ZIndex = 21
+                eqBar.Parent = eqOverlay
+                addCorner(eqBar, 1)
+            end
+
+            local rowTitle = Instance.new("TextLabel")
+            rowTitle.Name = "TrackRowTitle"
+            rowTitle.Position = UDim2.fromOffset(54, 8)
+            rowTitle.Size = UDim2.new(1, -104, 0, 16)
+            rowTitle.BackgroundTransparency = 1
+            rowTitle.Font = Enum.Font.GothamBold
+            rowTitle.Text = tr.Title
+            rowTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            rowTitle.TextSize = 12
+            rowTitle.TextTruncate = Enum.TextTruncate.AtEnd
+            rowTitle.TextXAlignment = Enum.TextXAlignment.Left
+            rowTitle.ZIndex = 18
+            rowTitle.Parent = rowBtn
+
+            local rowArtist = Instance.new("TextLabel")
+            rowArtist.Name = "TrackRowArtist"
+            rowArtist.Position = UDim2.fromOffset(54, 24)
+            rowArtist.Size = UDim2.new(1, -104, 0, 14)
+            rowArtist.BackgroundTransparency = 1
+            rowArtist.Font = Enum.Font.Code
+            rowArtist.Text = tr.Artist
+            rowArtist.TextColor3 = Color3.fromRGB(155, 155, 155)
+            rowArtist.TextSize = 10
+            rowArtist.TextTruncate = Enum.TextTruncate.AtEnd
+            rowArtist.TextXAlignment = Enum.TextXAlignment.Left
+            rowArtist.ZIndex = 18
+            rowArtist.Parent = rowBtn
+
+            local rowDur = Instance.new("TextLabel")
+            rowDur.Name = "TrackRowDuration"
+            rowDur.AnchorPoint = Vector2.new(1, 0.5)
+            rowDur.Position = UDim2.new(1, -12, 0.5, 0)
+            rowDur.Size = UDim2.fromOffset(42, 14)
+            rowDur.BackgroundTransparency = 1
+            rowDur.Font = Enum.Font.Code
+            rowDur.Text = State.formatTimeMMSS and State.formatTimeMMSS(tr.DefaultDuration or 184) or "03:04"
+            rowDur.TextColor3 = Color3.fromRGB(165, 165, 165)
+            rowDur.TextSize = 11
+            rowDur.TextXAlignment = Enum.TextXAlignment.Right
+            rowDur.ZIndex = 18
+            rowDur.Parent = rowBtn
+
+            spotifyRowRefs[tr.Id] = {
+                Track = tr,
+                Row = rowBtn,
+                Stroke = rowStroke,
+                LeftBar = activeLeftBar,
+                ThumbImg = thumbImg,
+                EqOverlay = eqOverlay,
+                Title = rowTitle,
+            }
+
+            rowBtn.MouseButton1Click:Connect(function()
+                if ConfigState.SelectedTrack == tr.Id then
+                    if State.setMusicPlaying then
+                        State.setMusicPlaying(not State.musicIsPlaying)
+                    end
+                else
+                    ConfigState.SelectedTrack = tr.Id
+                    State.musicSimulatedPos = 0
+                    if State.seekMusicToRatio then
+                        State.seekMusicToRatio(0)
+                    end
+                    if State.setMusicPlaying then
+                        State.setMusicPlaying(true)
+                    end
                 end
             end)
+
+            if State.ensureTrackCoverLoaded then
+                State.ensureTrackCoverLoaded(tr, function(coverAsset)
+                    thumbImg.Image = coverAsset
+                    if ConfigState.SelectedTrack == tr.Id or idx == 1 then
+                        NowPlayingCoverImage.Image = coverAsset
+                    end
+                end)
+            end
         end
+
+        if State.syncSpotifyTabUI then
+            State.syncSpotifyTabUI()
+        end
+        filterSpotifyTracks(SpotifySearchBox.Text)
     end
+    State.rebuildSpotifyTrackRows = rebuildSpotifyTrackRows
 
     -- Sync Callbacks Between Section 11B Audio Controller and Spotify Tab UI
     State.syncSpotifyCover = function(trackId, coverAsset)
@@ -12854,22 +13309,9 @@ end
             ref.Title.TextColor3 = Color3.fromRGB(255, 255, 255)
         end
     end
-    State.syncSpotifyTabUI()
-
-    -- Interactive Search Filter for Tracklist Rows
-    local function filterSpotifyTracks(queryText)
-        local q = string.lower((queryText or ""):gsub("^%s*(.-)%s*$", "%1"))
-        local visibleCount = 0
-        for _, ref in pairs(spotifyRowRefs) do
-            local match = (q == "")
-                or (string.find(string.lower(ref.Track.Title or ""), q, 1, true) ~= nil)
-                or (string.find(string.lower(ref.Track.Artist or ""), q, 1, true) ~= nil)
-            ref.Row.Visible = match
-            if match then
-                visibleCount = visibleCount + 1
-            end
-        end
-        TrackCountLbl.Text = tostring(visibleCount) .. (visibleCount == 1 and " song" or " songs")
+    rebuildSpotifyTrackRows()
+    if State.fetchGithubMusicCatalog then
+        State.fetchGithubMusicCatalog()
     end
 
     if SpotifySearchBox.GetPropertyChangedSignal then
@@ -13038,7 +13480,7 @@ end
         end)
     end)
 
-    createDropdown(MusicTab, "Select Track", State.musicTrackOptions or { "Snowman (Slowed + Reverb) — Sia" }, ConfigState.SelectedTrack or "Snowman (Slowed + Reverb) — Sia", function(opt)
+    local SelectTrackDropdownCtrl = createDropdown(MusicTab, "Select Track", State.musicTrackOptions or { "Snowman (Slowed + Reverb) — Sia" }, ConfigState.SelectedTrack or "Snowman (Slowed + Reverb) — Sia", function(opt)
         ConfigState.SelectedTrack = opt
         State.musicSimulatedPos = 0
         if State.seekMusicToRatio then
@@ -13051,6 +13493,9 @@ end
         end
         notify("Music Player", "Selected track: " .. tostring(opt), 3)
     end)
+    if SelectTrackDropdownCtrl and SelectTrackDropdownCtrl.Refresh then
+        State.refreshMusicTrackDropdown = SelectTrackDropdownCtrl.Refresh
+    end
 
     createToggle(MusicTab, "Toggle Player UI", ConfigState.MusicPlayerVisible == true, function(val)
         ConfigState.MusicPlayerVisible = val
@@ -13107,145 +13552,7 @@ do
         end
     end)
 
-    -- 1. Performance Settings Section Box
-    local perfSec = UI.createSectionBox(SettingsTab, "Performance Settings")
-
-    local autoRuleBanner = Instance.new("TextLabel")
-    autoRuleBanner.Name = "AutoConfigRuleLabel"
-    autoRuleBanner.Size = UDim2.new(1, 0, 0, 18)
-    autoRuleBanner.BackgroundTransparency = 1
-    autoRuleBanner.Font = Enum.Font.Code
-    autoRuleBanner.Text = "Auto On Mobile (Performance) / Auto On PC (Balanced)"
-    autoRuleBanner.TextColor3 = Theme.Muted
-    autoRuleBanner.TextSize = 10
-    autoRuleBanner.TextXAlignment = Enum.TextXAlignment.Left
-    autoRuleBanner.ZIndex = 15
-    autoRuleBanner.Parent = perfSec
-
-    local function applyLowGraphics(enabled)
-        ConfigState.LowGraphicsEnabled = enabled and true or false
-        if enabled then
-            pcall(function()
-                Lighting.GlobalShadows = false
-            end)
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("BasePart") then
-                    if State.lowGraphicsCache[obj] == nil then
-                        State.lowGraphicsCache[obj] = {
-                            Material = obj.Material,
-                            Reflectance = obj.Reflectance or 0,
-                        }
-                    end
-                    pcall(function()
-                        obj.Material = Enum.Material.SmoothPlastic
-                        obj.Reflectance = 0
-                    end)
-                end
-            end
-        else
-            for obj, orig in pairs(State.lowGraphicsCache) do
-                if obj and obj.Parent then
-                    pcall(function()
-                        if orig.Material then obj.Material = orig.Material end
-                        if orig.Reflectance ~= nil then obj.Reflectance = orig.Reflectance end
-                    end)
-                end
-            end
-            table.clear(State.lowGraphicsCache)
-            if not ConfigState.LightingNoShadows then
-                pcall(function()
-                    Lighting.GlobalShadows = State.origLighting.GlobalShadows
-                end)
-            end
-        end
-    end
-    State.applyLowGraphics = applyLowGraphics
-
-    local function applyOptimizeMode(enabled)
-        ConfigState.OptimizeModeEnabled = enabled and true or false
-        if enabled then
-            if UI.MainParticleCanvas then
-                UI.MainParticleCanvas.Visible = false
-            end
-            ConfigState.ShimmerEnabled = false
-        else
-            if UI.MainParticleCanvas then
-                UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false)
-            end
-            ConfigState.ShimmerEnabled = true
-        end
-    end
-    State.applyOptimizeMode = applyOptimizeMode
-
-    local function applyPerformanceProfile(profile)
-        profile = profile or ConfigState.PerformanceProfile or "Auto"
-        ConfigState.PerformanceProfile = profile
-        local isMobileDevice = not isPCDevice()
-        if State.syncKeybindBadgesVisibility then
-            State.syncKeybindBadgesVisibility()
-        end
-        local effective = profile
-        if profile == "Auto" then
-            effective = isMobileDevice and "Performance" or "Balanced"
-        end
-        State.effectivePerformanceMode = effective
-        autoRuleBanner.Text = string.format(
-            "Auto On Mobile (Performance) / Auto On PC (Balanced) · Active: %s",
-            effective
-        )
-        if effective == "Performance" then
-            State.activeProfileFPSCap = 60
-            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = false end
-            pcall(function() Lighting.GlobalShadows = false end)
-        elseif effective == "Quality" then
-            State.activeProfileFPSCap = 240
-            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false) end
-            if not ConfigState.LowGraphicsEnabled and not ConfigState.LightingNoShadows then
-                pcall(function() Lighting.GlobalShadows = true end)
-            end
-        else
-            State.activeProfileFPSCap = 120
-            if UI.MainParticleCanvas then UI.MainParticleCanvas.Visible = (ConfigState.ParticlesEnabled ~= false) and not ConfigState.OptimizeModeEnabled end
-        end
-        if State.isWindowFocused ~= false and Env.setfpscap then
-            pcall(function()
-                Env.setfpscap(State.activeProfileFPSCap)
-            end)
-        end
-    end
-    State.applyPerformanceProfile = applyPerformanceProfile
-
-    createDropdown(perfSec, "Performance Profile", { "Auto", "Quality", "Balanced", "Performance" }, ConfigState.PerformanceProfile or "Auto", function(opt)
-        applyPerformanceProfile(opt)
-    end)
-
-    createToggle(perfSec, "Low Graphics", ConfigState.LowGraphicsEnabled == true, function(val)
-        applyLowGraphics(val)
-    end)
-
-    createToggle(perfSec, "Optimize Mode", ConfigState.OptimizeModeEnabled == true, function(val)
-        applyOptimizeMode(val)
-    end)
-
-    createToggle(perfSec, "Pause Rendering When Tabbed Out", ConfigState.PauseRenderOnTabOut == true, function(val)
-        ConfigState.PauseRenderOnTabOut = val
-        if not State.isWindowFocused then
-            UI.RenderSaverOverlay.Visible = val or (ConfigState.Disable3DRender == true)
-        end
-    end)
-
-    createSlider(perfSec, "FPS When Tabbed Out", 5, 60, ConfigState.FPSWhenTabbedOut or 15, 1, " fps", function(val)
-        ConfigState.FPSWhenTabbedOut = val
-        if not State.isWindowFocused and Env.setfpscap then
-            pcall(function()
-                Env.setfpscap(val)
-            end)
-        end
-    end)
-
-    applyPerformanceProfile(ConfigState.PerformanceProfile or "Auto")
-
-    -- 2. Client Telemetry & Info Section Box (Executor & Device Info Only — Kill Count Removed)
+    -- 1. Client Telemetry & Info Section Box (Performance Settings relocated to WorldTab -> Performance & Optimization)
     local clientSec = UI.createSectionBox(SettingsTab, "Client")
 
     local function detectExecutorName()
@@ -14877,8 +15184,42 @@ do
         if UI.FovCircle.Visible ~= ConfigState.ShowFOV then
             UI.FovCircle.Visible = ConfigState.ShowFOV
         end
-        if ConfigState.ShowFOV and UI.FovOuterStroke then
+        if UI.FovCircle.Visible and UI.FovOuterStroke then
             UI.FovOuterStroke.Thickness = 1.6 + 0.45 * math.sin(animClock * 4.2)
+            local fovMode = ConfigState.FovVisualMode or "Still"
+            local baseCol = ConfigState.FovColor or Theme.White
+            if fovMode == "Rainbow" then
+                local h = (animClock * 0.45) % 1
+                local c1 = hsvToColor3(h, 0.9, 1)
+                local c2 = hsvToColor3((h + 0.33) % 1, 0.9, 1)
+                local c3 = hsvToColor3((h + 0.66) % 1, 0.9, 1)
+                UI.FovOuterStroke.Color = c1
+                if UI.FovGradient then
+                    UI.FovGradient.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0.0, c1),
+                        ColorSequenceKeypoint.new(0.5, c2),
+                        ColorSequenceKeypoint.new(1.0, c3),
+                    })
+                end
+            elseif fovMode == "Gradient" or fovMode == "Gradiant" then
+                local edgeCol = ConfigState.FovGradientColor or Color3.fromRGB(55, 55, 68)
+                UI.FovOuterStroke.Color = Color3.fromRGB(255, 255, 255)
+                if UI.FovGradient then
+                    UI.FovGradient.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0.0, edgeCol),
+                        ColorSequenceKeypoint.new(0.35, edgeCol),
+                        ColorSequenceKeypoint.new(0.5, baseCol),
+                        ColorSequenceKeypoint.new(0.65, edgeCol),
+                        ColorSequenceKeypoint.new(1.0, edgeCol),
+                    })
+                end
+            else
+                -- Still (Plain Solid Color FOV)
+                UI.FovOuterStroke.Color = baseCol
+                if UI.FovGradient then
+                    UI.FovGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+                end
+            end
         end
 
         -- Classic Single-Toggle Aimbot Lock-In (Frame-rate independent exponential smoothing + horizontal character tracking)
