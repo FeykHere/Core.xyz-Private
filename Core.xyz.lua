@@ -77,8 +77,8 @@ local AUTO_LOAD_FILE = FS_FOLDER .. "/AutoLoadConfig.txt"
 local KEY_META_FILE = FS_FOLDER .. "/PlatoKeyMeta.json"
 local SAVED_KEY_FILE = FS_FOLDER .. "/SavedKey.json"
 local CHANGELOG_SEEN_FILE = FS_FOLDER .. "/SeenChangelogVersion.txt"
-local CHANGELOG_VERSION = "v4.4"
-local CHANGELOG_DATE = "Nov 3, 2026"
+local CHANGELOG_VERSION = "Beta"
+local CHANGELOG_DATE = "Nov 6, 2026"
 local WAYPOINTS_FILE = FS_FOLDER .. "/Waypoints_" .. CURRENT_PLACE_ID .. ".json"
 
 pcall(function()
@@ -1603,7 +1603,7 @@ do
     RenderSaverLabel.Size = UDim2.fromOffset(420, 60)
     RenderSaverLabel.BackgroundTransparency = 1
     RenderSaverLabel.Font = Enum.Font.GothamBlack
-    RenderSaverLabel.Text = "CORE.XYZ  ·  3D RENDERING DISABLED (GPU SAVER ACTIVE)"
+    RenderSaverLabel.Text = "CORE.XYZ"
     RenderSaverLabel.TextColor3 = Theme.Muted
     RenderSaverLabel.TextSize = 14
     RenderSaverLabel.ZIndex = 6
@@ -2083,7 +2083,7 @@ do
     KeyInputBox.Size = UDim2.new(1, -68, 1, 0)
     KeyInputBox.BackgroundTransparency = 1
     KeyInputBox.Font = Enum.Font.Code
-    KeyInputBox.PlaceholderText = "Paste your Platoboost key here..."
+    KeyInputBox.PlaceholderText = "Paste Your key here..."
     KeyInputBox.PlaceholderColor3 = Theme.Muted
     KeyInputBox.Text = ""
     KeyInputBox.TextColor3 = Theme.White
@@ -2312,7 +2312,7 @@ do
     KeyFooter.Size = UDim2.new(1, -48, 0, 16)
     KeyFooter.BackgroundTransparency = 1
     KeyFooter.Font = Enum.Font.Code
-    KeyFooter.Text = "SECURED BY PLATOBOOST  ·  ACCURATE LIVE KEY DURATION"
+    KeyFooter.Text = "SECURED BY PLATOBOOST & CLOUDFLARE"
     KeyFooter.TextColor3 = Theme.Silver
     KeyFooter.TextSize = 9
     KeyFooter.TextXAlignment = Enum.TextXAlignment.Center
@@ -2324,7 +2324,7 @@ do
     KeyFooterSub.Size = UDim2.new(1, -48, 0, 14)
     KeyFooterSub.BackgroundTransparency = 1
     KeyFooterSub.Font = Enum.Font.Code
-    KeyFooterSub.Text = "SUPPORTS 24H STANDARD & DEVELOPER KEYS"
+    KeyFooterSub.Text = "nil"
     KeyFooterSub.TextColor3 = Theme.Muted
     KeyFooterSub.TextSize = 8
     KeyFooterSub.TextXAlignment = Enum.TextXAlignment.Center
@@ -2453,7 +2453,7 @@ do
     ChangelogSubtitle.Size = UDim2.new(1, -124, 0, 14)
     ChangelogSubtitle.BackgroundTransparency = 1
     ChangelogSubtitle.Font = Enum.Font.Code
-    ChangelogSubtitle.Text = "RELEASE NOTES  ·  SHOWS ONCE PER UPDATE"
+    ChangelogSubtitle.Text = "RELEASE NOTES"
     ChangelogSubtitle.TextColor3 = Theme.Muted
     ChangelogSubtitle.TextSize = 9
     ChangelogSubtitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -2561,21 +2561,17 @@ do
     end
 
     createChangelogGroup(1, "[-] Removed Features", Color3.fromRGB(255, 92, 108), {
-        "[-] Removed experimental custom-rig hitpart scanner",
-        "[-] Removed 3-step key guide bar & kill counter clutter",
+        "[-] Removed ESP Preview MINI-UI.",
+        "[-] Remove __newindex & __namecall",
     })
 
     createChangelogGroup(2, "[+] Added Features", Color3.fromRGB(72, 245, 148), {
-        "[+] Added Save-Key toggle with automatic key expiry check & direct launch",
-        "[+] Added one-time per-update Changelog " .. CHANGELOG_VERSION .. " popup note",
-        "[+] Added professional multi-stop Red & Green Key System gradients",
-        "[+] Added full touch & drag 2D HSV + Hue + Alpha Color Picker",
+        "[+] Added New Reworked Ui",
     })
 
     createChangelogGroup(3, "[*] Fixed", Color3.fromRGB(105, 205, 255), {
-        "[*] Fixed Color Picker touch/drag input & swatch selection bugs",
-        "[*] Fixed UI border lines, corner seams & Floating Pill gradient rotation",
-        "[*] Fixed default combat checks (Wall, Team & Whitelist off by default)",
+        "[*] Fixed Aimbot & 3D Esp Visuals",
+        "[*] Fixed Color Picker UI lag",
     })
 
     local function closeChangelogModal()
@@ -3660,7 +3656,7 @@ do
     pickerTitle.Size = UDim2.new(1, -40, 1, 0)
     pickerTitle.BackgroundTransparency = 1
     pickerTitle.Font = Enum.Font.Code
-    pickerTitle.Text = "COLOR PICKER  ·  TOUCH & DRAG"
+    pickerTitle.Text = "COLOR PICKER"
     pickerTitle.TextColor3 = Theme.Silver
     pickerTitle.TextSize = 9
     pickerTitle.TextXAlignment = Enum.TextXAlignment.Left
