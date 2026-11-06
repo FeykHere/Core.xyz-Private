@@ -1878,7 +1878,7 @@ do
     LoaderFooterHint.Size = UDim2.new(1, -48, 0, 14)
     LoaderFooterHint.BackgroundTransparency = 1
     LoaderFooterHint.Font = Enum.Font.Code
-    LoaderFooterHint.Text = "UNIVERSAL EDITION  ·  V4.5"
+    LoaderFooterHint.Text = "UNIVERSAL AIMBOT  ·  BETA"
     LoaderFooterHint.TextColor3 = Theme.Muted
     LoaderFooterHint.TextTransparency = 1
     LoaderFooterHint.TextSize = 9
@@ -3062,7 +3062,7 @@ do
     HeaderSub.Size = UDim2.fromOffset(195, 18)
     HeaderSub.BackgroundTransparency = 1
     HeaderSub.Font = Enum.Font.Code
-    HeaderSub.Text = "universal · home"
+    HeaderSub.Text = "universal Aimbot | home"
     HeaderSub.TextColor3 = Color3.fromRGB(90, 90, 90)
     HeaderSub.TextStrokeTransparency = 0.5
     HeaderSub.TextSize = 11
