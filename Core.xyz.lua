@@ -3048,7 +3048,7 @@ do
     HeaderTitle.Size = UDim2.fromOffset(165, 18)
     HeaderTitle.BackgroundTransparency = 1
     HeaderTitle.Font = Enum.Font.Code
-    HeaderTitle.Text = "vaderpaste | core.xyz"
+    HeaderTitle.Text = "core.xyz | beta"
     HeaderTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
     HeaderTitle.TextStrokeTransparency = 0.5
     HeaderTitle.TextSize = 12
@@ -3394,7 +3394,7 @@ local function createTab(name, order)
         end
         State.activeTab = tabObj
         if UI.HeaderSub then
-            UI.HeaderSub.Text = "UNIVERSAL EDITION  ·  " .. string.upper(tostring(name))
+            UI.HeaderSub.Text = "UNIVERSAL AIMBOT  " .. string.upper(tostring(name))
         end
         tween(btn, FastTween, {
             TextColor3 = Color3.fromRGB(170, 170, 170),
