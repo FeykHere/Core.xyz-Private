@@ -5579,32 +5579,46 @@ local function updateESP(camera)
     end
 end
 
+local cachedRayExcludeList = {}
+local lastRayExcludeChar = nil
+local lastRayExcludeCam = nil
+local lastRayExcludeRefresh = 0
+
 local function getSafeRaycastExcludeList()
-    local list = {}
-    if LocalPlayer.Character then
-        table.insert(list, LocalPlayer.Character)
+    local now = os.clock()
+    local myChar = LocalPlayer and LocalPlayer.Character
+    local cam = workspace.CurrentCamera
+    if myChar ~= lastRayExcludeChar or cam ~= lastRayExcludeCam or (now - lastRayExcludeRefresh) > 0.25 then
+        lastRayExcludeChar = myChar
+        lastRayExcludeCam = cam
+        lastRayExcludeRefresh = now
+        table.clear(cachedRayExcludeList)
+        if myChar then
+            table.insert(cachedRayExcludeList, myChar)
+        end
+        if cam then
+            table.insert(cachedRayExcludeList, cam)
+        end
+        local effectsFolder = workspace:FindFirstChild("Effects")
+        if effectsFolder then
+            table.insert(cachedRayExcludeList, effectsFolder)
+        end
+        local bulletsFolder = workspace:FindFirstChild("Bullets")
+        if bulletsFolder then
+            table.insert(cachedRayExcludeList, bulletsFolder)
+        end
+        if UI.WeatherEmitterPart then
+            table.insert(cachedRayExcludeList, UI.WeatherEmitterPart)
+        end
+        if UI.WeatherGroundPart then
+            table.insert(cachedRayExcludeList, UI.WeatherGroundPart)
+        end
+        if UI.LightningBoltPool then
+            table.insert(cachedRayExcludeList, UI.LightningBoltPool)
+        end
+        rayParams.FilterDescendantsInstances = cachedRayExcludeList
     end
-    if workspace.CurrentCamera then
-        table.insert(list, workspace.CurrentCamera)
-    end
-    local effectsFolder = workspace:FindFirstChild("Effects")
-    if effectsFolder then
-        table.insert(list, effectsFolder)
-    end
-    local bulletsFolder = workspace:FindFirstChild("Bullets")
-    if bulletsFolder then
-        table.insert(list, bulletsFolder)
-    end
-    if UI.WeatherEmitterPart then
-        table.insert(list, UI.WeatherEmitterPart)
-    end
-    if UI.WeatherGroundPart then
-        table.insert(list, UI.WeatherGroundPart)
-    end
-    if UI.LightningBoltPool then
-        table.insert(list, UI.LightningBoltPool)
-    end
-    return list
+    return cachedRayExcludeList
 end
 
 local function getClosestTarget(camera)
@@ -5618,7 +5632,7 @@ local function getClosestTarget(camera)
     local originPos = (myHRP and myHRP.Position) or (camera.CFrame and camera.CFrame.Position) or Vector3.zero
 
     if useWallCheck then
-        rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
+        getSafeRaycastExcludeList()
     end
 
     for _, player in ipairs(getAllTargetEntities()) do
@@ -10884,14 +10898,157 @@ do
     end
     State.monitorAllEnemyDeaths = monitorAllEnemyDeaths
 
-    -- Triggerbot Execution (Works on Real Players + Workspace Bots with O(1) Ancestor Model Lookup)
+    -- Triggerbot Execution (Dual Mobile + PC Native Support — Zero PC-Mode Input Switching on Mobile!)
     State.triggerAcquireTime = nil
     State.lastTriggerShotClock = 0
+
+    local function isMobileSessionActive()
+        local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+        if pgui then
+            local mobBtns = pgui:FindFirstChild("MobileButtons")
+            if mobBtns and mobBtns:IsA("ScreenGui") and mobBtns.Enabled then
+                return true
+            end
+            local gInterface = pgui:FindFirstChild("Game Interface") or pgui:FindFirstChild("GameInterface_Mobile")
+            if gInterface and gInterface:GetAttribute("isMobile") == true then
+                return true
+            end
+            local touchGui = pgui:FindFirstChild("TouchGui")
+            if touchGui and touchGui:IsA("ScreenGui") and touchGui.Enabled then
+                return true
+            end
+        end
+        return (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
+    end
+
+    local function ensureMobileControlsVisible()
+        pcall(function()
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            if not pgui then return end
+            local mobBtns = pgui:FindFirstChild("MobileButtons")
+            if mobBtns and mobBtns:IsA("ScreenGui") and not mobBtns.Enabled then
+                mobBtns.Enabled = true
+            end
+            local touchGui = pgui:FindFirstChild("TouchGui")
+            if touchGui and touchGui:IsA("ScreenGui") and not touchGui.Enabled then
+                touchGui.Enabled = true
+            end
+        end)
+    end
+
+    local function fireConnectionsOnSignal(sig, ...)
+        local firedAny = false
+        if not sig then return false end
+        if type(Env.firesignal) == "function" then
+            local ok = pcall(Env.firesignal, sig, ...)
+            if ok then firedAny = true end
+        end
+        if type(Env.getconnections) == "function" then
+            local ok, list = pcall(Env.getconnections, sig)
+            if ok and type(list) == "table" then
+                for _, conn in ipairs(list) do
+                    if conn and type(conn.Fire) == "function" then
+                        pcall(conn.Fire, conn, ...)
+                        firedAny = true
+                    elseif conn and type(conn.Function) == "function" then
+                        pcall(conn.Function, ...)
+                        firedAny = true
+                    end
+                end
+            end
+        end
+        return firedAny
+    end
 
     local function fireWeaponClick()
         local now = os.clock()
         if now - (State.lastTriggerShotClock or 0) < 0.08 then return end
         State.lastTriggerShotClock = now
+
+        -- MOBILE PATH: Never call mouse1click / SendMouseButtonEvent on Mobile!
+        -- Sending MouseButton1 on Mobile flips UserInputService:GetLastInputType() to MouseButton1,
+        -- which disables TouchGui thumbsticks and hides OneShot's MobileButtons for several seconds.
+        if isMobileSessionActive() then
+            pcall(function()
+                ensureMobileControlsVisible()
+                local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+                local mobBtns = pgui and pgui:FindFirstChild("MobileButtons")
+                local buttonsFrame = mobBtns and mobBtns:FindFirstChild("Buttons")
+                local attackBtn = buttonsFrame and buttonsFrame:FindFirstChild("Attack")
+
+                local myChar = LocalPlayer and LocalPlayer.Character
+                local prevPrimaryShot = myChar and myChar:GetAttribute("lastShotPrimary")
+                local prevSecondaryShot = myChar and myChar:GetAttribute("lastShotSecondary")
+
+                local dispatchedViaSignal = false
+                if attackBtn and attackBtn:IsA("GuiButton") then
+                    local absPos = attackBtn.AbsolutePosition
+                    local absSize = attackBtn.AbsoluteSize
+                    local cx = absPos.X + absSize.X * 0.5
+                    local cy = absPos.Y + absSize.Y * 0.5
+
+                    local touchBeginObj = {
+                        UserInputType = Enum.UserInputType.Touch,
+                        UserInputState = Enum.UserInputState.Begin,
+                        Position = Vector3.new(cx, cy, 0),
+                        Delta = Vector3.zero,
+                        KeyCode = Enum.KeyCode.Unknown,
+                    }
+                    local touchEndObj = {
+                        UserInputType = Enum.UserInputType.Touch,
+                        UserInputState = Enum.UserInputState.End,
+                        Position = Vector3.new(cx, cy, 0),
+                        Delta = Vector3.zero,
+                        KeyCode = Enum.KeyCode.Unknown,
+                    }
+
+                    local f1 = fireConnectionsOnSignal(attackBtn.InputBegan, touchBeginObj, false)
+                    local f2 = fireConnectionsOnSignal(attackBtn.MouseButton1Down, cx, cy)
+                    local f3 = fireConnectionsOnSignal(attackBtn.Activated, touchBeginObj, 1)
+                    local f4 = fireConnectionsOnSignal(attackBtn.MouseButton1Click)
+                    dispatchedViaSignal = (f1 or f2 or f3 or f4)
+
+                    task.delay(0.025, function()
+                        pcall(function()
+                            fireConnectionsOnSignal(attackBtn.InputEnded, touchEndObj, false)
+                            fireConnectionsOnSignal(attackBtn.MouseButton1Up, cx, cy)
+                            ensureMobileControlsVisible()
+                        end)
+                    end)
+
+                    -- Fallback to VirtualInputManager:SendTouchEvent (Pure Touch input, NEVER switches to PC mode!)
+                    local shotChanged = myChar and (
+                        myChar:GetAttribute("lastShotPrimary") ~= prevPrimaryShot or
+                        myChar:GetAttribute("lastShotSecondary") ~= prevSecondaryShot
+                    )
+                    if (not dispatchedViaSignal or not shotChanged) and VirtualInputManager and type(VirtualInputManager.SendTouchEvent) == "function" then
+                        local insetY = 0
+                        pcall(function()
+                            local gs = safeGetService("GuiService")
+                            if gs and gs.GetGuiInset then
+                                local inset = gs:GetGuiInset()
+                                insetY = (inset and inset.Y) or 0
+                            end
+                        end)
+                        local tx = math.floor(cx)
+                        local ty = math.floor(cy + insetY)
+                        -- Use touchId 77 so it never collides with finger 0 on the movement thumbstick
+                        pcall(function()
+                            VirtualInputManager:SendTouchEvent(77, 0, tx, ty)
+                        end)
+                        task.delay(0.025, function()
+                            pcall(function()
+                                VirtualInputManager:SendTouchEvent(77, 2, tx, ty)
+                                ensureMobileControlsVisible()
+                            end)
+                        end)
+                    end
+                end
+            end)
+            return
+        end
+
+        -- PC DESKTOP PATH
         pcall(function()
             if Env.mouse1click then
                 Env.mouse1click()
@@ -10951,7 +11108,7 @@ do
             return
         end
 
-        rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
+        getSafeRaycastExcludeList()
         local origin = camera.CFrame.Position
         local dir = camera.CFrame.LookVector * 1500
         local rayResult = workspace:Raycast(origin, dir, rayParams)
@@ -12925,39 +13082,104 @@ do
             UI.FovCircle.Visible = ConfigState.ShowFOV
         end
         if UI.FovCircle.Visible and UI.FovOuterStroke then
-            UI.FovOuterStroke.Thickness = 1.6 + 0.45 * math.sin(animClock * 4.2)
             local fovMode = ConfigState.FovVisualMode or "Still"
             local baseCol = ConfigState.FovColor or Theme.White
+            local baseDia = (tonumber(ConfigState.FOVRadius) or 85) * 2
+
             if fovMode == "Rainbow" then
-                local h = (animClock * 0.45) % 1
-                local c1 = hsvToColor3(h, 0.9, 1)
-                local c2 = hsvToColor3((h + 0.33) % 1, 0.9, 1)
-                local c3 = hsvToColor3((h + 0.66) % 1, 0.9, 1)
-                UI.FovOuterStroke.Color = c1
-                if UI.FovGradient then
-                    UI.FovGradient.Color = ColorSequence.new({
-                        ColorSequenceKeypoint.new(0.0, c1),
-                        ColorSequenceKeypoint.new(0.5, c2),
-                        ColorSequenceKeypoint.new(1.0, c3),
-                    })
-                end
-            elseif fovMode == "Gradient" or fovMode == "Gradiant" then
-                local edgeCol = ConfigState.FovGradientColor or Color3.fromRGB(55, 55, 68)
+                UI.FovCircle.Size = UDim2.fromOffset(baseDia, baseDia)
+                UI.FovOuterStroke.Thickness = 2.0
+                UI.FovOuterStroke.Transparency = 0
                 UI.FovOuterStroke.Color = Color3.fromRGB(255, 255, 255)
+                local h = (animClock * 0.45) % 1
                 if UI.FovGradient then
                     UI.FovGradient.Color = ColorSequence.new({
-                        ColorSequenceKeypoint.new(0.0, edgeCol),
-                        ColorSequenceKeypoint.new(0.35, edgeCol),
-                        ColorSequenceKeypoint.new(0.5, baseCol),
-                        ColorSequenceKeypoint.new(0.65, edgeCol),
-                        ColorSequenceKeypoint.new(1.0, edgeCol),
+                        ColorSequenceKeypoint.new(0.0, hsvToColor3(h, 0.92, 1)),
+                        ColorSequenceKeypoint.new(0.2, hsvToColor3((h + 0.2) % 1, 0.92, 1)),
+                        ColorSequenceKeypoint.new(0.4, hsvToColor3((h + 0.4) % 1, 0.92, 1)),
+                        ColorSequenceKeypoint.new(0.6, hsvToColor3((h + 0.6) % 1, 0.92, 1)),
+                        ColorSequenceKeypoint.new(0.8, hsvToColor3((h + 0.8) % 1, 0.92, 1)),
+                        ColorSequenceKeypoint.new(1.0, hsvToColor3(h, 0.92, 1)),
                     })
+                    UI.FovGradient.Transparency = NumberSequence.new(0)
+                    UI.FovGradient.Rotation = (animClock * 120) % 360
+                end
+            elseif fovMode == "Spin Gradient" or fovMode == "Gradient" or fovMode == "Gradiant" then
+                UI.FovCircle.Size = UDim2.fromOffset(baseDia, baseDia)
+                UI.FovOuterStroke.Thickness = 2.1
+                UI.FovOuterStroke.Transparency = 0
+                UI.FovOuterStroke.Color = Color3.fromRGB(255, 255, 255)
+                local tailCol = Color3.new(baseCol.R * 0.18, baseCol.G * 0.18, baseCol.B * 0.18)
+                local peakCol = baseCol:Lerp(Color3.fromRGB(255, 255, 255), 0.35)
+                if UI.FovGradient then
+                    UI.FovGradient.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0.0, tailCol),
+                        ColorSequenceKeypoint.new(0.35, baseCol),
+                        ColorSequenceKeypoint.new(0.50, peakCol),
+                        ColorSequenceKeypoint.new(0.65, baseCol),
+                        ColorSequenceKeypoint.new(1.0, tailCol),
+                    })
+                    UI.FovGradient.Transparency = NumberSequence.new({
+                        NumberSequenceKeypoint.new(0.0, 0.78),
+                        NumberSequenceKeypoint.new(0.30, 0.28),
+                        NumberSequenceKeypoint.new(0.50, 0.0),
+                        NumberSequenceKeypoint.new(0.70, 0.28),
+                        NumberSequenceKeypoint.new(1.0, 0.78),
+                    })
+                    UI.FovGradient.Rotation = (animClock * 175) % 360
+                end
+            elseif fovMode == "Double Sided" then
+                UI.FovCircle.Size = UDim2.fromOffset(baseDia, baseDia)
+                UI.FovOuterStroke.Thickness = 2.1
+                UI.FovOuterStroke.Transparency = 0
+                UI.FovOuterStroke.Color = Color3.fromRGB(255, 255, 255)
+                local gapCol = Color3.fromRGB(24, 24, 32)
+                local peakCol = baseCol:Lerp(Color3.fromRGB(255, 255, 255), 0.3)
+                if UI.FovGradient then
+                    UI.FovGradient.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0.0, peakCol),
+                        ColorSequenceKeypoint.new(0.14, baseCol),
+                        ColorSequenceKeypoint.new(0.25, gapCol),
+                        ColorSequenceKeypoint.new(0.36, baseCol),
+                        ColorSequenceKeypoint.new(0.50, peakCol),
+                        ColorSequenceKeypoint.new(0.64, baseCol),
+                        ColorSequenceKeypoint.new(0.75, gapCol),
+                        ColorSequenceKeypoint.new(0.86, baseCol),
+                        ColorSequenceKeypoint.new(1.0, peakCol),
+                    })
+                    UI.FovGradient.Transparency = NumberSequence.new({
+                        NumberSequenceKeypoint.new(0.0, 0.0),
+                        NumberSequenceKeypoint.new(0.14, 0.08),
+                        NumberSequenceKeypoint.new(0.25, 0.85),
+                        NumberSequenceKeypoint.new(0.36, 0.08),
+                        NumberSequenceKeypoint.new(0.50, 0.0),
+                        NumberSequenceKeypoint.new(0.64, 0.08),
+                        NumberSequenceKeypoint.new(0.75, 0.85),
+                        NumberSequenceKeypoint.new(0.86, 0.08),
+                        NumberSequenceKeypoint.new(1.0, 0.0),
+                    })
+                    UI.FovGradient.Rotation = (animClock * 140) % 360
+                end
+            elseif fovMode == "Pulse" then
+                local pulseWave = (math.sin(animClock * 5.2) + 1) * 0.5
+                local pulseDia = baseDia + math.floor((pulseWave - 0.5) * 10)
+                UI.FovCircle.Size = UDim2.fromOffset(pulseDia, pulseDia)
+                UI.FovOuterStroke.Thickness = 1.1 + pulseWave * 1.9
+                UI.FovOuterStroke.Transparency = 0.02 + (1 - pulseWave) * 0.45
+                UI.FovOuterStroke.Color = baseCol:Lerp(Color3.fromRGB(255, 255, 255), pulseWave * 0.45)
+                if UI.FovGradient then
+                    UI.FovGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+                    UI.FovGradient.Transparency = NumberSequence.new(0)
                 end
             else
                 -- Still (Plain Solid Color FOV)
+                UI.FovCircle.Size = UDim2.fromOffset(baseDia, baseDia)
+                UI.FovOuterStroke.Thickness = 1.8
+                UI.FovOuterStroke.Transparency = 0.05
                 UI.FovOuterStroke.Color = baseCol
                 if UI.FovGradient then
                     UI.FovGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+                    UI.FovGradient.Transparency = NumberSequence.new(0)
                 end
             end
         end
@@ -13080,10 +13302,12 @@ do
             for _, item in ipairs(State.liveGradients) do
                 if item.Gradient and item.Gradient.Parent then
                     local target = item.Target
-                    local isAlwaysActiveTarget = (target == UI.FloatingToggle or target == UI.FovCircle)
-                    local isTargetVisible = (not target) or (target.Visible ~= false)
-                    if isTargetVisible and (isAlwaysActiveTarget or ConfigState.ShimmerEnabled ~= false) then
-                        item.Gradient.Rotation = (item.Offset + animClock * item.Speed) % 360
+                    if target ~= UI.FovCircle then
+                        local isAlwaysActiveTarget = (target == UI.FloatingToggle)
+                        local isTargetVisible = (not target) or (target.Visible ~= false)
+                        if isTargetVisible and (isAlwaysActiveTarget or ConfigState.ShimmerEnabled ~= false) then
+                            item.Gradient.Rotation = (item.Offset + animClock * item.Speed) % 360
+                        end
                     end
                 end
             end
@@ -13092,10 +13316,6 @@ do
                 if rot.Instance and rot.Instance.Parent then
                     rot.Instance.Rotation = (animClock * rot.Speed) % 360
                 end
-            end
-
-            if ConfigState.ShowFOV and UI.FovOuterStroke then
-                UI.FovOuterStroke.Thickness = 1.6 + 0.45 * math.sin(animClock * 4.2)
             end
 
             if menuCardOpen then
