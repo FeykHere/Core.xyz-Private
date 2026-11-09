@@ -11200,10 +11200,105 @@ do
             end)
         end
 
-        -- 2. Instant Reload
+        -- 2. Instant Reload (Completes WeaponManager reload timers, fires AnimationTrack completion, and restores full clip state)
+        if not State.savedWeaponReloadStats then
+            State.savedWeaponReloadStats = setmetatable({}, { __mode = "k" })
+        end
+
+        local function syncWeaponManagerReloadTimings(enableInstant)
+            pcall(function()
+                if not ReplicatedStorage then
+                    ReplicatedStorage = safeGetService("ReplicatedStorage")
+                end
+                if not ReplicatedStorage then return end
+                local common = ReplicatedStorage:FindFirstChild("Common")
+                local managers = common and common:FindFirstChild("Managers")
+                local wm = managers and managers:FindFirstChild("WeaponManager")
+                local wepMod = wm and wm:FindFirstChild("_Weapons")
+                if wepMod and wepMod:IsA("ModuleScript") then
+                    local ok, wepTable = pcall(require, wepMod)
+                    if ok and type(wepTable) == "table" then
+                        local reloadKeys = {
+                            "reloadTime", "ReloadTime", "reloadDuration", "ReloadDuration",
+                            "reloadSpeed", "ReloadSpeed", "boltTime", "BoltTime", "boltingTime",
+                        }
+                        for _, wData in pairs(wepTable) do
+                            if type(wData) == "table" then
+                                if enableInstant then
+                                    if not State.savedWeaponReloadStats[wData] then
+                                        local backup = {}
+                                        for _, k in ipairs(reloadKeys) do
+                                            if type(wData[k]) == "number" then
+                                                backup[k] = wData[k]
+                                            end
+                                        end
+                                        State.savedWeaponReloadStats[wData] = backup
+                                    end
+                                    for _, k in ipairs(reloadKeys) do
+                                        if type(wData[k]) == "number" then
+                                            wData[k] = 0.01
+                                        end
+                                    end
+                                else
+                                    local backup = State.savedWeaponReloadStats[wData]
+                                    if backup then
+                                        for k, origVal in pairs(backup) do
+                                            wData[k] = origVal
+                                        end
+                                        State.savedWeaponReloadStats[wData] = nil
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        State.syncWeaponManagerReloadTimings = syncWeaponManagerReloadTimings
+
+        local function completeReloadAnimationTracks(animator)
+            if not animator then return end
+            pcall(function()
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    local tName = string.lower(tostring(track.Name or (track.Animation and track.Animation.Name) or ""))
+                    if string.find(tName, "reload", 1, true) or string.find(tName, "bolt", 1, true) then
+                        track:AdjustSpeed(100)
+                        if type(track.Length) == "number" and track.Length > 0 then
+                            track.TimePosition = math.max(0, track.Length - 0.005)
+                        end
+                        track:Stop(0)
+                    end
+                end
+            end)
+        end
+
+        if myChar then
+            pcall(function()
+                local pb = myChar:GetAttribute("Primary_bullets")
+                if type(pb) == "number" and pb > (State.maxPrimaryClip or 0) then
+                    State.maxPrimaryClip = pb
+                end
+                local sb = myChar:GetAttribute("Secondary_bullets")
+                if type(sb) == "number" and sb > (State.maxSecondaryClip or 0) then
+                    State.maxSecondaryClip = sb
+                end
+            end)
+        end
+
         if ConfigState.InstantReload then
+            if not State.instantReloadTimingsApplied then
+                State.instantReloadTimingsApplied = true
+                syncWeaponManagerReloadTimings(true)
+            end
+
             if myChar then
                 pcall(function()
+                    if myChar:GetAttribute("reloading") == true then
+                        myChar:SetAttribute("reloading", false)
+                    end
+                    if myChar:GetAttribute("isReloading") == true then
+                        myChar:SetAttribute("isReloading", false)
+                    end
                     if myChar:GetAttribute("lastShotPrimary") ~= nil then
                         myChar:SetAttribute("lastShotPrimary", 0)
                     end
@@ -11211,38 +11306,24 @@ do
                         myChar:SetAttribute("lastShotSecondary", 0)
                     end
                     local pb = myChar:GetAttribute("Primary_bullets")
-                    if type(pb) == "number" and pb == 0 then
-                        myChar:SetAttribute("Primary_bullets", 1)
+                    if type(pb) == "number" and pb <= 0 then
+                        myChar:SetAttribute("Primary_bullets", math.max(1, State.maxPrimaryClip or 1))
+                    end
+                    local sb = myChar:GetAttribute("Secondary_bullets")
+                    if type(sb) == "number" and sb <= 0 then
+                        myChar:SetAttribute("Secondary_bullets", math.max(1, State.maxSecondaryClip or 6))
                     end
                 end)
                 local hum = myChar:FindFirstChildOfClass("Humanoid")
                 local animator = hum and hum:FindFirstChildOfClass("Animator")
-                if animator then
-                    pcall(function()
-                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                            local tName = string.lower(tostring(track.Name or (track.Animation and track.Animation.Name) or ""))
-                            if string.find(tName, "reload", 1, true) then
-                                track:AdjustSpeed(100)
-                            end
-                        end
-                    end)
-                end
+                completeReloadAnimationTracks(animator)
             end
 
             local vm = cam and cam:FindFirstChild("Viewmodel")
             if vm then
                 local animCtrl = vm:FindFirstChildOfClass("AnimationController") or vm:FindFirstChildOfClass("Humanoid")
                 local vmAnimator = animCtrl and animCtrl:FindFirstChildOfClass("Animator")
-                if vmAnimator then
-                    pcall(function()
-                        for _, track in ipairs(vmAnimator:GetPlayingAnimationTracks()) do
-                            local tName = string.lower(tostring(track.Name or (track.Animation and track.Animation.Name) or ""))
-                            if string.find(tName, "reload", 1, true) then
-                                track:AdjustSpeed(100)
-                            end
-                        end
-                    end)
-                end
+                completeReloadAnimationTracks(vmAnimator)
             end
 
             pcall(function()
@@ -11253,6 +11334,9 @@ do
                     reloadBar.Visible = false
                 end
             end)
+        elseif State.instantReloadTimingsApplied then
+            State.instantReloadTimingsApplied = false
+            syncWeaponManagerReloadTimings(false)
         end
 
         -- 3. Viewmodel CFrame Offset & Muzzle Smoke Suppression
@@ -11716,6 +11800,9 @@ do
     end, { ShowKeybindBadge = true })
     createToggle(MiscTab, "Instant Reload", false, function(val)
         ConfigState.InstantReload = val
+        if State.syncWeaponManagerReloadTimings then
+            State.syncWeaponManagerReloadTimings(val)
+        end
     end, { ShowKeybindBadge = true })
     createToggle(MiscTab, "Auto-Respawn (Bypass Killcam)", false, function(val)
         ConfigState.AutoRespawn = val
