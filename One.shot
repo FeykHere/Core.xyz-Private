@@ -1,5 +1,5 @@
 --[=[
-    CORE.XYZ | UNIVERSAL ROBLOX LUA SCRIPT (V5.0 PRODUCTION RELEASE)
+    CORE.XYZ | UNIVERSAL ROBLOX LUA SCRIPT (V5.1 ONESHOT PRODUCTION RELEASE)
     Theme: Pure Black & White Monochrome (With Full RGB & Theme Freedom in Settings)
     Architecture:
       1. Zero Metatable Hooks (No __namecall, __index, hookmetamethod, or restricted C++ telemetry calls)
@@ -489,15 +489,15 @@ local State = {
     espObjects = {},
     cachedAimTarget = nil,
     targetScanAccumulator = 0,
-    noclipCollideCache = {},
-    antiFlingCollideCache = {},
-    hitboxCache = {},
-    xrayCache = {},
-    promptDurationCache = {},
-    headlessCache = {},
-    korbloxCache = {},
-    selfChamsCache = {},
-    toolVisualsCache = {},
+    noclipCollideCache = setmetatable({}, { __mode = "k" }),
+    antiFlingCollideCache = setmetatable({}, { __mode = "k" }),
+    hitboxCache = setmetatable({}, { __mode = "k" }),
+    xrayCache = setmetatable({}, { __mode = "k" }),
+    promptDurationCache = setmetatable({}, { __mode = "k" }),
+    headlessCache = setmetatable({}, { __mode = "k" }),
+    korbloxCache = setmetatable({}, { __mode = "k" }),
+    selfChamsCache = setmetatable({}, { __mode = "k" }),
+    toolVisualsCache = setmetatable({}, { __mode = "k" }),
     clearedAtmosphereCache = {},
     suppressedSkyInstances = {},
     lowGraphicsCache = {},
@@ -872,82 +872,6 @@ do
     UI.FovCircle = FovCircle
     UI.FovOuterStroke = FovOuterStroke
     UI.FovGradient = FovGradient
-
-    local CrosshairContainer = Instance.new("Frame")
-    CrosshairContainer.Name = "CrosshairContainer"
-    CrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5)
-    CrosshairContainer.Position = UDim2.fromScale(0.5, 0.5)
-    CrosshairContainer.Size = UDim2.fromOffset(120, 120)
-    CrosshairContainer.BackgroundTransparency = 1
-    CrosshairContainer.Visible = false
-    CrosshairContainer.ZIndex = 7
-    CrosshairContainer.Parent = OverlayContainer
-    UI.CrosshairContainer = CrosshairContainer
-
-    local CrosshairV = Instance.new("Frame")
-    CrosshairV.Name = "CrosshairV"
-    CrosshairV.AnchorPoint = Vector2.new(0.5, 0.5)
-    CrosshairV.Position = UDim2.fromScale(0.5, 0.5)
-    CrosshairV.Size = UDim2.fromOffset(ConfigState.CrosshairWidth, ConfigState.CrosshairSize * 2)
-    CrosshairV.BackgroundColor3 = State.crosshairColor
-    CrosshairV.BorderSizePixel = 0
-    CrosshairV.Visible = false
-    CrosshairV.Parent = OverlayContainer
-    UI.CrosshairV = CrosshairV
-
-    local CrosshairH = Instance.new("Frame")
-    CrosshairH.Name = "CrosshairH"
-    CrosshairH.AnchorPoint = Vector2.new(0.5, 0.5)
-    CrosshairH.Position = UDim2.fromScale(0.5, 0.5)
-    CrosshairH.Size = UDim2.fromOffset(ConfigState.CrosshairSize * 2, ConfigState.CrosshairWidth)
-    CrosshairH.BackgroundColor3 = State.crosshairColor
-    CrosshairH.BorderSizePixel = 0
-    CrosshairH.Visible = false
-    CrosshairH.Parent = OverlayContainer
-    UI.CrosshairH = CrosshairH
-
-    local function makeCrosshairArm(name)
-        local arm = Instance.new("Frame")
-        arm.Name = name
-        arm.AnchorPoint = Vector2.new(0.5, 0.5)
-        arm.BackgroundColor3 = State.crosshairColor
-        arm.BorderSizePixel = 0
-        arm.ZIndex = 8
-        arm.Parent = CrosshairContainer
-        return arm
-    end
-
-    UI.CrosshairArmTop = makeCrosshairArm("ArmTop")
-    UI.CrosshairArmBottom = makeCrosshairArm("ArmBottom")
-    UI.CrosshairArmLeft = makeCrosshairArm("ArmLeft")
-    UI.CrosshairArmRight = makeCrosshairArm("ArmRight")
-
-    local CrosshairDotFrame = Instance.new("Frame")
-    CrosshairDotFrame.Name = "CrosshairDot"
-    CrosshairDotFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    CrosshairDotFrame.Position = UDim2.fromScale(0.5, 0.5)
-    CrosshairDotFrame.Size = UDim2.fromOffset(ConfigState.CrosshairDotSize, ConfigState.CrosshairDotSize)
-    CrosshairDotFrame.BackgroundColor3 = State.crosshairColor
-    CrosshairDotFrame.BorderSizePixel = 0
-    CrosshairDotFrame.ZIndex = 9
-    CrosshairDotFrame.Parent = CrosshairContainer
-    addCorner(CrosshairDotFrame, 999)
-    UI.CrosshairDotFrame = CrosshairDotFrame
-
-    local CrosshairRingFrame = Instance.new("Frame")
-    CrosshairRingFrame.Name = "CrosshairRing"
-    CrosshairRingFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    CrosshairRingFrame.Position = UDim2.fromScale(0.5, 0.5)
-    CrosshairRingFrame.Size = UDim2.fromOffset(22, 22)
-    CrosshairRingFrame.BackgroundTransparency = 1
-    CrosshairRingFrame.Visible = false
-    CrosshairRingFrame.ZIndex = 7
-    CrosshairRingFrame.Parent = CrosshairContainer
-    local CrosshairRingCorner = addCorner(CrosshairRingFrame, 999)
-    local CrosshairRingStroke = addStroke(CrosshairRingFrame, State.crosshairColor, 1.4, 0.1)
-    UI.CrosshairRingFrame = CrosshairRingFrame
-    UI.CrosshairRingCorner = CrosshairRingCorner
-    UI.CrosshairRingStroke = CrosshairRingStroke
 
     local RenderSaverOverlay = Instance.new("Frame")
     RenderSaverOverlay.Name = "RenderSaverOverlay"
@@ -4410,73 +4334,111 @@ end
 --------------------------------------------------------------------------------
 -- 11. CORE GAMEPLAY & UNIVERSAL FEATURE IMPLEMENTATIONS
 --------------------------------------------------------------------------------
--- OneShot Bot + Real Player Discovery & Hitbox Resolution
+-- OneShot Bot + Real Player Discovery & Hitbox Resolution (Dump-Verified for PlaceId 90568084448279)
 State.botProxies = State.botProxies or {}
+State.lastBotScanClock = 0
+State.lastEnemyPositions = State.lastEnemyPositions or {}
 
 local function isOneShotBotModel(model)
     if not model or not model:IsA("Model") then return false end
-    if model.Name == "Npc" or model.Name == "Viewmodel" then return false end
+    if model.Name == "Npc" or model.Name == "Viewmodel" or model.Name == "Map" or model.Name == "Lobby" then return false end
     if LocalPlayer and model == LocalPlayer.Character then return false end
     if Players:GetPlayerFromCharacter(model) then return false end
     local hum = model:FindFirstChildOfClass("Humanoid")
-    local hrp = model:FindFirstChild("HumanoidRootPart")
+    local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("Head")
     if hum and hrp then
-        if model:FindFirstChild("Hitbox_Bots") or model:FindFirstChild("Hitbox") or model:GetAttribute("primaryWeapon") ~= nil or model:GetAttribute("botChased") ~= nil or model:GetAttribute("deployed") ~= nil then
+        if model:FindFirstChild("Hitbox_Bots")
+            or model:FindFirstChild("Hitbox")
+            or model:GetAttribute("primaryWeapon") ~= nil
+            or model:GetAttribute("botChased") ~= nil
+            or model:GetAttribute("deployed") ~= nil
+            or model:GetAttribute("BotsNearby") ~= nil then
             return true
         end
     end
     return false
 end
 
-local function refreshOneShotBotProxies()
+local function cleanupBotProxyESP(proxy)
+    if State.espObjects and State.espObjects[proxy] then
+        pcall(function()
+            local data = State.espObjects[proxy]
+            if data.Billboard then data.Billboard:Destroy() end
+            if data.Tracer then data.Tracer:Destroy() end
+            if data.Overlay3D then data.Overlay3D:Destroy() end
+            if data.Highlight then data.Highlight:Destroy() end
+            State.espObjects[proxy] = nil
+        end)
+    end
+end
+
+local function refreshOneShotBotProxies(forceScan)
+    local now = os.clock()
+    if not forceScan and (now - (State.lastBotScanClock or 0)) < 0.20 then
+        return
+    end
+    State.lastBotScanClock = now
+
     for model, proxy in pairs(State.botProxies) do
         if not model or not model.Parent or not model:FindFirstChildOfClass("Humanoid") then
-            if State.espObjects and State.espObjects[proxy] then
-                pcall(function()
-                    local data = State.espObjects[proxy]
-                    if data.Billboard then data.Billboard:Destroy() end
-                    if data.Tracer then data.Tracer:Destroy() end
-                    if data.Overlay3D then data.Overlay3D:Destroy() end
-                    if data.Highlight then data.Highlight:Destroy() end
-                    State.espObjects[proxy] = nil
-                end)
-            end
+            cleanupBotProxyESP(proxy)
             State.botProxies[model] = nil
         end
     end
     for _, child in ipairs(workspace:GetChildren()) do
-        if isOneShotBotModel(child) and not State.botProxies[child] then
-            State.botProxies[child] = {
-                Name = child.Name,
-                DisplayName = child.Name .. " [BOT]",
-                Character = child,
-                Team = nil,
-                UserId = -1,
-                IsOneShotBot = true,
-            }
-        elseif State.botProxies[child] then
-            State.botProxies[child].Character = child
+        if isOneShotBotModel(child) then
+            local existingProxy = State.botProxies[child]
+            if not existingProxy then
+                -- Check if a previous proxy had the same bot name so ESP pool stays warm
+                State.botProxies[child] = {
+                    Name = child.Name,
+                    DisplayName = child.Name .. " [BOT]",
+                    Character = child,
+                    Team = nil,
+                    UserId = -1,
+                    IsOneShotBot = true,
+                }
+            else
+                existingProxy.Character = child
+            end
         end
     end
 end
 
+workspace.ChildAdded:Connect(function(child)
+    task.defer(function()
+        if isOneShotBotModel(child) then
+            refreshOneShotBotProxies(true)
+        end
+    end)
+end)
+
 local function getAllTargetEntities()
-    refreshOneShotBotProxies()
+    refreshOneShotBotProxies(false)
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        table.insert(list, p)
+        if p ~= LocalPlayer then
+            table.insert(list, p)
+        end
     end
-    for _, proxy in pairs(State.botProxies) do
-        table.insert(list, proxy)
+    for model, proxy in pairs(State.botProxies) do
+        if model and model.Parent then
+            proxy.Character = model
+            table.insert(list, proxy)
+        end
     end
     return list
 end
 State.getAllTargetEntities = getAllTargetEntities
 
+-- Dump-verified spawn protection check:
+-- In OneShot, EVERY character and bot permanently has a child [Highlight] DeployHighlight!
+-- Checking char:FindFirstChild("DeployHighlight") caused Aimbot, Triggerbot & Hitbox to skip 100% of bots.
+-- Real spawn protection is controlled by the @deployed attribute (false when in lobby/spawn protection).
 local function isCharacterSpawnProtected(char)
     if not char then return false end
-    if char:FindFirstChild("DeployHighlight") then return true end
     if char:GetAttribute("deployed") == false then return true end
+    if char:FindFirstChildOfClass("ForceField") then return true end
     return false
 end
 
@@ -4979,6 +4941,17 @@ local function hidePlayerESP(player)
         data.LastHLEnabled = false
         data.LastHLAdornee = nil
     end
+    if player and player.Character then
+        local dhl = player.Character:FindFirstChild("DeployHighlight")
+        if dhl and dhl:IsA("Highlight") and dhl:GetAttribute("CoreXyz_ESPActive") then
+            pcall(function()
+                dhl:SetAttribute("CoreXyz_ESPActive", nil)
+                dhl.Enabled = false
+                dhl.FillTransparency = 1
+                dhl.OutlineTransparency = 1
+            end)
+        end
+    end
 end
 
 local function disconnectPlayerCharSignals(player)
@@ -5220,8 +5193,37 @@ local function updateESP(camera)
                         end
                     end
 
-                    -- Verify both cached & actual Highlight Adornee/Enabled so respawns immediately re-bind Highlight
-                    if tagData.Highlight then
+                    -- Cache last live enemy position for instant Kill Effects
+                    State.lastEnemyPositions[player.Name] = hrp.Position
+
+                    -- In OneShot, every character & bot has a built-in child [Highlight] DeployHighlight.
+                    -- Reusing DeployHighlight avoids Roblox's 31-Highlight limit and prevents DeployHighlight from blocking external Adornee highlights on bots!
+                    local builtInHL = char:FindFirstChild("DeployHighlight")
+                    if builtInHL and builtInHL:IsA("Highlight") then
+                        if ConfigState.ESP then
+                            pcall(function()
+                                builtInHL:SetAttribute("CoreXyz_ESPActive", true)
+                                builtInHL.Adornee = char
+                                builtInHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                builtInHL.FillColor = displayCol
+                                builtInHL.OutlineColor = Theme.White
+                                builtInHL.FillTransparency = 0.65
+                                builtInHL.OutlineTransparency = 0.15
+                                builtInHL.Enabled = true
+                            end)
+                        elseif builtInHL:GetAttribute("CoreXyz_ESPActive") then
+                            pcall(function()
+                                builtInHL:SetAttribute("CoreXyz_ESPActive", nil)
+                                builtInHL.Enabled = false
+                                builtInHL.FillTransparency = 1
+                                builtInHL.OutlineTransparency = 1
+                            end)
+                        end
+                        if tagData.Highlight and tagData.Highlight.Enabled then
+                            tagData.Highlight.Enabled = false
+                            tagData.Highlight.Adornee = nil
+                        end
+                    elseif tagData.Highlight then
                         local wantHL = ConfigState.ESP
                         local wantAdornee = wantHL and char or nil
                         if tagData.LastHLAdornee ~= wantAdornee or tagData.Highlight.Adornee ~= wantAdornee then
@@ -5577,117 +5579,6 @@ local function updateESP(camera)
     end
 end
 
-local function updateCrosshair(animClock)
-    local enabled = ConfigState.Crosshair
-    if not enabled then
-        if UI.CrosshairContainer then UI.CrosshairContainer.Visible = false end
-        if UI.CrosshairV then UI.CrosshairV.Visible = false end
-        if UI.CrosshairH then UI.CrosshairH.Visible = false end
-        return
-    end
-
-    local clock = animClock or 0
-    local col = ConfigState.CrosshairRainbow and hsvToColor3((clock * 0.45) % 1, 0.92, 1) or State.crosshairColor
-
-    -- Smooth, unmistakable pulse (oscillates arm length & center gap smoothly without getting too small or too huge)
-    local baseLen = ConfigState.CrosshairSize or 10
-    local baseGap = ConfigState.CrosshairGap or 4
-    local lineLen = baseLen
-    local gap = baseGap
-    if ConfigState.CrosshairPulse then
-        local wave = math.sin(clock * (ConfigState.CrosshairPulseSpeed or 4) * 1.6)
-        lineLen = math.clamp(math.floor(baseLen + ( math.max(baseLen * 0.30, 3) * wave ) + 0.5), 4, 48)
-        gap = math.clamp(math.floor(baseGap + ( math.max(baseGap * 0.45, 3.5) * wave ) + 0.5), 2, 28)
-    end
-
-    local lineWid = math.max(1, math.floor(ConfigState.CrosshairWidth or 2))
-    local dotSz = math.max(1, math.floor(ConfigState.CrosshairDotSize or 3))
-    local preset = ConfigState.CrosshairPreset or "Plus (+)"
-
-    local rot = 0
-    if ConfigState.CrosshairSpin then
-        rot = (clock * (ConfigState.CrosshairSpinSpeed or 120)) % 360
-    elseif preset == "Cross (X)" then
-        rot = 45
-    end
-
-    if UI.CrosshairContainer then
-        UI.CrosshairContainer.Visible = true
-        UI.CrosshairContainer.Rotation = rot
-    end
-
-    local showArms = (preset ~= "Dot Only")
-    local showTopArm = showArms and (preset ~= "T-Shape")
-    local centerDist = gap + (lineLen * 0.5)
-    local rad = math.rad(rot)
-    local sinR = math.sin(rad)
-    local cosR = math.cos(rad)
-
-    -- Position & rotate each arm directly so Spin, Pulse, and Rainbow render 100% reliably across all executors
-    if UI.CrosshairArmTop then
-        UI.CrosshairArmTop.Visible = showTopArm
-        UI.CrosshairArmTop.BackgroundColor3 = col
-        UI.CrosshairArmTop.Position = UDim2.new(0.5, math.floor(sinR * centerDist + 0.5), 0.5, math.floor(-cosR * centerDist + 0.5))
-        UI.CrosshairArmTop.Size = UDim2.fromOffset(lineWid, lineLen)
-        UI.CrosshairArmTop.Rotation = rot
-    end
-    if UI.CrosshairArmBottom then
-        UI.CrosshairArmBottom.Visible = showArms
-        UI.CrosshairArmBottom.BackgroundColor3 = col
-        UI.CrosshairArmBottom.Position = UDim2.new(0.5, math.floor(-sinR * centerDist + 0.5), 0.5, math.floor(cosR * centerDist + 0.5))
-        UI.CrosshairArmBottom.Size = UDim2.fromOffset(lineWid, lineLen)
-        UI.CrosshairArmBottom.Rotation = rot
-    end
-    if UI.CrosshairArmLeft then
-        UI.CrosshairArmLeft.Visible = showArms
-        UI.CrosshairArmLeft.BackgroundColor3 = col
-        UI.CrosshairArmLeft.Position = UDim2.new(0.5, math.floor(-cosR * centerDist + 0.5), 0.5, math.floor(-sinR * centerDist + 0.5))
-        UI.CrosshairArmLeft.Size = UDim2.fromOffset(lineLen, lineWid)
-        UI.CrosshairArmLeft.Rotation = rot
-    end
-    if UI.CrosshairArmRight then
-        UI.CrosshairArmRight.Visible = showArms
-        UI.CrosshairArmRight.BackgroundColor3 = col
-        UI.CrosshairArmRight.Position = UDim2.new(0.5, math.floor(cosR * centerDist + 0.5), 0.5, math.floor(sinR * centerDist + 0.5))
-        UI.CrosshairArmRight.Size = UDim2.fromOffset(lineLen, lineWid)
-        UI.CrosshairArmRight.Rotation = rot
-    end
-
-    if UI.CrosshairDotFrame then
-        UI.CrosshairDotFrame.Visible = (ConfigState.CrosshairDot or preset == "Dot Only")
-        UI.CrosshairDotFrame.BackgroundColor3 = col
-        UI.CrosshairDotFrame.Size = UDim2.fromOffset(dotSz, dotSz)
-    end
-
-    if UI.CrosshairRingFrame then
-        local showRing = (preset == "Circle + Cross" or preset == "Box Reticle")
-        UI.CrosshairRingFrame.Visible = showRing
-        if showRing then
-            local ringDia = math.max(12, math.floor((gap + lineLen) * 1.55))
-            UI.CrosshairRingFrame.Size = UDim2.fromOffset(ringDia, ringDia)
-            UI.CrosshairRingFrame.Rotation = rot
-            if UI.CrosshairRingCorner then
-                UI.CrosshairRingCorner.CornerRadius = UDim.new(0, preset == "Box Reticle" and 3 or 999)
-            end
-            if UI.CrosshairRingStroke then
-                UI.CrosshairRingStroke.Color = col
-                UI.CrosshairRingStroke.Thickness = math.max(1, lineWid * 0.75)
-            end
-        end
-    end
-
-    -- Keep legacy CrosshairV / CrosshairH updated for test/state compatibility
-    UI.CrosshairV.Size = UDim2.fromOffset(lineWid, lineLen * 2)
-    UI.CrosshairV.BackgroundColor3 = col
-    UI.CrosshairV.Rotation = rot
-    UI.CrosshairV.Visible = false
-
-    UI.CrosshairH.Size = UDim2.fromOffset(lineLen * 2, lineWid)
-    UI.CrosshairH.BackgroundColor3 = col
-    UI.CrosshairH.Rotation = rot
-    UI.CrosshairH.Visible = false
-end
-
 local function getSafeRaycastExcludeList()
     local list = {}
     if LocalPlayer.Character then
@@ -5695,6 +5586,10 @@ local function getSafeRaycastExcludeList()
     end
     if workspace.CurrentCamera then
         table.insert(list, workspace.CurrentCamera)
+    end
+    local effectsFolder = workspace:FindFirstChild("Effects")
+    if effectsFolder then
+        table.insert(list, effectsFolder)
     end
     local bulletsFolder = workspace:FindFirstChild("Bullets")
     if bulletsFolder then
@@ -5772,7 +5667,7 @@ local function getClosestTarget(camera)
     return closestPriority or closestNormal
 end
 
--- Universal Hitbox Expander (Supports Team Check, Whitelist & Auto-Refresh on New/Respawned Players)
+-- Universal Hitbox Expander (Supports Real Players & OneShot Bots via Hitbox / Hitbox_Bots)
 local function expandOrRestorePart(part, shouldExpand, sz, tr)
     if not part or not part:IsA("BasePart") then return end
     if shouldExpand then
@@ -5781,19 +5676,26 @@ local function expandOrRestorePart(part, shouldExpand, sz, tr)
                 Size = part.Size,
                 Transparency = part.Transparency,
                 CanCollide = part.CanCollide,
+                CanQuery = part.CanQuery,
                 Massless = part.Massless,
             }
         end
-        part.Size = Vector3.new(sz, sz, sz)
-        part.Transparency = tr
-        part.CanCollide = false
-        pcall(function() part.Massless = true end)
+        pcall(function()
+            part.Size = Vector3.new(sz, sz, sz)
+            part.Transparency = tr
+            part.CanCollide = false
+            part.CanQuery = true
+            part.Massless = true
+        end)
     elseif State.hitboxCache[part] then
         local orig = State.hitboxCache[part]
-        part.Size = orig.Size
-        part.Transparency = orig.Transparency
-        part.CanCollide = orig.CanCollide
-        pcall(function() part.Massless = orig.Massless end)
+        pcall(function()
+            part.Size = orig.Size
+            part.Transparency = orig.Transparency
+            part.CanCollide = orig.CanCollide
+            part.CanQuery = orig.CanQuery
+            part.Massless = orig.Massless
+        end)
         State.hitboxCache[part] = nil
     end
 end
@@ -5810,17 +5712,24 @@ local function updateHitboxExpander()
         if p ~= LocalPlayer and p.Character then
             local char = p.Character
             local hrp = char:FindFirstChild("HumanoidRootPart")
+            local head = char:FindFirstChild("Head")
             local hum = char:FindFirstChildOfClass("Humanoid")
             local isAlive = (not hum) or (hum.Health > 0)
             local shouldExpand = ConfigState.HitboxExpander and isAlive and not isCharacterSpawnProtected(char) and passesTeamCheck(p)
             if hrp then
                 expandOrRestorePart(hrp, shouldExpand, sz, tr)
             end
+            if head then
+                expandOrRestorePart(head, shouldExpand, sz, tr)
+            end
             for _, folderName in ipairs({ "Hitbox", "Hitbox_Bots" }) do
                 local hbFolder = char:FindFirstChild(folderName)
                 if hbFolder then
-                    expandOrRestorePart(hbFolder:FindFirstChild("Hitbox_Head"), shouldExpand, sz, tr)
-                    expandOrRestorePart(hbFolder:FindFirstChild("Hitbox_Torso"), shouldExpand, sz, tr)
+                    for _, hbChild in ipairs(hbFolder:GetChildren()) do
+                        if hbChild:IsA("BasePart") and (hbChild.Name == "Hitbox_Head" or hbChild.Name == "Hitbox_Torso") then
+                            expandOrRestorePart(hbChild, shouldExpand, sz, tr)
+                        end
+                    end
                 end
             end
         end
@@ -5828,12 +5737,14 @@ local function updateHitboxExpander()
 end
 
 local function restoreAllHitboxes()
-    for hrp, orig in pairs(State.hitboxCache) do
-        if hrp and hrp.Parent then
+    for part, orig in pairs(State.hitboxCache) do
+        if part and part.Parent then
             pcall(function()
-                hrp.Size = orig.Size
-                hrp.Transparency = orig.Transparency
-                hrp.CanCollide = orig.CanCollide
+                part.Size = orig.Size
+                part.Transparency = orig.Transparency
+                part.CanCollide = orig.CanCollide
+                part.CanQuery = orig.CanQuery
+                part.Massless = orig.Massless
             end)
         end
     end
@@ -8620,14 +8531,10 @@ do
         local rainbowCol1 = Color3.fromHSV(hue1, 0.85, 1)
         local rainbowCol2 = Color3.fromHSV(hue2, 0.85, 1)
 
-        if ConfigState.SelfChams then
-            if ConfigState.SelfChamsRainbow or ConfigState.SelfChamsPulse or ConfigState.SelfChamsMaterial == "Rainbow" then
-                local useRainbow = (ConfigState.SelfChamsRainbow or ConfigState.SelfChamsMaterial == "Rainbow") and rainbowCol1 or nil
-                local pulseWave = ConfigState.SelfChamsPulse and (math.sin(animClock * 4.0) * 0.22) or 0
-                applySelfChams(useRainbow, pulseWave)
-            elseif selfChamsHighlight.Adornee ~= LocalPlayer.Character then
-                applySelfChams()
-            end
+        -- Section 11C generic SelfChams disabled in favor of Section 12 OneShot-specific applyOneShotSelfChams (LeftArm / RightArm & Character)
+        if selfChamsHighlight and selfChamsHighlight.Enabled then
+            selfChamsHighlight.Enabled = false
+            selfChamsHighlight.Adornee = nil
         end
 
         if ConfigState.LegTrailEnabled then
@@ -9557,11 +9464,16 @@ end
 
 
 -- ============================================================================
--- ONESHOT CORE ENGINE (SNIPER / PISTOL / KNIFE SKIN CHANGER, AUTO-REAPPLY,
--- KILL EFFECTS, BULLET TRACERS, HIT EFFECTS, SELF CHAMS, WEAPON CHAMS,
--- TRIGGERBOT, INSTANT SCOPE & INSTANT RELOAD)
+-- ONESHOT CORE ENGINE V5.1 (DUMP-VERIFIED FOR PLACEID 90568084448279)
+-- • Separated Sniper / Pistol / Knife Catalogs + Fixed Knife Skin Sync
+-- • Workspace.Effects Bullet Tracers & Hit Effects
+-- • Instant Kill Effects (Humanoid + ReplicatedStorage.Values.Game Death Sync + Trail Animation)
+-- • Working Self Chams (Camera.Viewmodel.LeftArm / RightArm + Character Limbs)
+-- • Bot-Compatible Triggerbot + Instant Scope + Instant Reload + Killcam-Bypass Auto-Respawn
 -- ============================================================================
 do
+    -- Strictly separated Sniper (Primary) vs Pistol (Secondary) vs Knife catalogs
+    -- Verified against ReplicatedStorage.Assets.Viewmodels.Weapons & _Weapons
     local SNIPER_SKINS_CATALOG = {
         "Moonlord", "Divinity", "Blackhole", "Eternity", "Leviathan", "Apotheosis",
         "Galactic Sentinel", "Anti-Matter Rifle", "Glitched Judgement", "Eternal Nightmare",
@@ -9577,27 +9489,29 @@ do
         "Sunfire", "Moonshot", "Moonfire", "Dragon's Breath", "Delay", "Mauler",
         "Summer Rifle", "Absorbtion", "Tom", "C121", "Top Grade", "Sky Guardian",
         "Nightshade", "Steam Cannon", "Hunter's Desire", "Sunbeam", "Crimshade",
-        "Sun Cannon", "Reliable", "Summer Day", "Serenity Rifle", "Stopwatch", "True Titan",
+        "Reliable", "Summer Day", "Serenity Rifle", "Stopwatch", "True Titan",
         "Redux", "Hawk", "Infinity Rifle", "Sub-Atomic", "Vortex Rifle", "Scourge Rifle",
         "Desert Storm", "Survivor", "Warrior Spirit", "Camo", "Dragon Flame", "Crystal Mirror",
-        "Ray Gun #2", "Sci-fi Rifle?", "Storm Rifle", "High Voltage Cannon", "SP-301",
+        "Sci-fi Rifle?", "Storm Rifle", "High Voltage Cannon", "SP-301",
         "Nightmare Toxic", "Nightmare Eater", "Krampus", "Nightmare Light", "Nightmare Freeze",
         "Nightmare Ghost", "Overdrive", "The Amazing Solar Powered Gigawatt Laser Blaster",
         "Nebula", "The Hunter", "Zen-Rifle #1", "Zen-Rifle #2", "Zen-Rifle #3", "Zen-Rifle #4",
         "Proto-Green", "Proto-Red", "Proto-Blue", "Proto-Gold", "Proto-Purple", "Proto-White",
         "Proto-Orange", "Prototype-Ultra", "Prototype-1", "Eternal Fury", "Alien",
-        "The Big Gun", "Rhythm", "Cosmic Love", "Frostbite", "Solar Cannon", "Yellow Jacket",
-        "Stardust", "Pulse Rifle Red", "Pulse Rifle Orange", "Pulse Rifle", "Electroshock",
-        "The Covenant", "Roaring Star Cannon", "Snow Shark", "Rudolf's Revenge", "Santa's Pig",
-        "Prestige", "Jack o' Snipe", "Spooky Skeleton", "Witch", "Fearless", "Reanimated",
-        "Jump Scare", "Candle", "Jack o' Shot", "Witch Brew", "Hallowed Power", "Shark",
+        "The Big Gun", "Rhythm", "Cosmic Love", "Frostbite", "Solar Cannon",
+        "Pulse Rifle Red", "Pulse Rifle Orange", "Pulse Rifle",
+        "The Covenant", "Roaring Star Cannon", "Snow Shark", "Rudolf's Revenge",
+        "Prestige", "Jack o' Snipe", "Fearless", "Reanimated",
+        "Jack o' Shot", "Witch Brew", "Hallowed Power",
         "Nightmare Fuel", "Artic Hunting Rifle", "Frost Hunter", "Candy Cane Ultra Blaster Mk1",
         "Banana Rifle", "The Apocalypse", "Nightmare Soul", "AK", "Silent Love", "Love Hunter",
-        "Motorsnipe", "The Invention", "Banana Sniper", "Old Hunting Rifle", "Eagle", "Mk3 Damaged",
+        "Motorsnipe", "The Invention", "Banana Sniper", "Old Hunting Rifle", "Mk3 Damaged",
+        "Plasma Rifle", "Elf Super Blaster", "Toy Rifle",
     }
 
     local PISTOL_SKINS_CATALOG = {
-        "The Enforcer", "Executioner", "Revolver", "Moon Ray", "Lunar Blaster",
+        "The Enforcer", "Executioner", "Revolver", "Desert Eagle", "Eagle",
+        "Moon Ray", "Lunar Blaster", "Sun Cannon", "Ray Gun #2",
         "Glitched Enforcer", "Glitched Revolver", "Glitched Sharkgun", "Event Horizon",
         "Darkmatter", "Redshift", "Echo", "The Ray Gun", "The Patriot", "Ion Revolver",
         "Serenity Pistol", "Nightmare Hand Cannon", "Bananavolver", "Frost Revolver",
@@ -9606,7 +9520,7 @@ do
         "Star Blaster", "Mini Laser", "Olverrev", "Fish", "The Gamer", "Confetti",
         "Frontliner", "Killbyte", "Voidline", "The Contraption", "Cosmic Shooter",
         "Point", "Radiance", "Crystalized", "Celestial", "Pink Shark", "Cosmic Vortex",
-        "Plasma Rifle", "Elf Super Blaster", "Toy Rifle",
+        "Yellow Jacket", "Stardust", "Electroshock", "Shark",
     }
 
     local KNIFE_SKINS_CATALOG = {
@@ -9693,14 +9607,14 @@ do
 
     ConfigState.InstantScope = ConfigState.InstantScope or false
     ConfigState.InstantReload = ConfigState.InstantReload or false
-
-    State.oneShotCatalogs = {
-        SniperSkins = SNIPER_SKINS_CATALOG,
-        PistolSkins = PISTOL_SKINS_CATALOG,
-        KnifeSkins = KNIFE_SKINS_CATALOG,
-        KillEffects = KILL_EFFECTS_CATALOG,
-        HitEffects = HIT_EFFECTS_CATALOG,
-    }
+    ConfigState.AutoRespawn = ConfigState.AutoRespawn or false
+    ConfigState.AutoDeploy = ConfigState.AutoDeploy or false
+    ConfigState.AutoClaimRewards = ConfigState.AutoClaimRewards or false
+    ConfigState.ViewmodelOffsetEnabled = ConfigState.ViewmodelOffsetEnabled or false
+    ConfigState.ViewmodelOffsetX = ConfigState.ViewmodelOffsetX or 0
+    ConfigState.ViewmodelOffsetY = ConfigState.ViewmodelOffsetY or 0
+    ConfigState.ViewmodelOffsetZ = ConfigState.ViewmodelOffsetZ or 0
+    ConfigState.SuppressMuzzleSmoke = ConfigState.SuppressMuzzleSmoke or false
 
     local ReplicatedStorage = safeGetService("ReplicatedStorage")
     local SoundService = safeGetService("SoundService")
@@ -9714,39 +9628,95 @@ do
         return ReplicatedStorage:FindFirstChild("Assets")
     end
 
-    -- Sync any new skins dynamically from ReplicatedStorage.Assets.Viewmodels
+    -- Build lookup sets and query ReplicatedStorage.Common.Managers.WeaponManager._Weapons if available
+    -- Never dump unknown weapons into both Sniper & Pistol lists!
+    local sniperSet, pistolSet, knifeSet = {}, {}, {}
+    for _, n in ipairs(SNIPER_SKINS_CATALOG) do sniperSet[n] = true end
+    for _, n in ipairs(PISTOL_SKINS_CATALOG) do pistolSet[n] = true end
+    for _, n in ipairs(KNIFE_SKINS_CATALOG) do knifeSet[n] = true end
+
+    pcall(function()
+        if not ReplicatedStorage then return end
+        local common = ReplicatedStorage:FindFirstChild("Common")
+        local managers = common and common:FindFirstChild("Managers")
+        local wm = managers and managers:FindFirstChild("WeaponManager")
+        local wepMod = wm and wm:FindFirstChild("_Weapons")
+        if wepMod and wepMod:IsA("ModuleScript") then
+            local ok, wepTable = pcall(require, wepMod)
+            if ok and type(wepTable) == "table" then
+                local cleanSnipers, cleanPistols = {}, {}
+                local addedS, addedP = {}, {}
+                for wName, wData in pairs(wepTable) do
+                    if type(wName) == "string" and type(wData) == "table" then
+                        local wType = tostring(wData.Type or wData.WeaponType or wData.Slot or wData.Category or ""):lower()
+                        if string.find(wType, "secondary", 1, true) or string.find(wType, "pistol", 1, true) then
+                            if not addedP[wName] then
+                                addedP[wName] = true
+                                pistolSet[wName] = true
+                                sniperSet[wName] = nil
+                                table.insert(cleanPistols, wName)
+                            end
+                        elseif string.find(wType, "primary", 1, true) or string.find(wType, "sniper", 1, true) then
+                            if not addedS[wName] then
+                                addedS[wName] = true
+                                sniperSet[wName] = true
+                                pistolSet[wName] = nil
+                                table.insert(cleanSnipers, wName)
+                            end
+                        end
+                    end
+                end
+                if #cleanSnipers >= 10 and #cleanPistols >= 5 then
+                    table.sort(cleanSnipers)
+                    table.sort(cleanPistols)
+                    SNIPER_SKINS_CATALOG = cleanSnipers
+                    PISTOL_SKINS_CATALOG = cleanPistols
+                end
+            end
+        end
+    end)
+
     pcall(function()
         local assets = getAssetsFolder()
         if not assets then return end
         local vm = assets:FindFirstChild("Viewmodels")
         if vm then
-            local weps = vm:FindFirstChild("Weapons")
-            if weps then
-                local seenSniper, seenPistol = {}, {}
-                for _, n in ipairs(SNIPER_SKINS_CATALOG) do seenSniper[n] = true end
-                for _, n in ipairs(PISTOL_SKINS_CATALOG) do seenPistol[n] = true end
-                for _, child in ipairs(weps:GetChildren()) do
-                    if child.Name ~= "TexturePart" then
-                        if not seenSniper[child.Name] and not seenPistol[child.Name] then
-                            table.insert(SNIPER_SKINS_CATALOG, child.Name)
-                            table.insert(PISTOL_SKINS_CATALOG, child.Name)
-                        end
+            local knives = vm:FindFirstChild("Knives")
+            if knives then
+                for _, child in ipairs(knives:GetChildren()) do
+                    if not knifeSet[child.Name] then
+                        knifeSet[child.Name] = true
+                        table.insert(KNIFE_SKINS_CATALOG, child.Name)
                     end
                 end
             end
-            local knives = vm:FindFirstChild("Knives")
-            if knives then
-                local seenKnife = {}
-                for _, n in ipairs(KNIFE_SKINS_CATALOG) do seenKnife[n] = true end
-                for _, child in ipairs(knives:GetChildren()) do
-                    if not seenKnife[child.Name] then
-                        seenKnife[child.Name] = true
-                        table.insert(KNIFE_SKINS_CATALOG, child.Name)
+            -- Also inspect Viewmodels.Weapons PrimaryPart names for any explicit Pistol vs Sniper hints
+            local weps = vm:FindFirstChild("Weapons")
+            if weps then
+                for _, child in ipairs(weps:GetChildren()) do
+                    if child.Name ~= "TexturePart" and not sniperSet[child.Name] and not pistolSet[child.Name] and not knifeSet[child.Name] then
+                        local ppName = (child:IsA("Model") and child.PrimaryPart and child.PrimaryPart.Name) or ""
+                        local lowerCombo = string.lower(child.Name .. " " .. ppName)
+                        if string.find(lowerCombo, "pistol", 1, true) or string.find(lowerCombo, "revolver", 1, true) or string.find(lowerCombo, "enforcer", 1, true) or string.find(lowerCombo, "blaster", 1, true) then
+                            pistolSet[child.Name] = true
+                            table.insert(PISTOL_SKINS_CATALOG, child.Name)
+                        elseif string.find(lowerCombo, "rifle", 1, true) or string.find(lowerCombo, "sniper", 1, true) or string.find(lowerCombo, "awp", 1, true) then
+                            sniperSet[child.Name] = true
+                            table.insert(SNIPER_SKINS_CATALOG, child.Name)
+                        end
                     end
                 end
             end
         end
     end)
+
+    State.oneShotCatalogs = {
+        SniperSkins = SNIPER_SKINS_CATALOG,
+        PistolSkins = PISTOL_SKINS_CATALOG,
+        KnifeSkins = KNIFE_SKINS_CATALOG,
+        KillEffects = KILL_EFFECTS_CATALOG,
+        HitEffects = HIT_EFFECTS_CATALOG,
+    }
 
     -- Resolve Root BasePart from a Viewmodels template (handles Model wrappers & direct UnionOperation/MeshPart/Part)
     local function cloneSkinRootPart(category, skinName)
@@ -9755,12 +9725,15 @@ do
         if not assets then return nil end
         local vmFolder = assets:FindFirstChild("Viewmodels")
         if not vmFolder then return nil end
+
         local catFolder = vmFolder:FindFirstChild(category)
-        if not catFolder then return nil end
-        local template = catFolder:FindFirstChild(skinName)
-        if not template and category ~= "Weapons" then
+        local template = catFolder and catFolder:FindFirstChild(skinName)
+        if not template and category == "Knives" then
             local wepFolder = vmFolder:FindFirstChild("Weapons")
             if wepFolder then template = wepFolder:FindFirstChild(skinName) end
+        elseif not template and category == "Weapons" then
+            local knifeFolder = vmFolder:FindFirstChild("Knives")
+            if knifeFolder then template = knifeFolder:FindFirstChild(skinName) end
         end
         if not template then return nil end
 
@@ -9774,6 +9747,12 @@ do
                 rootPart = cloned.PrimaryPart or cloned:FindFirstChildWhichIsA("BasePart")
             end
             if rootPart then
+                -- Copy C1 / viewmodelScale attributes if placed on the Model wrapper
+                for attrName, attrVal in pairs(cloned:GetAttributes()) do
+                    if rootPart:GetAttribute(attrName) == nil then
+                        pcall(function() rootPart:SetAttribute(attrName, attrVal) end)
+                    end
+                end
                 for _, child in ipairs(cloned:GetChildren()) do
                     if child ~= rootPart then
                         child.Parent = rootPart
@@ -9802,6 +9781,13 @@ do
     end
 
     -- Resolve & Apply Matching Knife Animation Set Automatically
+    local KNIFE_ANIM_FAMILY_SET = {
+        ["Karambit"] = true, ["Exo-Sword"] = true, ["Energy"] = true,
+        ["Frost Sword"] = true, ["Love Sword"] = true, ["Longsword"] = true,
+        ["Pickaxe"] = true, ["Fire Axe"] = true, ["Hatchet"] = true,
+        ["Default"] = true, ["DefaultShoot_Knife"] = true,
+    }
+
     local function resolveKnifeAnimFamily(knifeName)
         local lower = string.lower(knifeName or "")
         if string.find(lower, "karambit", 1, true) or string.find(lower, "terrabit", 1, true) then
@@ -9861,7 +9847,7 @@ do
     }
 
     -- Apply Weapon Chams to Viewmodel Weapon & 3rd-Person Weapon Parts
-    State.origWeaponChamsCache = State.origWeaponChamsCache or {}
+    State.origWeaponChamsCache = State.origWeaponChamsCache or setmetatable({}, { __mode = "k" })
     local function applyOneShotWeaponChams()
         local cam = workspace.CurrentCamera
         local vm = cam and cam:FindFirstChild("Viewmodel")
@@ -9871,30 +9857,29 @@ do
         local tr = math.clamp(tonumber(ConfigState.WeaponChamsTransparency) or 0.15, 0, 0.95)
 
         if wep then
-            local parts = { wep }
+            local parts = {}
+            if wep:IsA("BasePart") then table.insert(parts, wep) end
             for _, d in ipairs(wep:GetDescendants()) do
                 if d:IsA("BasePart") then table.insert(parts, d) end
             end
             for _, p in ipairs(parts) do
-                if p:IsA("BasePart") then
-                    if ConfigState.WeaponChams then
-                        if not State.origWeaponChamsCache[p] then
-                            State.origWeaponChamsCache[p] = { Material = p.Material, Color = p.Color, Transparency = p.Transparency }
-                        end
-                        pcall(function()
-                            p.Material = mat
-                            p.Color = col
-                            p.Transparency = tr
-                        end)
-                    elseif State.origWeaponChamsCache[p] then
-                        local orig = State.origWeaponChamsCache[p]
-                        pcall(function()
-                            p.Material = orig.Material
-                            p.Color = orig.Color
-                            p.Transparency = orig.Transparency
-                        end)
-                        State.origWeaponChamsCache[p] = nil
+                if ConfigState.WeaponChams then
+                    if not State.origWeaponChamsCache[p] then
+                        State.origWeaponChamsCache[p] = { Material = p.Material, Color = p.Color, Transparency = p.Transparency }
                     end
+                    pcall(function()
+                        p.Material = mat
+                        p.Color = col
+                        p.Transparency = tr
+                    end)
+                elseif State.origWeaponChamsCache[p] then
+                    local orig = State.origWeaponChamsCache[p]
+                    pcall(function()
+                        p.Material = orig.Material
+                        p.Color = orig.Color
+                        p.Transparency = orig.Transparency
+                    end)
+                    State.origWeaponChamsCache[p] = nil
                 end
             end
 
@@ -9920,59 +9905,72 @@ do
     State.applyOneShotWeaponChams = applyOneShotWeaponChams
 
     -- Apply Self Chams ("Only hands" or "Character")
-    State.origSelfChamsCache = State.origSelfChamsCache or {}
+    -- Dump-Verified: Camera.Viewmodel uses MeshParts named "LeftArm" and "RightArm" (no space)!
+    State.origSelfChamsCache = State.origSelfChamsCache or setmetatable({}, { __mode = "k" })
     local function applyOneShotSelfChams()
         local enabled = ConfigState.SelfChams == true
         local targetMode = ConfigState.SelfChamsTarget or "Only hands"
-        local wantHands = enabled and (targetMode == "Only hands")
-        local wantChar = enabled and (targetMode == "Character")
+        local wantHands = enabled and (targetMode == "Only hands" or targetMode == "Both")
+        local wantChar = enabled and (targetMode == "Character" or targetMode == "Both")
         local col = ConfigState.SelfChamsRainbow and Color3.fromHSV((os.clock() * 0.25) % 1, 0.85, 1) or (ConfigState.SelfChamsColor or Theme.White)
         local mat = MATERIAL_ENUM_MAP[ConfigState.SelfChamsMaterial or "ForceField"] or Enum.Material.ForceField
         local tr = math.clamp(tonumber(ConfigState.SelfChamsTransparency) or 0.2, 0, 0.95)
 
-        -- 1. First-person hands (Viewmodel Left Arm & Right Arm)
+        -- 1. First-person hands (Camera.Viewmodel.LeftArm & RightArm + fallback names)
         local cam = workspace.CurrentCamera
         local vm = cam and cam:FindFirstChild("Viewmodel")
         if vm then
-            for _, armName in ipairs({ "Left Arm", "Right Arm" }) do
+            local armParts = {}
+            for _, armName in ipairs({ "LeftArm", "RightArm", "Left Arm", "Right Arm" }) do
                 local arm = vm:FindFirstChild(armName)
-                if arm and arm:IsA("BasePart") then
-                    if wantHands then
-                        if not State.origSelfChamsCache[arm] then
-                            State.origSelfChamsCache[arm] = { Material = arm.Material, Color = arm.Color, Transparency = arm.Transparency }
-                        end
-                        pcall(function()
-                            arm.Material = mat
-                            arm.Color = col
-                            arm.Transparency = tr
-                        end)
-                    elseif State.origSelfChamsCache[arm] then
-                        local orig = State.origSelfChamsCache[arm]
-                        pcall(function()
-                            arm.Material = orig.Material
-                            arm.Color = orig.Color
-                            arm.Transparency = orig.Transparency
-                        end)
-                        State.origSelfChamsCache[arm] = nil
+                if arm then
+                    if arm:IsA("BasePart") then
+                        table.insert(armParts, arm)
                     end
+                    for _, d in ipairs(arm:GetDescendants()) do
+                        if d:IsA("BasePart") then
+                            table.insert(armParts, d)
+                        end
+                    end
+                end
+            end
 
-                    local armHl = arm:FindFirstChild("CoreXyz_SelfArmOutline")
-                    if wantHands and ConfigState.SelfOutlineGlow then
-                        if not armHl then
-                            armHl = Instance.new("Highlight")
-                            armHl.Name = "CoreXyz_SelfArmOutline"
-                            armHl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                            armHl.Parent = arm
-                        end
-                        armHl.Adornee = arm
-                        armHl.FillColor = col
-                        armHl.FillTransparency = 0.82
-                        armHl.OutlineColor = ConfigState.SelfOutlineColor or Theme.White
-                        armHl.OutlineTransparency = 0.05
-                        armHl.Enabled = true
-                    elseif armHl then
-                        armHl.Enabled = false
+            for _, arm in ipairs(armParts) do
+                if wantHands then
+                    if not State.origSelfChamsCache[arm] then
+                        State.origSelfChamsCache[arm] = { Material = arm.Material, Color = arm.Color, Transparency = arm.Transparency }
                     end
+                    pcall(function()
+                        arm.Material = mat
+                        arm.Color = col
+                        arm.Transparency = tr
+                    end)
+                elseif State.origSelfChamsCache[arm] then
+                    local orig = State.origSelfChamsCache[arm]
+                    pcall(function()
+                        arm.Material = orig.Material
+                        arm.Color = orig.Color
+                        arm.Transparency = orig.Transparency
+                    end)
+                    State.origSelfChamsCache[arm] = nil
+                end
+
+                local armHl = arm:FindFirstChild("CoreXyz_SelfArmOutline")
+                if wantHands and (ConfigState.SelfOutlineGlow or ConfigState.SelfChams) then
+                    if not armHl then
+                        armHl = Instance.new("Highlight")
+                        armHl.Name = "CoreXyz_SelfArmOutline"
+                        armHl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        armHl.Parent = arm
+                    end
+                    armHl.Adornee = arm
+                    armHl.FillColor = col
+                    armHl.FillTransparency = ConfigState.SelfOutlineGlow and 0.65 or 0.82
+                    armHl.OutlineColor = ConfigState.SelfOutlineColor or col
+                    armHl.OutlineTransparency = ConfigState.SelfOutlineGlow and 0.05 or 0.35
+                    armHl.Enabled = true
+                elseif armHl then
+                    armHl.Enabled = false
                 end
             end
         end
@@ -10002,9 +10000,8 @@ do
                     end
                 end
             end
-
             local charHl = char:FindFirstChild("CoreXyz_SelfCharOutline")
-            if wantChar and ConfigState.SelfOutlineGlow then
+            if wantChar and (ConfigState.SelfOutlineGlow or ConfigState.SelfChams) then
                 if not charHl then
                     charHl = Instance.new("Highlight")
                     charHl.Name = "CoreXyz_SelfCharOutline"
@@ -10013,9 +10010,9 @@ do
                 end
                 charHl.Adornee = char
                 charHl.FillColor = col
-                charHl.FillTransparency = 0.82
-                charHl.OutlineColor = ConfigState.SelfOutlineColor or Theme.White
-                charHl.OutlineTransparency = 0.05
+                charHl.FillTransparency = 0.68
+                charHl.OutlineColor = ConfigState.SelfOutlineColor or col
+                charHl.OutlineTransparency = ConfigState.SelfOutlineGlow and 0.05 or 0.3
                 charHl.Enabled = true
             elseif charHl then
                 charHl.Enabled = false
@@ -10024,7 +10021,61 @@ do
     end
     State.applySelfChams = applyOneShotSelfChams
 
-    -- Core 1st-Person & 3rd-Person Skin Changer (Sniper / Pistol / Knife) with Internal Auto-Reapply
+    -- Dump-Verified Active Slot Detector (Prevents Sniper Skin from overwriting Knife Skin!)
+    local function detectActiveOneShotSlot(char, vm, currentWepPart)
+        -- 1. Check Character attributes first
+        if char then
+            if char:GetAttribute("usingKnife") == true then
+                return "Knife"
+            end
+            local cw = string.lower(tostring(char:GetAttribute("currentWeapon") or ""))
+            local cws = string.lower(tostring(char:GetAttribute("currentWeaponServer") or ""))
+            if cw == "knife" or cws == "knife" then
+                return "Knife"
+            end
+        end
+
+        -- 2. Check playing Viewmodel Animation tracks (Knives play animations from Animations.Viewmodels.Knives)
+        if vm then
+            local animCtrl = vm:FindFirstChildOfClass("AnimationController") or vm:FindFirstChildOfClass("Humanoid")
+            local animator = animCtrl and animCtrl:FindFirstChildOfClass("Animator")
+            if animator then
+                local ok, tracks = pcall(function() return animator:GetPlayingAnimationTracks() end)
+                if ok and tracks then
+                    for _, tr in ipairs(tracks) do
+                        if tr.IsPlaying then
+                            local anim = tr.Animation
+                            local aName = anim and anim.Name or tr.Name or ""
+                            local pName = (anim and anim.Parent and anim.Parent.Name) or ""
+                            if string.find(string.lower(aName), "knife", 1, true)
+                                or string.find(string.lower(pName), "knive", 1, true)
+                                or string.find(string.lower(pName), "knife", 1, true)
+                                or (KNIFE_ANIM_FAMILY_SET[aName] and pName ~= "Weapons") then
+                                return "Knife"
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 3. Inspect freshly spawned Viewmodel.Weapon before CoreXyz stamps it:
+        -- In OneShot (dump_90568084448279), every Sniper & Pistol has a 'ShootEffects' Attachment, whereas Knives NEVER have 'ShootEffects'!
+        if currentWepPart and currentWepPart:GetAttribute("CoreXyz_Slot") == nil then
+            if not currentWepPart:FindFirstChild("ShootEffects") and not currentWepPart:FindFirstChild("Core") then
+                return "Knife"
+            end
+        end
+
+        -- 4. Check Secondary vs Primary
+        local slotAttr = char and (char:GetAttribute("currentWeapon") or char:GetAttribute("currentWeaponServer")) or "Primary"
+        if tostring(slotAttr) == "Secondary" then
+            return "Secondary"
+        end
+        return "Primary"
+    end
+
+    -- Core 1st-Person & 3rd-Person Skin Changer (Sniper / Pistol / Knife) with Strict Slot Isolation
     local isSwappingViewmodel = false
     local function applyViewmodelSkin(forceSwap)
         if isSwappingViewmodel then return end
@@ -10041,33 +10092,38 @@ do
         if not hrp or not handleMotor or not oldWep then return end
 
         local char = LocalPlayer and LocalPlayer.Character
-        local usingKnife = char and (char:GetAttribute("usingKnife") == true)
-        local curSlot = (char and char:GetAttribute("currentWeapon")) or (char and char:GetAttribute("currentWeaponServer")) or "Primary"
+        local activeSlot = detectActiveOneShotSlot(char, vm, oldWep)
 
-        local category = "Weapons"
+        local category = nil
         local desiredSkin = nil
-        if usingKnife then
-            if ConfigState.KnifeSkinEnabled then
-                category = "Knives"
-                desiredSkin = ConfigState.KnifeSkin
+        if activeSlot == "Knife" then
+            -- Strictly isolated Knife branch: NEVER falls through to Sniper when Knife is held!
+            if not ConfigState.KnifeSkinEnabled then
+                return
             end
-        elseif curSlot == "Secondary" then
-            if ConfigState.PistolSkinEnabled then
-                category = "Weapons"
-                desiredSkin = ConfigState.PistolSkin
+            category = "Knives"
+            desiredSkin = ConfigState.KnifeSkin
+        elseif activeSlot == "Secondary" then
+            if not ConfigState.PistolSkinEnabled then
+                return
             end
+            category = "Weapons"
+            desiredSkin = ConfigState.PistolSkin
         else
-            if ConfigState.SniperSkinEnabled then
-                category = "Weapons"
-                desiredSkin = ConfigState.SniperSkin
+            if not ConfigState.SniperSkinEnabled then
+                return
             end
+            category = "Weapons"
+            desiredSkin = ConfigState.SniperSkin
         end
 
         if not desiredSkin or desiredSkin == "" then
             return
         end
 
-        if not forceSwap and oldWep:GetAttribute("CoreXyz_AppliedSkin") == desiredSkin and oldWep:GetAttribute("CoreXyz_Slot") == (usingKnife and "Knife" or curSlot) then
+        if not forceSwap
+            and oldWep:GetAttribute("CoreXyz_AppliedSkin") == desiredSkin
+            and oldWep:GetAttribute("CoreXyz_Slot") == activeSlot then
             applyOneShotWeaponChams()
             return
         end
@@ -10077,18 +10133,18 @@ do
             local newWep = cloneSkinRootPart(category, desiredSkin)
             if not newWep then return end
 
-            -- Preserve ShootEffects muzzle attachment so firing flash works seamlessly
-            if not newWep:FindFirstChild("Attachment") then
-                local oldAtt = oldWep:FindFirstChild("Attachment")
-                if oldAtt then
-                    pcall(function() oldAtt:Clone().Parent = newWep end)
+            -- Preserve ShootEffects muzzle attachment on firearms so firing flash & tracers work seamlessly
+            if activeSlot ~= "Knife" and not newWep:FindFirstChild("ShootEffects") then
+                local oldShootFx = oldWep:FindFirstChild("ShootEffects")
+                if oldShootFx then
+                    pcall(function() oldShootFx:Clone().Parent = newWep end)
                 end
             end
 
             prepWeaponPartPhysics(newWep)
             newWep.Name = "Weapon"
             newWep:SetAttribute("CoreXyz_AppliedSkin", desiredSkin)
-            newWep:SetAttribute("CoreXyz_Slot", usingKnife and "Knife" or curSlot)
+            newWep:SetAttribute("CoreXyz_Slot", activeSlot)
             newWep.CFrame = oldWep.CFrame
             newWep.Parent = vm
 
@@ -10096,9 +10152,11 @@ do
             handleMotor.Part1 = newWep
             local c1Attr = newWep:GetAttribute("C1")
             if typeof(c1Attr) == "CFrame" then
+                newWep:SetAttribute("CoreXyz_BaseC1", c1Attr)
                 handleMotor.C1 = c1Attr
+            else
+                newWep:SetAttribute("CoreXyz_BaseC1", handleMotor.C1)
             end
-
             oldWep:Destroy()
         end)
         isSwappingViewmodel = false
@@ -10109,25 +10167,13 @@ do
         local char = LocalPlayer and LocalPlayer.Character
         if not char then return end
 
-        pcall(function()
-            if ConfigState.SniperSkinEnabled and ConfigState.SniperSkin then
-                char:SetAttribute("primaryWeapon", ConfigState.SniperSkin)
-            end
-            if ConfigState.PistolSkinEnabled and ConfigState.PistolSkin then
-                char:SetAttribute("secondaryWeapon", ConfigState.PistolSkin)
-            end
-            if ConfigState.KnifeSkinEnabled and ConfigState.KnifeSkin then
-                char:SetAttribute("knifeName", ConfigState.KnifeSkin)
-            end
-        end)
-
         local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightHand")
         if not rightArm then return end
 
         local slotConfigs = {
-            { Slot = "Primary", Enabled = ConfigState.SniperSkinEnabled, Category = "Weapons", Skin = ConfigState.SniperSkin },
+            { Slot = "Primary",   Enabled = ConfigState.SniperSkinEnabled, Category = "Weapons", Skin = ConfigState.SniperSkin },
             { Slot = "Secondary", Enabled = ConfigState.PistolSkinEnabled, Category = "Weapons", Skin = ConfigState.PistolSkin },
-            { Slot = "Knife", Enabled = ConfigState.KnifeSkinEnabled, Category = "Knives", Skin = ConfigState.KnifeSkin },
+            { Slot = "Knife",     Enabled = ConfigState.KnifeSkinEnabled,  Category = "Knives",  Skin = ConfigState.KnifeSkin },
         }
 
         for _, sc in ipairs(slotConfigs) do
@@ -10143,6 +10189,7 @@ do
                             newPart:SetAttribute("CoreXyz_AppliedSkin", sc.Skin)
                             newPart.CFrame = existing.CFrame
                             newPart.Parent = char
+
                             local weld = newPart:FindFirstChild("CharacterMotor") or rightArm:FindFirstChild(sc.Slot)
                             if weld and (weld:IsA("Weld") or weld:IsA("Motor6D")) then
                                 weld.Part0 = rightArm
@@ -10171,75 +10218,7 @@ do
     end
     State.applyAllOneShotSkins = applyAllOneShotSkins
 
-    -- Hook Viewmodel & Character for Internal Auto-Reapply (After Dying / Respawning / Switching Weapons)
-    local hookedViewmodels = {}
-    local function hookViewmodelInstance(vm)
-        if not vm or hookedViewmodels[vm] then return end
-        hookedViewmodels[vm] = true
-        task.defer(function()
-            applyViewmodelSkin(true)
-            applyOneShotSelfChams()
-            applyOneShotWeaponChams()
-        end)
-        vm.ChildAdded:Connect(function(child)
-            if child.Name == "Weapon" and not isSwappingViewmodel then
-                task.defer(function()
-                    applyViewmodelSkin(false)
-                    applyOneShotWeaponChams()
-                end)
-            elseif child.Name == "Left Arm" or child.Name == "Right Arm" then
-                task.defer(applyOneShotSelfChams)
-            end
-        end)
-    end
-
-    local function bindCameraViewmodelWatcher()
-        local cam = workspace.CurrentCamera
-        if not cam then return end
-        local vm = cam:FindFirstChild("Viewmodel")
-        if vm then hookViewmodelInstance(vm) end
-        cam.ChildAdded:Connect(function(child)
-            if child.Name == "Viewmodel" then
-                hookViewmodelInstance(child)
-            end
-        end)
-    end
-    bindCameraViewmodelWatcher()
-
-    local function hookLocalCharacterSkinSignals(char)
-        if not char then return end
-        task.defer(function()
-            applyAllOneShotSkins(true)
-            applyOneShotSelfChams()
-        end)
-        for _, attr in ipairs({ "currentWeapon", "currentWeaponServer", "usingKnife", "deployed" }) do
-            pcall(function()
-                char:GetAttributeChangedSignal(attr):Connect(function()
-                    task.defer(function()
-                        applyAllOneShotSkins(true)
-                        applyOneShotSelfChams()
-                    end)
-                end)
-            end)
-        end
-        char.ChildAdded:Connect(function(child)
-            if child.Name == "Primary" or child.Name == "Secondary" or child.Name == "Knife" then
-                task.defer(applyThirdPersonCharacterSkins)
-            end
-        end)
-    end
-    if LocalPlayer and LocalPlayer.Character then
-        hookLocalCharacterSkinSignals(LocalPlayer.Character)
-    end
-    if LocalPlayer and LocalPlayer.CharacterAdded then
-        LocalPlayer.CharacterAdded:Connect(function(newChar)
-            task.defer(function()
-                hookLocalCharacterSkinSignals(newChar)
-            end)
-        end)
-    end
-
-    -- Spawn Custom Kill Effect at World Position
+    -- Spawn Custom Kill Effect at World Position (Animates OneShot's TrailAttach + ParticleEmitters)
     local function spawnKillEffectAtPosition(worldPos, effectNameOverride, customColOverride, scaleOverride, durationOverride)
         if not worldPos then return end
         local fxName = effectNameOverride or ConfigState.KillEffect or "Multimoon"
@@ -10248,6 +10227,7 @@ do
         local template = keFolder and keFolder:FindFirstChild(fxName)
 
         pcall(function()
+            local parentContainer = workspace:FindFirstChild("Effects") or workspace
             local anchor = Instance.new("Part")
             anchor.Name = "CoreXyz_EffectAnchor"
             anchor.Size = Vector3.new(1, 1, 1)
@@ -10257,7 +10237,7 @@ do
             anchor.CanQuery = false
             anchor.CanTouch = false
             anchor.CFrame = CFrame.new(worldPos)
-            anchor.Parent = workspace
+            anchor.Parent = parentContainer
 
             local scaleMult = math.clamp(tonumber(scaleOverride) or 1, 0.4, 3.5)
             local dur = math.clamp(tonumber(durationOverride) or 3.2, 0.2, 5.0)
@@ -10265,7 +10245,7 @@ do
             if fxName == "3D Hitmarker Cross" then
                 for _, rot in ipairs({ 45, -45 }) do
                     local bar = Instance.new("Part")
-                    bar.Size = Vector3.new(0.12 * scaleMult, 1.8 * scaleMult, 0.12 * scaleMult)
+                    bar.Size = Vector3.new(0.14 * scaleMult, 2.0 * scaleMult, 0.14 * scaleMult)
                     bar.Material = Enum.Material.Neon
                     bar.Color = customColOverride or Theme.White
                     bar.Anchored = true
@@ -10287,54 +10267,59 @@ do
                 ring.CanQuery = false
                 ring.CFrame = CFrame.new(worldPos)
                 ring.Parent = anchor
-                tween(ring, SlowTween, { Size = Vector3.new(6.5 * scaleMult, 6.5 * scaleMult, 6.5 * scaleMult), Transparency = 1 })
+                tween(ring, SlowTween, { Size = Vector3.new(7.0 * scaleMult, 7.0 * scaleMult, 7.0 * scaleMult), Transparency = 1 })
             elseif fxName == "Electric Sparks" or not template then
                 local pe = Instance.new("ParticleEmitter")
                 pe.Color = ColorSequence.new(customColOverride or Theme.White)
                 pe.LightEmission = 1
-                pe.Size = NumberSequence.new(0.35 * scaleMult, 0)
+                pe.Size = NumberSequence.new(0.38 * scaleMult, 0)
                 pe.Lifetime = NumberRange.new(0.25, 0.55)
-                pe.Speed = NumberRange.new(12 * scaleMult, 24 * scaleMult)
+                pe.Speed = NumberRange.new(14 * scaleMult, 26 * scaleMult)
                 pe.SpreadAngle = Vector2.new(180, 180)
                 pe.Rate = 0
                 pe.Parent = anchor
-                pe:Emit(25)
+                pe:Emit(28)
             else
                 local cloned = template:Clone()
                 local emitters = {}
-                if cloned:IsA("BasePart") or cloned:IsA("Model") then
-                    if cloned:IsA("BasePart") then
-                        cloned.CFrame = CFrame.new(worldPos)
-                        cloned.Anchored = true
-                        cloned.CanCollide = false
-                        cloned.CanQuery = false
-                    elseif cloned:IsA("Model") then
-                        pcall(function() cloned:PivotTo(CFrame.new(worldPos)) end)
-                    end
+                local trails = {}
+                if cloned:IsA("BasePart") then
+                    cloned.CFrame = CFrame.new(worldPos)
+                    cloned.Transparency = 1
+                    cloned.Anchored = true
+                    cloned.CanCollide = false
+                    cloned.CanQuery = false
+                    cloned.CanTouch = false
                     cloned.Parent = anchor
-                    for _, d in ipairs(cloned:GetDescendants()) do
-                        if d:IsA("BasePart") then
-                            d.Anchored = true
-                            d.CanCollide = false
-                            d.CanQuery = false
-                        elseif d:IsA("ParticleEmitter") then
-                            table.insert(emitters, d)
-                        elseif d:IsA("PointLight") and customColOverride then
-                            d.Color = customColOverride
-                        end
-                    end
+                elseif cloned:IsA("Model") then
+                    pcall(function() cloned:PivotTo(CFrame.new(worldPos)) end)
+                    cloned.Parent = anchor
                 else
-                    for _, child in ipairs(cloned:GetChildren()) do
-                        child.Parent = anchor
-                        if child:IsA("ParticleEmitter") then
-                            table.insert(emitters, child)
-                        end
+                    cloned.Parent = anchor
+                end
+
+                for _, d in ipairs(anchor:GetDescendants()) do
+                    if d:IsA("BasePart") and d ~= anchor then
+                        d.Anchored = true
+                        d.CanCollide = false
+                        d.CanQuery = false
+                        d.CanTouch = false
+                    elseif d:IsA("ParticleEmitter") then
+                        table.insert(emitters, d)
+                    elseif d:IsA("Trail") then
+                        table.insert(trails, d)
+                    elseif d:IsA("PointLight") and customColOverride then
+                        d.Color = customColOverride
                     end
-                    for _, d in ipairs(anchor:GetDescendants()) do
-                        if d:IsA("ParticleEmitter") then
-                            table.insert(emitters, d)
+                end
+
+                for _, tr in ipairs(trails) do
+                    pcall(function()
+                        if customColOverride then
+                            tr.Color = ColorSequence.new(customColOverride)
                         end
-                    end
+                        tr.Enabled = true
+                    end)
                 end
 
                 for _, pe in ipairs(emitters) do
@@ -10343,7 +10328,7 @@ do
                             pe.Color = ColorSequence.new(customColOverride)
                         end
                         pe.Enabled = true
-                        local emitCnt = math.floor((tonumber(pe:GetAttribute("EmitCount")) or 18) * scaleMult)
+                        local emitCnt = math.max(math.floor((tonumber(pe:GetAttribute("EmitCount")) or 20) * scaleMult), 12)
                         local emitDel = tonumber(pe:GetAttribute("EmitDelay")) or 0
                         if emitDel > 0 then
                             task.delay(emitDel, function()
@@ -10351,6 +10336,29 @@ do
                             end)
                         else
                             pe:Emit(emitCnt)
+                        end
+                        task.delay(0.65, function()
+                            if pe and pe.Parent then pe.Enabled = false end
+                        end)
+                    end)
+                end
+
+                -- Animate orbital motion on cloned Part so OneShot's TrailAttach -> Trail1 ribbons render in 3D space!
+                if #trails > 0 then
+                    task.spawn(function()
+                        local t0 = os.clock()
+                        local targetPart = (cloned:IsA("BasePart") and cloned) or anchor
+                        while targetPart and targetPart.Parent and (os.clock() - t0) < 1.35 do
+                            local elapsed = os.clock() - t0
+                            local angle = elapsed * 10.5
+                            local radius = 2.4 * scaleMult * (1 - elapsed * 0.45)
+                            local lift = elapsed * 3.2
+                            pcall(function()
+                                targetPart.CFrame = CFrame.new(
+                                    worldPos + Vector3.new(math.cos(angle) * radius, lift, math.sin(angle) * radius)
+                                ) * CFrame.Angles(angle * 0.7, angle, 0)
+                            end)
+                            RunService.RenderStepped:Wait()
                         end
                     end)
                 end
@@ -10389,11 +10397,16 @@ do
         end)
     end
 
+    local lastHitEffectClock = 0
     local function triggerCustomHitEffectAt(pos)
+        if not pos then return end
+        local now = os.clock()
+        if now - lastHitEffectClock < 0.03 then return end
+        lastHitEffectClock = now
         if ConfigState.HitSoundEnabled then
             playCustomHitSound()
         end
-        if ConfigState.HitEffectEnabled and pos then
+        if ConfigState.HitEffectEnabled then
             local col = ConfigState.HitEffectCustomColor and ConfigState.HitEffectColor or nil
             spawnKillEffectAtPosition(
                 pos,
@@ -10422,8 +10435,31 @@ do
         return ConfigState.TracerColor or Theme.White
     end
 
+    local function getLocalMuzzleWorldPos()
+        local cam = workspace.CurrentCamera
+        local vm = cam and cam:FindFirstChild("Viewmodel")
+        local wep = vm and vm:FindFirstChild("Weapon")
+        if wep then
+            local shootFx = wep:FindFirstChild("ShootEffects") or wep:FindFirstChild("Attachment")
+            if shootFx and shootFx:IsA("Attachment") then
+                return shootFx.WorldPosition
+            elseif wep:IsA("BasePart") then
+                return wep.Position
+            end
+        end
+        local myChar = LocalPlayer and LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if cam then
+            return cam.CFrame.Position + (cam.CFrame.RightVector * 0.55) - (cam.CFrame.UpVector * 0.35) + (cam.CFrame.LookVector * 1.2)
+        elseif myHRP then
+            return myHRP.Position
+        end
+        return nil
+    end
+
     local function spawnCustomTracerSegment(startPos, endPos)
         if not ConfigState.BulletTracers or not startPos or not endPos then return end
+        if (endPos - startPos).Magnitude < 0.8 then return end
         pcall(function()
             local col = getActiveTracerColor()
             local width = math.clamp(tonumber(ConfigState.TracerWidth) or 1.5, 0.1, 5.0) * 0.18
@@ -10432,15 +10468,15 @@ do
             local tex = TRACER_TEXTURES[style] or ""
 
             local holder = Instance.new("Part")
-            holder.Name = "CoreXyz_TracerHolder"
+            holder.Name = "CoreXyz_BulletTracer"
             holder.Size = Vector3.new(0.1, 0.1, 0.1)
             holder.Transparency = 1
             holder.Anchored = true
             holder.CanCollide = false
             holder.CanQuery = false
             holder.CanTouch = false
-            holder.Position = startPos
-            holder.Parent = workspace
+            holder.CFrame = CFrame.new(startPos)
+            holder.Parent = workspace:FindFirstChild("Effects") or workspace
 
             local att0 = Instance.new("Attachment")
             att0.WorldPosition = startPos
@@ -10477,9 +10513,13 @@ do
     end
     State.spawnCustomTracerSegment = spawnCustomTracerSegment
 
-    -- Hook Workspace.Bullets for Bullet Tracers ("Only Me" filter) & Hit Effects
-    local function isBulletFromLocalPlayer(bulletObj)
+    -- Dump-Verified Workspace.Effects Watcher for Bullet & BulletHit (Lines 1243-1318 of dump)
+    local lastLocalFireClock = 0
+    local function isEffectFromLocalPlayer(effectPart)
         if not ConfigState.BulletTracersOnlyMe then
+            return true
+        end
+        if (os.clock() - lastLocalFireClock) <= 0.28 then
             return true
         end
         local cam = workspace.CurrentCamera
@@ -10488,133 +10528,363 @@ do
         local originRef = (cam and cam.CFrame.Position) or (myHRP and myHRP.Position)
         if not originRef then return true end
 
-        local bPos = nil
-        if bulletObj:IsA("BasePart") then
-            bPos = bulletObj.Position
-        else
-            local p = bulletObj:FindFirstChildWhichIsA("BasePart")
-            if p then bPos = p.Position end
-        end
-        if bPos and (bPos - originRef).Magnitude <= 18 then
-            return true
+        if effectPart:IsA("BasePart") then
+            if (effectPart.Position - originRef).Magnitude <= 28 then
+                return true
+            end
+            -- Also check if any Attachment inside Bullet is near the player's camera/muzzle
+            for _, child in ipairs(effectPart:GetChildren()) do
+                if child:IsA("Attachment") and (child.WorldPosition - originRef).Magnitude <= 28 then
+                    return true
+                end
+            end
+            -- Check if effectPart lies closely along the camera's look ray
+            if cam then
+                local toPart = effectPart.Position - cam.CFrame.Position
+                if toPart.Magnitude > 0.5 and toPart.Unit:Dot(cam.CFrame.LookVector) >= 0.965 then
+                    return true
+                end
+            end
         end
         return false
     end
 
-    local function styleBulletObject(bulletObj)
-        if not bulletObj then return end
+    local function styleBulletOrHitObject(obj)
+        if not obj then return end
         task.defer(function()
-            if bulletObj.Name == "BulletHit" then
-                if isBulletFromLocalPlayer(bulletObj) and bulletObj:IsA("BasePart") then
-                    triggerCustomHitEffectAt(bulletObj.Position)
-                end
-                return
-            end
-
-            if not isBulletFromLocalPlayer(bulletObj) then
-                return
-            end
-
-            local startPos = nil
-            local cam = workspace.CurrentCamera
-            local vm = cam and cam:FindFirstChild("Viewmodel")
-            local wep = vm and vm:FindFirstChild("Weapon")
-            local att = wep and wep:FindFirstChild("Attachment")
-            if att and att:IsA("Attachment") then
-                startPos = att.WorldPosition
-            elseif wep and wep:IsA("BasePart") then
-                startPos = wep.Position
-            elseif bulletObj:IsA("BasePart") then
-                startPos = bulletObj.Position
-            end
-
-            if ConfigState.BulletTracers then
-                local col = getActiveTracerColor()
-                local widthMult = math.clamp(tonumber(ConfigState.TracerWidth) or 1.5, 0.1, 5.0)
-                local life = math.clamp(tonumber(ConfigState.TracerLifetime) or 0.85, 0.1, 5.0)
-                local style = ConfigState.TracerStyle or "Laser Beam"
-                local tex = TRACER_TEXTURES[style] or ""
-
-                for _, d in ipairs(bulletObj:GetDescendants()) do
-                    if d:IsA("Beam") or d:IsA("Trail") then
-                        pcall(function()
-                            d.Color = ColorSequence.new(col)
-                            d.LightEmission = 1
-                            d.LightInfluence = 0
-                            if tex ~= "" then
-                                d.Texture = tex
-                            end
-                            if d:IsA("Trail") then
-                                d.Lifetime = life
-                                d.WidthScale = NumberSequence.new(widthMult)
-                            elseif d:IsA("Beam") then
-                                d.Width0 = (d.Width0 > 0 and d.Width0 or 0.25) * widthMult
-                                d.Width1 = (d.Width1 > 0 and d.Width1 or 0.25) * widthMult
-                            end
-                        end)
+            if not obj.Parent then return end
+            if obj.Name == "BulletHit" and obj:IsA("BasePart") then
+                if isEffectFromLocalPlayer(obj) then
+                    local muzzlePos = getLocalMuzzleWorldPos()
+                    if ConfigState.BulletTracers and muzzlePos then
+                        spawnCustomTracerSegment(muzzlePos, obj.Position)
                     end
+                    triggerCustomHitEffectAt(obj.Position)
                 end
+                return
+            end
 
-                if bulletObj:IsA("BasePart") and startPos then
-                    local lastPos = bulletObj.Position
-                    local posConn = bulletObj:GetPropertyChangedSignal("Position"):Connect(function()
-                        lastPos = bulletObj.Position
-                    end)
-                    local conn
-                    conn = bulletObj.AncestryChanged:Connect(function(_, newParent)
-                        if not newParent then
-                            if posConn then posConn:Disconnect() end
-                            if conn then conn:Disconnect() end
-                            local finalPos = bulletObj.Position or lastPos
-                            spawnCustomTracerSegment(startPos, finalPos)
+            if obj.Name == "Bullet" and obj:IsA("BasePart") then
+                if not isEffectFromLocalPlayer(obj) then
+                    return
+                end
+                if ConfigState.BulletTracers then
+                    local col = getActiveTracerColor()
+                    local widthMult = math.clamp(tonumber(ConfigState.TracerWidth) or 1.5, 0.1, 5.0)
+                    local life = math.clamp(tonumber(ConfigState.TracerLifetime) or 0.85, 0.1, 5.0)
+                    local style = ConfigState.TracerStyle or "Laser Beam"
+                    local tex = TRACER_TEXTURES[style] or ""
+
+                    for _, d in ipairs(obj:GetDescendants()) do
+                        if d:IsA("Beam") or d:IsA("Trail") then
+                            pcall(function()
+                                d.Color = ColorSequence.new(col)
+                                d.LightEmission = 1
+                                d.LightInfluence = 0
+                                if tex ~= "" then
+                                    d.Texture = tex
+                                end
+                                if d:IsA("Trail") then
+                                    d.Lifetime = life
+                                    d.WidthScale = NumberSequence.new(widthMult)
+                                elseif d:IsA("Beam") then
+                                    d.Width0 = (d.Width0 > 0 and d.Width0 or 0.25) * widthMult
+                                    d.Width1 = (d.Width1 > 0 and d.Width1 or 0.25) * widthMult
+                                end
+                            end)
                         end
-                    end)
+                    end
                 end
             end
         end)
     end
 
-    local function bindBulletsFolderWatcher()
-        local bFolder = workspace:FindFirstChild("Bullets")
-        if bFolder and not State.hookedBulletsFolder then
-            State.hookedBulletsFolder = bFolder
-            bFolder.ChildAdded:Connect(styleBulletObject)
-        end
+    local hookedEffectFolders = setmetatable({}, { __mode = "k" })
+    local function bindEffectsFolderWatcher(folder)
+        if not folder or hookedEffectFolders[folder] then return end
+        hookedEffectFolders[folder] = true
+        folder.ChildAdded:Connect(styleBulletOrHitObject)
     end
-    bindBulletsFolderWatcher()
+
+    bindEffectsFolderWatcher(workspace:FindFirstChild("Effects"))
+    bindEffectsFolderWatcher(workspace:FindFirstChild("Bullets"))
     workspace.ChildAdded:Connect(function(child)
-        if child.Name == "Bullets" then
-            bindBulletsFolderWatcher()
-        elseif child.Name == "BulletHit" then
-            styleBulletObject(child)
+        if child.Name == "Effects" or child.Name == "Bullets" then
+            bindEffectsFolderWatcher(child)
+        elseif child.Name == "Bullet" or child.Name == "BulletHit" then
+            styleBulletOrHitObject(child)
         end
     end)
 
-    -- Watch Enemy Deaths for Custom Kill Effects
-    local hookedEnemyDeaths = {}
+    -- Also fire instant raycast Tracer & Hit Effect whenever LocalPlayer fires Primary or Secondary weapon!
+    local function onLocalWeaponFired()
+        lastLocalFireClock = os.clock()
+        if not ConfigState.BulletTracers and not ConfigState.HitEffectEnabled and not ConfigState.HitSoundEnabled then
+            return
+        end
+        local cam = workspace.CurrentCamera
+        if not cam then return end
+        local muzzlePos = getLocalMuzzleWorldPos() or cam.CFrame.Position
+        rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
+        local rayResult = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * 1500, rayParams)
+        local endPos = (rayResult and rayResult.Position) or (cam.CFrame.Position + cam.CFrame.LookVector * 600)
+        if ConfigState.BulletTracers then
+            spawnCustomTracerSegment(muzzlePos, endPos)
+        end
+        if rayResult and rayResult.Position then
+            triggerCustomHitEffectAt(rayResult.Position)
+        end
+    end
+
+    -- Hook Viewmodel & Character for Internal Auto-Reapply & Shot Detection
+    local hookedViewmodels = setmetatable({}, { __mode = "k" })
+    local function hookViewmodelInstance(vm)
+        if not vm or hookedViewmodels[vm] then return end
+        hookedViewmodels[vm] = true
+
+        task.defer(function()
+            applyViewmodelSkin(true)
+            applyOneShotSelfChams()
+            applyOneShotWeaponChams()
+        end)
+
+        vm.ChildAdded:Connect(function(child)
+            if child.Name == "Weapon" and not isSwappingViewmodel then
+                task.defer(function()
+                    applyViewmodelSkin(true)
+                    applyOneShotWeaponChams()
+                end)
+            elseif child.Name == "LeftArm" or child.Name == "RightArm" or child.Name == "Left Arm" or child.Name == "Right Arm" then
+                task.defer(applyOneShotSelfChams)
+            end
+        end)
+    end
+
+    local function bindCameraViewmodelWatcher()
+        local cam = workspace.CurrentCamera
+        if not cam then return end
+        local vm = cam:FindFirstChild("Viewmodel")
+        if vm then hookViewmodelInstance(vm) end
+        cam.ChildAdded:Connect(function(child)
+            if child.Name == "Viewmodel" then
+                hookViewmodelInstance(child)
+            end
+        end)
+    end
+    bindCameraViewmodelWatcher()
+
+    -- Instant Auto-Respawn helper (Bypasses OneShot Killcam & Respawns Immediately)
+    local cachedMainGamePackets = nil
+    local lastAutoRespawnAttempt = 0
+    local function triggerImmediateOneShotRespawn()
+        if not ConfigState.AutoRespawn then return end
+        local now = os.clock()
+        if (now - lastAutoRespawnAttempt) < 0.18 then return end
+        lastAutoRespawnAttempt = now
+
+        -- 1. Invoke OneShot's native MainGamePackets.respawn & deploy modules if readable
+        pcall(function()
+            if not cachedMainGamePackets and ReplicatedStorage then
+                local common = ReplicatedStorage:FindFirstChild("Common")
+                local packets = common and common:FindFirstChild("Packets")
+                local mgp = packets and packets:FindFirstChild("MainGamePackets")
+                if mgp and mgp:IsA("ModuleScript") then
+                    local ok, mod = pcall(require, mgp)
+                    if ok and type(mod) == "table" then
+                        cachedMainGamePackets = mod
+                    end
+                end
+            end
+            if cachedMainGamePackets then
+                if cachedMainGamePackets.respawn and type(cachedMainGamePackets.respawn.send) == "function" then
+                    pcall(cachedMainGamePackets.respawn.send)
+                end
+                if cachedMainGamePackets.deploy and type(cachedMainGamePackets.deploy.send) == "function" then
+                    pcall(cachedMainGamePackets.deploy.send)
+                end
+            end
+        end)
+
+        -- 2. Trigger client Deathscreen / Deploy UI buttons & hide Killcam overlay
+        pcall(function()
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            if not pgui then return end
+            for _, guiName in ipairs({ "Game Interface", "GameInterface_Mobile" }) do
+                local gGui = pgui:FindFirstChild(guiName)
+                if gGui then
+                    local ds = gGui:FindFirstChild("Deathscreen")
+                    if ds then
+                        local deployBtn = ds:FindFirstChild("Deploy")
+                        if deployBtn and deployBtn:IsA("GuiButton") then
+                            if type(firesignal) == "function" then
+                                pcall(firesignal, deployBtn.MouseButton1Click)
+                                pcall(firesignal, deployBtn.Activated)
+                            elseif type(getconnections) == "function" then
+                                for _, c in ipairs(getconnections(deployBtn.MouseButton1Click)) do pcall(function() c:Fire() end) end
+                                for _, c in ipairs(getconnections(deployBtn.Activated)) do pcall(function() c:Fire() end) end
+                            end
+                        end
+                        ds.Visible = false
+                    end
+                    local mainHud = gGui:FindFirstChild("MainHud")
+                    local hudDeploy = mainHud and mainHud:FindFirstChild("Deploy")
+                    if hudDeploy and hudDeploy:IsA("GuiButton") and hudDeploy.Visible then
+                        if type(firesignal) == "function" then
+                            pcall(firesignal, hudDeploy.MouseButton1Click)
+                            pcall(firesignal, hudDeploy.Activated)
+                        elseif type(getconnections) == "function" then
+                            for _, c in ipairs(getconnections(hudDeploy.MouseButton1Click)) do pcall(function() c:Fire() end) end
+                            for _, c in ipairs(getconnections(hudDeploy.Activated)) do pcall(function() c:Fire() end) end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    State.triggerImmediateOneShotRespawn = triggerImmediateOneShotRespawn
+
+    local function hookLocalCharacterSkinSignals(char)
+        if not char then return end
+        task.defer(function()
+            applyAllOneShotSkins(true)
+            applyOneShotSelfChams()
+        end)
+        for _, attr in ipairs({ "currentWeapon", "currentWeaponServer", "usingKnife", "deployed" }) do
+            pcall(function()
+                char:GetAttributeChangedSignal(attr):Connect(function()
+                    task.defer(function()
+                        applyAllOneShotSkins(true)
+                        applyOneShotSelfChams()
+                    end)
+                    -- Wait an extra short tick in case Viewmodel.Weapon swaps right after attribute replication
+                    task.delay(0.06, function()
+                        applyAllOneShotSkins(false)
+                    end)
+                end)
+            end)
+        end
+        for _, shotAttr in ipairs({ "lastShotPrimary", "lastShotSecondary" }) do
+            pcall(function()
+                char:GetAttributeChangedSignal(shotAttr):Connect(function()
+                    local val = tonumber(char:GetAttribute(shotAttr)) or 0
+                    if val > 0 then
+                        onLocalWeaponFired()
+                    end
+                end)
+            end)
+        end
+        char.ChildAdded:Connect(function(child)
+            if child.Name == "Primary" or child.Name == "Secondary" or child.Name == "Knife" then
+                task.defer(applyThirdPersonCharacterSkins)
+            end
+        end)
+        local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 3)
+        if hum then
+            hum.Died:Connect(function()
+                if ConfigState.AutoRespawn then
+                    triggerImmediateOneShotRespawn()
+                    task.delay(0.15, triggerImmediateOneShotRespawn)
+                end
+            end)
+            hum.HealthChanged:Connect(function(hp)
+                if hp <= 0 and ConfigState.AutoRespawn then
+                    triggerImmediateOneShotRespawn()
+                end
+            end)
+        end
+    end
+
+    if LocalPlayer and LocalPlayer.Character then
+        hookLocalCharacterSkinSignals(LocalPlayer.Character)
+    end
+    if LocalPlayer and LocalPlayer.CharacterAdded then
+        LocalPlayer.CharacterAdded:Connect(function(newChar)
+            task.defer(function()
+                hookLocalCharacterSkinSignals(newChar)
+            end)
+        end)
+    end
+
+    -- Watch Enemy & Bot Deaths for Custom Kill Effects (Hooks Humanoid.Died, HealthChanged & ReplicatedStorage.Values.Game.@deaths)
+    local hookedEnemyHumanoids = setmetatable({}, { __mode = "k" })
+    local hookedGameValueFolders = setmetatable({}, { __mode = "k" })
+    local lastDeathEffectClockPerEntity = {}
+
+    local function triggerEnemyKillEffectOnce(entityName, fallbackChar)
+        if not ConfigState.KillEffectEnabled then return end
+        local now = os.clock()
+        if lastDeathEffectClockPerEntity[entityName] and (now - lastDeathEffectClockPerEntity[entityName]) < 0.75 then
+            return
+        end
+        lastDeathEffectClockPerEntity[entityName] = now
+
+        local pos = nil
+        if fallbackChar then
+            local root = fallbackChar:FindFirstChild("HumanoidRootPart") or fallbackChar:FindFirstChild("Torso") or fallbackChar:FindFirstChild("Head")
+            if root and root:IsA("BasePart") then
+                pos = root.Position
+            end
+        end
+        if not pos then
+            pos = State.lastEnemyPositions[entityName]
+        end
+        if pos then
+            spawnKillEffectAtPosition(pos, ConfigState.KillEffect)
+        end
+    end
+
     local function monitorAllEnemyDeaths()
         if not ConfigState.KillEffectEnabled then return end
         for _, ent in ipairs(getAllTargetEntities()) do
             if ent ~= LocalPlayer and ent.Character then
                 local char = ent.Character
+                local eName = ent.Name
+                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("Head")
+                if root and root:IsA("BasePart") then
+                    State.lastEnemyPositions[eName] = root.Position
+                end
                 local hum = char:FindFirstChildOfClass("Humanoid")
-                if hum and not hookedEnemyDeaths[hum] then
-                    hookedEnemyDeaths[hum] = true
+                if hum and not hookedEnemyHumanoids[hum] then
+                    hookedEnemyHumanoids[hum] = true
                     hum.Died:Connect(function()
-                        if ConfigState.KillEffectEnabled then
-                            local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("Head")
-                            if root and root:IsA("BasePart") then
-                                spawnKillEffectAtPosition(root.Position, ConfigState.KillEffect)
-                            end
+                        triggerEnemyKillEffectOnce(eName, char)
+                    end)
+                    hum.HealthChanged:Connect(function(hp)
+                        if hp <= 0 then
+                            triggerEnemyKillEffectOnce(eName, char)
                         end
                     end)
                 end
             end
         end
+
+        -- Also hook ReplicatedStorage.Values.Game.<EntityName> @deaths attribute changes (100% reliable in OneShot!)
+        pcall(function()
+            local vals = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Values")
+            local gameFolder = vals and vals:FindFirstChild("Game")
+            if gameFolder then
+                for _, folder in ipairs(gameFolder:GetChildren()) do
+                    if folder.Name ~= (LocalPlayer and LocalPlayer.Name) and not hookedGameValueFolders[folder] then
+                        hookedGameValueFolders[folder] = true
+                        local lastDeaths = tonumber(folder:GetAttribute("deaths")) or 0
+                        folder:GetAttributeChangedSignal("deaths"):Connect(function()
+                            local newDeaths = tonumber(folder:GetAttribute("deaths")) or 0
+                            if newDeaths > lastDeaths then
+                                lastDeaths = newDeaths
+                                local entChar = workspace:FindFirstChild(folder.Name)
+                                triggerEnemyKillEffectOnce(folder.Name, entChar)
+                            else
+                                lastDeaths = newDeaths
+                            end
+                        end)
+                    end
+                end
+            end
+        end)
     end
     State.monitorAllEnemyDeaths = monitorAllEnemyDeaths
 
-    -- Triggerbot Execution (Works on Real Players + Workspace Bots with Configurable Delay)
+    -- Triggerbot Execution (Works on Real Players + Workspace Bots with O(1) Ancestor Model Lookup)
     State.triggerAcquireTime = nil
     State.lastTriggerShotClock = 0
 
@@ -10643,6 +10913,29 @@ do
         end)
     end
 
+    local function resolveRayHitEnemyEntity(hitInst)
+        if not hitInst then return nil, nil end
+        local curr = hitInst
+        while curr and curr ~= workspace do
+            if curr:IsA("Model") and curr ~= (LocalPlayer and LocalPlayer.Character) then
+                local plr = Players:GetPlayerFromCharacter(curr)
+                if plr and plr ~= LocalPlayer then
+                    return plr, curr
+                end
+                local botProxy = State.botProxies[curr]
+                if botProxy then
+                    return botProxy, curr
+                end
+                if isOneShotBotModel(curr) then
+                    refreshOneShotBotProxies(true)
+                    return State.botProxies[curr], curr
+                end
+            end
+            curr = curr.Parent
+        end
+        return nil, nil
+    end
+
     local function stepOneShotTriggerbot(camera)
         if not ConfigState.Triggerbot or not camera then
             State.triggerAcquireTime = nil
@@ -10666,15 +10959,12 @@ do
         local hitValidEnemy = false
         local hitWorldPos = nil
         if rayResult and rayResult.Instance then
-            local hitInst = rayResult.Instance
-            for _, ent in ipairs(getAllTargetEntities()) do
-                if ent ~= LocalPlayer and ent.Character and hitInst:IsDescendantOf(ent.Character) then
-                    local hum = ent.Character:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health > 0 and not isCharacterSpawnProtected(ent.Character) and passesTeamCheck(ent) then
-                        hitValidEnemy = true
-                        hitWorldPos = rayResult.Position
-                        break
-                    end
+            local ent, charModel = resolveRayHitEnemyEntity(rayResult.Instance)
+            if ent and charModel then
+                local hum = charModel:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health > 0 and not isCharacterSpawnProtected(charModel) and passesTeamCheck(ent) then
+                    hitValidEnemy = true
+                    hitWorldPos = rayResult.Position
                 end
             end
         end
@@ -10697,13 +10987,24 @@ do
     end
     State.stepOneShotTriggerbot = stepOneShotTriggerbot
 
-    -- Instant Scope & Instant Reload Execution
+    -- Instant Scope, Instant Reload, Viewmodel Offsets, Suppress Muzzle Smoke & Auto-Respawn Execution
     State.savedUnscopedFOV = 70
     local function stepOneShotMiscFeatures(camera)
         local myChar = LocalPlayer and LocalPlayer.Character
         local cam = camera or workspace.CurrentCamera
 
-        -- 1. Instant Scope
+        -- 0. Instant Killcam-Bypass Auto-Respawn & Auto-Deploy
+        if ConfigState.AutoRespawn then
+            local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            local gGui = pgui and (pgui:FindFirstChild("Game Interface") or pgui:FindFirstChild("GameInterface_Mobile"))
+            local ds = gGui and gGui:FindFirstChild("Deathscreen")
+            if (myHum and myHum.Health <= 0) or (ds and ds.Visible) then
+                triggerImmediateOneShotRespawn()
+            end
+        end
+
+        -- 1. Instant Scope (Restores FOV cleanly even if switching weapons while holding RMB)
         if ConfigState.InstantScope and cam then
             local rmbDown = false
             pcall(function()
@@ -10712,13 +11013,14 @@ do
             local curSlot = myChar and (myChar:GetAttribute("currentWeapon") or myChar:GetAttribute("currentWeaponServer") or "Primary")
             local usingKnife = myChar and (myChar:GetAttribute("usingKnife") == true)
             local deployed = (not myChar) or (myChar:GetAttribute("deployed") ~= false)
+            local shouldScope = rmbDown and deployed and not usingKnife and curSlot == "Primary"
 
-            if rmbDown and deployed and not usingKnife and curSlot == "Primary" then
+            if shouldScope then
                 if cam.FieldOfView > 40 then
                     State.savedUnscopedFOV = cam.FieldOfView
                 end
                 cam.FieldOfView = 26
-            elseif State.savedUnscopedFOV and cam.FieldOfView < 40 and not rmbDown then
+            elseif State.savedUnscopedFOV and cam.FieldOfView < 40 then
                 cam.FieldOfView = State.savedUnscopedFOV
             end
 
@@ -10788,12 +11090,47 @@ do
 
             pcall(function()
                 local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-                local mainHud = pgui and pgui:FindFirstChild("MainHud")
-                local reloadBar = mainHud and mainHud:FindFirstChild("ReloadBar")
+                local gameplayGui = pgui and (pgui:FindFirstChild("Gameplay") or pgui:FindFirstChild("MainHud"))
+                local reloadBar = gameplayGui and gameplayGui:FindFirstChild("ReloadBar")
                 if reloadBar and reloadBar:IsA("GuiObject") then
                     reloadBar.Visible = false
                 end
             end)
+        end
+
+        -- 3. Viewmodel CFrame Offset & Muzzle Smoke Suppression
+        local vm = cam and cam:FindFirstChild("Viewmodel")
+        if vm then
+            local hrp = vm:FindFirstChild("HumanoidRootPart")
+            local handleMotor = hrp and hrp:FindFirstChild("Handle")
+            local wep = vm:FindFirstChild("Weapon")
+            if handleMotor and wep then
+                local baseC1 = wep:GetAttribute("CoreXyz_BaseC1") or wep:GetAttribute("C1")
+                if typeof(baseC1) ~= "CFrame" then
+                    baseC1 = handleMotor.C1
+                    pcall(function() wep:SetAttribute("CoreXyz_BaseC1", baseC1) end)
+                end
+                if ConfigState.ViewmodelOffsetEnabled then
+                    local ox = tonumber(ConfigState.ViewmodelOffsetX) or 0
+                    local oy = tonumber(ConfigState.ViewmodelOffsetY) or 0
+                    local oz = tonumber(ConfigState.ViewmodelOffsetZ) or 0
+                    handleMotor.C1 = baseC1 * CFrame.new(ox, oy, oz)
+                elseif typeof(baseC1) == "CFrame" then
+                    handleMotor.C1 = baseC1
+                end
+
+                if ConfigState.SuppressMuzzleSmoke then
+                    local sfx = wep:FindFirstChild("ShootEffects")
+                    if sfx then
+                        for _, pe in ipairs(sfx:GetChildren()) do
+                            if pe:IsA("ParticleEmitter") and string.find(string.lower(pe.Name), "smoke", 1, true) then
+                                pe:SetAttribute("EmitCount", 0)
+                                pe.Enabled = false
+                            end
+                        end
+                    end
+                end
+            end
         end
     end
     State.stepOneShotMiscFeatures = stepOneShotMiscFeatures
@@ -10802,7 +11139,7 @@ do
     task.spawn(function()
         while task.wait(0.25) do
             if not State.unloaded then
-                pcall(refreshOneShotBotProxies)
+                pcall(refreshOneShotBotProxies, true)
                 pcall(applyAllOneShotSkins, false)
                 if ConfigState.SelfChams then
                     pcall(applyOneShotSelfChams)
@@ -10822,26 +11159,32 @@ do
 end
 
 -- ============================================================================
--- TAB 1: COMBAT (UNIVERSAL COMBAT + BOT SUPPORT + TRIGGERBOT + ESP & 3D BOX)
+-- TAB 1: COMBAT (AIMBOT, FOV, WALL CHECK, TRIGGERBOT & HITBOX EXPANDER FOR PLAYERS + BOTS)
 -- ============================================================================
 do
-    createLabel(CombatTab, "Aimbot & FOV Controller", "Left")
+    createLabel(CombatTab, "Aimbot & FOV Controller (Players & Bots)", "Left")
     createToggle(CombatTab, "Aimbot", false, function(val)
         ConfigState.Aimbot = val
         if not val then
             State.cachedAimTarget = nil
         end
     end, { ShowKeybindBadge = true })
-    createToggle(CombatTab, "FOV Circle", false, function(val)
+    createSlider(CombatTab, "Smoothness", 0.05, 1, 0.9, 0.05, "", function(val)
+        ConfigState.Smoothness = val
+    end)
+    createToggle(CombatTab, "Show FOV Circle", false, function(val)
         ConfigState.ShowFOV = val
         UI.FovCircle.Visible = val
     end)
-    createSlider(CombatTab, "FOV Radius", 10, 240, 85, 1, "px", function(val)
+    createSlider(CombatTab, "FOV Radius", 10, 450, 85, 5, "px", function(val)
         ConfigState.FOVRadius = val
         UI.FovCircle.Size = UDim2.fromOffset(val * 2, val * 2)
     end)
-    createSlider(CombatTab, "Aimbot Smoothness", 0.05, 1, 0.9, 0.01, "", function(val)
-        ConfigState.Smoothness = val
+    createDropdown(CombatTab, "FOV Style", { "Still", "Spin Gradient", "Double Sided", "Rainbow", "Pulse" }, ConfigState.FovVisualMode or "Still", function(opt)
+        ConfigState.FovVisualMode = opt
+    end)
+    UI.createColorRow(CombatTab, "FOV Color", ConfigState.FovColor or Color3.fromRGB(255, 255, 255), function(col)
+        ConfigState.FovColor = col
     end)
     createDropdown(CombatTab, "FOV Target", { "Closest to Crosshair", "Closest To User", "Lowest Health" }, ConfigState.FovTargetMode or "Closest to Crosshair", function(opt)
         ConfigState.FovTargetMode = opt
@@ -10917,13 +11260,19 @@ do
             updateHitboxExpander()
         end
     end)
+end
 
-    createLabel(CombatTab, "Enemy ESP & 3D Box (Players & Bots)", "Right")
-    createToggle(CombatTab, "ESP", false, function(val)
+-- ============================================================================
+-- TAB 2: VISUALS (ENEMY ESP & 3D BOX, 3-WEAPON SKIN CHANGER, KILL EFFECTS,
+-- BULLET TRACERS, HIT EFFECTS, SELF CHAMS & WEAPON CHAMS)
+-- ============================================================================
+do
+    createLabel(VisualsTab, "Enemy ESP & 3D Box (Players & Bots)", "Left")
+    createToggle(VisualsTab, "ESP (Chams, Name & HP)", false, function(val)
         ConfigState.ESP = val
         ConfigState.HealthBarESP = val
         if not val then
-            for _, data in pairs(State.espObjects) do
+            for plr, data in pairs(State.espObjects) do
                 if data.ScreenTag then data.ScreenTag.Visible = false end
                 if data.Billboard then data.Billboard.Enabled = false; data.Billboard.Adornee = nil end
                 if data.HealthBarBg then data.HealthBarBg.Visible = false end
@@ -10934,40 +11283,76 @@ do
                     data.LastHLEnabled = false
                     data.LastHLAdornee = nil
                 end
+                if plr and plr.Character then
+                    local dhl = plr.Character:FindFirstChild("DeployHighlight")
+                    if dhl and dhl:IsA("Highlight") and dhl:GetAttribute("CoreXyz_ESPActive") then
+                        pcall(function()
+                            dhl:SetAttribute("CoreXyz_ESPActive", nil)
+                            dhl.Enabled = false
+                            dhl.FillTransparency = 1
+                            dhl.OutlineTransparency = 1
+                        end)
+                    end
+                end
             end
-            if not ConfigState.Box3DESP then
+            if not ConfigState.Box3DESP and not ConfigState.SkeletonESP and not ConfigState.Tracers then
                 clearESP()
             end
         end
     end, { ShowKeybindBadge = true })
-    createToggle(CombatTab, "3D Box", false, function(val)
+    createToggle(VisualsTab, "3D Box", false, function(val)
         ConfigState.Box3DESP = val
         if not val then
             for _, data in pairs(State.espObjects) do
-                if data.BoxLines then
-                    for i = 1, 12 do
-                        data.BoxLines[i].Visible = false
+                if data.Box3DLines then
+                    for i = 1, #data.Box3DLines do
+                        data.Box3DLines[i].Visible = false
                     end
                 end
-                if data.Box2DFill then data.Box2DFill.Visible = false end
-                data.BoxVisible = false
+                if data.BoxFillFrame then data.BoxFillFrame.Visible = false end
+                data.Box3DVisible = false
             end
-            if not ConfigState.ESP then
+            if not ConfigState.ESP and not ConfigState.SkeletonESP and not ConfigState.Tracers then
                 clearESP()
             end
         end
     end)
-    UI.createColorRow(CombatTab, "ESP Color", State.espColor or Color3.fromRGB(255, 255, 255), function(col)
+    createToggle(VisualsTab, "Skeleton ESP", false, function(val)
+        ConfigState.SkeletonESP = val
+        if not val then
+            for _, data in pairs(State.espObjects) do
+                if data.SkeletonLines then
+                    for i = 1, #data.SkeletonLines do
+                        data.SkeletonLines[i].Visible = false
+                    end
+                end
+                if data.HeadCircle then data.HeadCircle.Visible = false end
+                data.SkeletonVisible = false
+            end
+            if not ConfigState.ESP and not ConfigState.Box3DESP and not ConfigState.Tracers then
+                clearESP()
+            end
+        end
+    end)
+    createToggle(VisualsTab, "2D ESP Snaplines", false, function(val)
+        ConfigState.Tracers = val
+        if not val then
+            for _, data in pairs(State.espObjects) do
+                if data.Tracer then data.Tracer.Visible = false end
+            end
+            if not ConfigState.ESP and not ConfigState.Box3DESP and not ConfigState.SkeletonESP then
+                clearESP()
+            end
+        end
+    end)
+    createDropdown(VisualsTab, "Snapline Origin", { "Bottom", "Center", "Top" }, ConfigState.TracerOrigin or "Bottom", function(opt)
+        ConfigState.TracerOrigin = opt
+    end)
+    UI.createColorRow(VisualsTab, "ESP Color", State.espColor or Color3.fromRGB(255, 255, 255), function(col)
         State.espColor = col
         ConfigState.ESPColorCustom = col
     end)
-end
 
--- ============================================================================
--- TAB 2: VISUALS (3-WEAPON SKIN CHANGER, KILL EFFECTS, BULLET TRACERS,
--- HIT EFFECTS, SELF CHAMS & WEAPON CHAMS)
--- ============================================================================
-do
     createLabel(VisualsTab, "OneShot Skin Changer (Auto-Reapplies on Respawn)", "Left")
     createToggle(VisualsTab, "Sniper Skin Changer", false, function(val)
         ConfigState.SniperSkinEnabled = val
@@ -10981,7 +11366,6 @@ do
             State.applyAllOneShotSkins(true)
         end
     end)
-
     createToggle(VisualsTab, "Pistol Skin Changer", false, function(val)
         ConfigState.PistolSkinEnabled = val
         if State.applyAllOneShotSkins then
@@ -10994,7 +11378,6 @@ do
             State.applyAllOneShotSkins(true)
         end
     end)
-
     createToggle(VisualsTab, "Knife Skin Changer", false, function(val)
         ConfigState.KnifeSkinEnabled = val
         if State.applyAllOneShotSkins then
@@ -11071,14 +11454,14 @@ do
         ConfigState.HitSoundVolume = val
     end)
 
-    createLabel(VisualsTab, "Self Chams", "Right")
+    createLabel(VisualsTab, "Self Chams (LeftArm / RightArm & Character)", "Right")
     createToggle(VisualsTab, "Self Chams", false, function(val)
         ConfigState.SelfChams = val
         if State.applySelfChams then
             State.applySelfChams()
         end
     end)
-    createDropdown(VisualsTab, "Target Mode", { "Only hands", "Character" }, ConfigState.SelfChamsTarget or "Only hands", function(opt)
+    createDropdown(VisualsTab, "Target Mode", { "Only hands", "Character", "Both" }, ConfigState.SelfChamsTarget or "Only hands", function(opt)
         ConfigState.SelfChamsTarget = opt
         if State.applySelfChams then
             State.applySelfChams()
@@ -11167,16 +11550,39 @@ do
 end
 
 -- ============================================================================
--- TAB 3: MISC (INSTANT SCOPE & INSTANT RELOAD)
+-- TAB 3: MISC (INSTANT SCOPE, INSTANT RELOAD, AUTO-RESPAWN & VIEWMODEL MODS)
 -- ============================================================================
 do
-    createLabel(MiscTab, "OneShot Weapon Modifiers", "Left")
+    createLabel(MiscTab, "OneShot Weapon & Match Modifiers", "Left")
     createToggle(MiscTab, "Instant Scope", false, function(val)
         ConfigState.InstantScope = val
     end, { ShowKeybindBadge = true })
     createToggle(MiscTab, "Instant Reload", false, function(val)
         ConfigState.InstantReload = val
     end, { ShowKeybindBadge = true })
+    createToggle(MiscTab, "Auto-Respawn (Bypass Killcam)", false, function(val)
+        ConfigState.AutoRespawn = val
+        if val and State.triggerImmediateOneShotRespawn then
+            State.triggerImmediateOneShotRespawn()
+        end
+    end, { ShowKeybindBadge = true })
+    createToggle(MiscTab, "Suppress Muzzle Smoke", false, function(val)
+        ConfigState.SuppressMuzzleSmoke = val
+    end)
+
+    createLabel(MiscTab, "Viewmodel CFrame Offset", "Right")
+    createToggle(MiscTab, "Enable Viewmodel Offset", false, function(val)
+        ConfigState.ViewmodelOffsetEnabled = val
+    end)
+    createSlider(MiscTab, "Offset X", -2.5, 2.5, 0, 0.05, "st", function(val)
+        ConfigState.ViewmodelOffsetX = val
+    end)
+    createSlider(MiscTab, "Offset Y", -2.5, 2.5, 0, 0.05, "st", function(val)
+        ConfigState.ViewmodelOffsetY = val
+    end)
+    createSlider(MiscTab, "Offset Z", -2.5, 2.5, 0, 0.05, "st", function(val)
+        ConfigState.ViewmodelOffsetZ = val
+    end)
 end
 
 -- TAB 8: SETTINGS (PERFORMANCE + CLIENT + SERVER + BACKGROUND + THEMES + FLOATING PILL + CONFIG MANAGER)
@@ -12064,7 +12470,6 @@ do
         if State.syncMusicPlayerDock then
             State.syncMusicPlayerDock()
         end
-        updateCrosshair(0)
         State.lastPillText = ""
         updateFloatingPillTelemetry()
         notify("Config System", "Loaded configuration '" .. cleanName .. "'!", 4)
@@ -12601,13 +13006,7 @@ do
             updateESP(camera)
         end
 
-        if ConfigState.Crosshair then
-            updateCrosshair(animClock)
-        elseif UI.CrosshairContainer and UI.CrosshairContainer.Visible then
-            UI.CrosshairContainer.Visible = false
-            UI.CrosshairV.Visible = false
-            UI.CrosshairH.Visible = false
-        end
+        -- Custom Crosshair removed in V5.1
     end
 
     -- Bind Camera + ESP + Resolution Stretch to RenderPriority.Camera + 1 (201) if supported so it runs AFTER Roblox's Camera script!
@@ -12626,7 +13025,6 @@ do
         local safeDt = (deltaTime and deltaTime > 0) and deltaTime or (1 / 60)
         animClock = animClock + safeDt
         telemetryTimer = telemetryTimer + safeDt
-        playerListRefreshTimer = playerListRefreshTimer
         playerListRefreshTimer = playerListRefreshTimer + safeDt
         keyCountdownTimer = keyCountdownTimer + safeDt
         uiAnimTimer = uiAnimTimer + safeDt
@@ -12752,9 +13150,7 @@ do
             State.updateVisualSuitesFrame(safeDt, animClock)
         end
 
-        if ConfigState.Crosshair then
-            updateCrosshair(animClock)
-        end
+
 
         if not boundCameraStep then
             runPostCameraRenderPass(safeDt)
