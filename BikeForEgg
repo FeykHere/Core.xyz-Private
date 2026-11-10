@@ -166,24 +166,36 @@ do
     local okHui, huiRes = pcall(function()
         return type(gethui) == "function" and gethui() or nil
     end)
-    if okHui and huiRes then
+    local playerGui = LocalPlayer and (LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5))
+    -- Prefer PlayerGui so Identity-2 UI input callbacks (MouseButton1Click) never throw 'lacking capability Plugin' when parenting notifications or ESP
+    if playerGui then
+        guiParent = playerGui
+    elseif okHui and huiRes then
         guiParent = huiRes
     else
-        local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
-        guiParent = playerGui or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+        guiParent = CoreGui
     end
 
-    -- Deterministically unbind any previous execution's render step & destroy old UI
+    -- Deterministically unbind any previous execution's render step & destroy old UI across all possible containers
     pcall(function()
         if RunService and RunService.UnbindFromRenderStep then
             RunService:UnbindFromRenderStep("CoreXYZ_PostCameraSync")
         end
     end)
-    local existingGui = guiParent and guiParent:FindFirstChild("CoreXYZ_Universal")
-    if existingGui then
-        pcall(function()
-            existingGui:Destroy()
-        end)
+    for _, container in ipairs({ playerGui, (okHui and huiRes) or nil, CoreGui }) do
+        if container then
+            pcall(function()
+                local existingGui = container:FindFirstChild("CoreXYZ_Universal")
+                if existingGui then
+                    existingGui:Destroy()
+                end
+                for _, child in ipairs(container:GetChildren()) do
+                    if child.Name == "CoreXYZ_BFE_ESP" then
+                        child:Destroy()
+                    end
+                end
+            end)
+        end
     end
     pcall(function()
         local oldWeatherPart = workspace and workspace:FindFirstChild("CoreXyz_WeatherEmitterPart")
@@ -912,87 +924,110 @@ do
     NotifyLayout.Parent = NotifyHolder
 end
 
+local function elevateThreadIdentity()
+    pcall(function()
+        local setId = (Env and (Env.setthreadidentity or Env.setidentity or Env.setthreadcontext))
+            or (type(setthreadidentity) == "function" and setthreadidentity)
+            or (type(setidentity) == "function" and setidentity)
+            or (type(setthreadcontext) == "function" and setthreadcontext)
+            or (type(syn) == "table" and type(syn.set_thread_identity) == "function" and syn.set_thread_identity)
+        if type(setId) == "function" then
+            setId(8)
+        end
+    end)
+end
+
 local function notify(title, content, duration)
     duration = duration or 4
-    local card = Instance.new("Frame")
-    card.Size = UDim2.fromOffset(280, 58)
-    card.BackgroundColor3 = Theme.Black
-    card.BackgroundTransparency = 1
-    card.ClipsDescendants = true
-    card.ZIndex = 51
-    card.Parent = UI.NotifyHolder
-    addCorner(card, 8)
-    local st = addLiveBorder(card, 1.2, 110, 1)
+    task.spawn(function()
+        elevateThreadIdentity()
+        pcall(function()
+            if not UI or not UI.NotifyHolder then
+                return
+            end
+            local card = Instance.new("Frame")
+            card.Size = UDim2.fromOffset(280, 58)
+            card.BackgroundColor3 = Theme.Black
+            card.BackgroundTransparency = 1
+            card.ClipsDescendants = true
+            card.ZIndex = 51
+            card.Parent = UI.NotifyHolder
+            addCorner(card, 8)
+            local st = addLiveBorder(card, 1.2, 110, 1)
 
-    local cardScale = Instance.new("UIScale")
-    cardScale.Scale = 0.9
-    cardScale.Parent = card
+            local cardScale = Instance.new("UIScale")
+            cardScale.Scale = 0.9
+            cardScale.Parent = card
 
-    local accentBar = Instance.new("Frame")
-    accentBar.Position = UDim2.fromOffset(8, 10)
-    accentBar.Size = UDim2.new(0, 3, 1, -20)
-    accentBar.BackgroundColor3 = Theme.Accent
-    accentBar.BackgroundTransparency = 1
-    accentBar.BorderSizePixel = 0
-    accentBar.ZIndex = 52
-    accentBar.Parent = card
-    addCorner(accentBar, 4)
+            local accentBar = Instance.new("Frame")
+            accentBar.Position = UDim2.fromOffset(8, 10)
+            accentBar.Size = UDim2.new(0, 3, 1, -20)
+            accentBar.BackgroundColor3 = Theme.Accent
+            accentBar.BackgroundTransparency = 1
+            accentBar.BorderSizePixel = 0
+            accentBar.ZIndex = 52
+            accentBar.Parent = card
+            addCorner(accentBar, 4)
 
-    local tLbl = Instance.new("TextLabel")
-    tLbl.Position = UDim2.fromOffset(20, 8)
-    tLbl.Size = UDim2.new(1, -28, 0, 18)
-    tLbl.BackgroundTransparency = 1
-    tLbl.Font = Enum.Font.GothamBlack
-    tLbl.Text = string.upper(title)
-    tLbl.TextColor3 = Theme.White
-    tLbl.TextTransparency = 1
-    tLbl.TextSize = 11
-    tLbl.TextXAlignment = Enum.TextXAlignment.Left
-    tLbl.ZIndex = 52
-    tLbl.Parent = card
+            local tLbl = Instance.new("TextLabel")
+            tLbl.Position = UDim2.fromOffset(20, 8)
+            tLbl.Size = UDim2.new(1, -28, 0, 18)
+            tLbl.BackgroundTransparency = 1
+            tLbl.Font = Enum.Font.GothamBlack
+            tLbl.Text = string.upper(tostring(title or "CORE.XYZ"))
+            tLbl.TextColor3 = Theme.White
+            tLbl.TextTransparency = 1
+            tLbl.TextSize = 11
+            tLbl.TextXAlignment = Enum.TextXAlignment.Left
+            tLbl.ZIndex = 52
+            tLbl.Parent = card
 
-    local cLbl = Instance.new("TextLabel")
-    cLbl.Position = UDim2.fromOffset(20, 25)
-    cLbl.Size = UDim2.new(1, -28, 0, 26)
-    cLbl.BackgroundTransparency = 1
-    cLbl.Font = Enum.Font.GothamMedium
-    cLbl.Text = content
-    cLbl.TextColor3 = Theme.Silver
-    cLbl.TextTransparency = 1
-    cLbl.TextSize = 11
-    cLbl.TextWrapped = true
-    cLbl.TextXAlignment = Enum.TextXAlignment.Left
-    cLbl.ZIndex = 52
-    cLbl.Parent = card
+            local cLbl = Instance.new("TextLabel")
+            cLbl.Position = UDim2.fromOffset(20, 25)
+            cLbl.Size = UDim2.new(1, -28, 0, 26)
+            cLbl.BackgroundTransparency = 1
+            cLbl.Font = Enum.Font.GothamMedium
+            cLbl.Text = tostring(content or "")
+            cLbl.TextColor3 = Theme.Silver
+            cLbl.TextTransparency = 1
+            cLbl.TextSize = 11
+            cLbl.TextWrapped = true
+            cLbl.TextXAlignment = Enum.TextXAlignment.Left
+            cLbl.ZIndex = 52
+            cLbl.Parent = card
 
-    local progBar = Instance.new("Frame")
-    progBar.AnchorPoint = Vector2.new(0, 1)
-    progBar.Position = UDim2.fromScale(0, 1)
-    progBar.Size = UDim2.new(1, 0, 0, 2)
-    progBar.BackgroundColor3 = Theme.Accent
-    progBar.BorderSizePixel = 0
-    progBar.ZIndex = 53
-    progBar.Parent = card
+            local progBar = Instance.new("Frame")
+            progBar.AnchorPoint = Vector2.new(0, 1)
+            progBar.Position = UDim2.fromScale(0, 1)
+            progBar.Size = UDim2.new(1, 0, 0, 2)
+            progBar.BackgroundColor3 = Theme.Accent
+            progBar.BorderSizePixel = 0
+            progBar.ZIndex = 53
+            progBar.Parent = card
 
-    tween(cardScale, SpringTween, { Scale = 1 })
-    tween(card, FastTween, { BackgroundTransparency = 0.04 })
-    tween(st, FastTween, { Transparency = 0.1 })
-    tween(accentBar, FastTween, { BackgroundTransparency = 0 })
-    tween(tLbl, FastTween, { TextTransparency = 0 })
-    tween(cLbl, FastTween, { TextTransparency = 0 })
-    tween(progBar, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Size = UDim2.new(0, 0, 0, 2) })
+            tween(cardScale, SpringTween, { Scale = 1 })
+            tween(card, FastTween, { BackgroundTransparency = 0.04 })
+            tween(st, FastTween, { Transparency = 0.1 })
+            tween(accentBar, FastTween, { BackgroundTransparency = 0 })
+            tween(tLbl, FastTween, { TextTransparency = 0 })
+            tween(cLbl, FastTween, { TextTransparency = 0 })
+            tween(progBar, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Size = UDim2.new(0, 0, 0, 2) })
 
-    task.delay(duration, function()
-        tween(cardScale, FastTween, { Scale = 0.9 })
-        tween(card, FastTween, { BackgroundTransparency = 1 })
-        tween(st, FastTween, { Transparency = 1 })
-        tween(accentBar, FastTween, { BackgroundTransparency = 1 })
-        tween(tLbl, FastTween, { TextTransparency = 1 })
-        tween(cLbl, FastTween, { TextTransparency = 1 })
-        task.wait(0.22)
-        if card and card.Parent then
-            card:Destroy()
-        end
+            task.delay(duration, function()
+                pcall(function()
+                    tween(cardScale, FastTween, { Scale = 0.9 })
+                    tween(card, FastTween, { BackgroundTransparency = 1 })
+                    tween(st, FastTween, { Transparency = 1 })
+                    tween(accentBar, FastTween, { BackgroundTransparency = 1 })
+                    tween(tLbl, FastTween, { TextTransparency = 1 })
+                    tween(cLbl, FastTween, { TextTransparency = 1 })
+                    task.wait(0.22)
+                    if card and card.Parent then
+                        card:Destroy()
+                    end
+                end)
+            end)
+        end)
     end)
 end
 
@@ -2203,7 +2238,7 @@ local function createTab(name, order)
     local btn = Instance.new("TextButton")
     btn.Name = name .. "_TabBtn"
     btn.LayoutOrder = order
-    btn.Size = UDim2.new(0.2, -6, 1, 0)
+    btn.Size = UDim2.new(1 / 6, -5, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
     btn.BackgroundTransparency = 1
     btn.AutoButtonColor = false
@@ -2211,7 +2246,7 @@ local function createTab(name, order)
     btn.Text = tostring(name)
     btn.TextColor3 = Color3.fromRGB(115, 115, 115)
     btn.TextStrokeTransparency = 0.5
-    btn.TextSize = 12
+    btn.TextSize = 11
     btn.TextXAlignment = Enum.TextXAlignment.Center
     btn.ClipsDescendants = false
     btn.ZIndex = 14
@@ -2359,6 +2394,13 @@ local function createTab(name, order)
     }
     table.insert(State.Tabs, tabObj)
 
+    local tabCount = math.max(#State.Tabs, 5)
+    for _, t in ipairs(State.Tabs) do
+        if t.Btn then
+            t.Btn.Size = UDim2.new(1 / tabCount, -5, 1, 0)
+        end
+    end
+
     local function selectTab()
         if State.activeTab == tabObj then
             return
@@ -2411,6 +2453,7 @@ local function createTab(name, order)
     end)
 
     btn.MouseButton1Click:Connect(function()
+        elevateThreadIdentity()
         selectTab()
     end)
 
@@ -2488,11 +2531,15 @@ local function createButton(page, text, callback)
     end)
 
     btn.MouseButton1Click:Connect(function()
+        elevateThreadIdentity()
         tween(btn, TweenInfo.new(0.08), { BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Black })
         task.delay(0.12, function()
             tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(16, 16, 16), TextColor3 = Color3.fromRGB(220, 220, 220) })
         end)
-        callback()
+        task.spawn(function()
+            elevateThreadIdentity()
+            callback()
+        end)
     end)
     return btn
 end
@@ -3601,6 +3648,7 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
     end
 
     setState = function(newVal, fireCallback)
+        elevateThreadIdentity()
         state = newVal
         tween(lbl, FastTween, {
             TextColor3 = state and Color3.fromRGB(240, 240, 240) or Color3.fromRGB(185, 185, 185),
@@ -3612,7 +3660,10 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
             ImageTransparency = state and 0.80 or 1,
         })
         if fireCallback ~= false then
-            callback(state)
+            task.spawn(function()
+                elevateThreadIdentity()
+                callback(state)
+            end)
         end
     end
 
@@ -3629,6 +3680,7 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
     end)
 
     row.MouseButton1Click:Connect(function()
+        elevateThreadIdentity()
         setState(not state, true)
     end)
 
@@ -3765,10 +3817,12 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
     end
 
     minusBtn.MouseButton1Click:Connect(function()
+        elevateThreadIdentity()
         setValue(currentVal - step, true)
     end)
 
     plusBtn.MouseButton1Click:Connect(function()
+        elevateThreadIdentity()
         setValue(currentVal + step, true)
     end)
 
@@ -4082,6 +4136,7 @@ local function createDropdown(page, text, options, defaultOpt, callback)
             end)
 
             optBtn.MouseButton1Click:Connect(function()
+                elevateThreadIdentity()
                 selected = opt
                 optLbl.Text = tostring(opt)
                 for _, otherBtn in ipairs(optionButtons) do
@@ -4103,6 +4158,7 @@ local function createDropdown(page, text, options, defaultOpt, callback)
     rebuildOptions(options)
 
     headerBtn.MouseButton1Click:Connect(function()
+        elevateThreadIdentity()
         isOpen = not isOpen
         local h = getDropdownListHeight(#options)
         if searchBox and searchBox.Text ~= "" then
@@ -4150,8 +4206,18 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
     local targetParent = resolveTargetParent(page)
     local isOpen = false
     local selectedList = {}
-    for _, item in ipairs(defaultSelectedList or {}) do
-        table.insert(selectedList, item)
+    if type(defaultSelectedList) == "table" then
+        if #defaultSelectedList > 0 then
+            for _, item in ipairs(defaultSelectedList) do
+                table.insert(selectedList, item)
+            end
+        else
+            for k, v in pairs(defaultSelectedList) do
+                if v == true and type(k) == "string" then
+                    table.insert(selectedList, k)
+                end
+            end
+        end
     end
 
     local container = Instance.new("Frame")
@@ -4215,21 +4281,70 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
     arrow.ZIndex = 16
     arrow.Parent = headerBtn
 
+    local maxVisibleRows = 8
+    local searchBarHeight = 22
+
     local listHolder = Instance.new("Frame")
     listHolder.Position = UDim2.fromOffset(18, 38)
-    listHolder.Size = UDim2.new(1, -20, 0, #options * 20)
+    listHolder.Size = UDim2.new(1, -20, 0, math.min(#options, maxVisibleRows) * 20)
     listHolder.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
     listHolder.BorderColor3 = Color3.fromRGB(48, 48, 48)
     listHolder.BorderSizePixel = 1
+    listHolder.ClipsDescendants = true
     listHolder.ZIndex = 15
     listHolder.Parent = container
+
+    local searchFrame = Instance.new("Frame")
+    searchFrame.Name = "MultiDropdownSearchFrame"
+    searchFrame.Size = UDim2.new(1, 0, 0, 21)
+    searchFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
+    searchFrame.BorderColor3 = Color3.fromRGB(42, 42, 48)
+    searchFrame.BorderSizePixel = 1
+    searchFrame.ZIndex = 16
+    searchFrame.Parent = listHolder
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Name = "MultiDropdownSearchBox"
+    searchBox.Position = UDim2.fromOffset(6, 0)
+    searchBox.Size = UDim2.new(1, -12, 1, 0)
+    searchBox.BackgroundTransparency = 1
+    searchBox.ClearTextOnFocus = false
+    searchBox.Font = Enum.Font.Code
+    searchBox.PlaceholderText = "Search (" .. tostring(#options) .. ")..."
+    searchBox.PlaceholderColor3 = Color3.fromRGB(105, 105, 115)
+    searchBox.Text = ""
+    searchBox.TextColor3 = Color3.fromRGB(235, 235, 235)
+    searchBox.TextSize = 11
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.ZIndex = 17
+    searchBox.Parent = searchFrame
+
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Name = "MultiDropdownScroll"
+    scrollFrame.Position = UDim2.fromOffset(0, 22)
+    scrollFrame.Size = UDim2.new(1, 0, 1, -22)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 2
+    scrollFrame.ScrollBarImageColor3 = Theme.Accent
+    scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scrollFrame.ZIndex = 16
+    scrollFrame.Parent = listHolder
+    registerAccentObject(scrollFrame, "ScrollBarImageColor3")
 
     local listLayout = Instance.new("UIListLayout")
     listLayout.Padding = UDim.new(0, 1)
     listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.Parent = listHolder
+    listLayout.Parent = scrollFrame
 
     local optionButtons = {}
+
+    local function getMultiListHeight(visibleCount)
+        local count = math.max(visibleCount or #options, 1)
+        local rows = math.clamp(count, 1, maxVisibleRows)
+        return searchBarHeight + (rows * 20)
+    end
 
     local function isOptionSelected(opt)
         for i, v in ipairs(selectedList) do
@@ -4251,12 +4366,47 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
         end
     end
 
+    local function applyMultiSearchFilter(queryText)
+        local q = string.lower(string.gsub(tostring(queryText or ""), "^%s*(.-)%s*$", "%1"))
+        local visCount = 0
+        for _, item in ipairs(optionButtons) do
+            local optVal = tostring(item.Value or "")
+            local match = (#q == 0) or (string.find(string.lower(optVal), q, 1, true) ~= nil)
+            item.Btn.Visible = match
+            if match then
+                visCount = visCount + 1
+            end
+        end
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, visCount * 20)
+        local h = getMultiListHeight(visCount)
+        listHolder.Size = UDim2.new(1, -20, 0, h)
+        if isOpen then
+            container.Size = UDim2.new(1, 0, 0, 40 + h)
+        end
+    end
+
+    if searchBox and searchBox.GetPropertyChangedSignal then
+        pcall(function()
+            searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                applyMultiSearchFilter(searchBox.Text)
+            end)
+        end)
+    end
+
     local function rebuildMultiOptions(newOptions, newSelectedList)
         options = newOptions
         if newSelectedList then
             selectedList = {}
-            for _, v in ipairs(newSelectedList) do
-                table.insert(selectedList, v)
+            if #newSelectedList > 0 then
+                for _, v in ipairs(newSelectedList) do
+                    table.insert(selectedList, v)
+                end
+            else
+                for k, v in pairs(newSelectedList) do
+                    if v == true and type(k) == "string" then
+                        table.insert(selectedList, k)
+                    end
+                end
             end
         end
         for _, item in ipairs(optionButtons) do
@@ -4281,7 +4431,7 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
             optBtn.TextSize = 12
             optBtn.TextXAlignment = Enum.TextXAlignment.Left
             optBtn.ZIndex = 16
-            optBtn.Parent = listHolder
+            optBtn.Parent = scrollFrame
             local optPad = Instance.new("UIPadding")
             optPad.PaddingLeft = UDim.new(0, 6)
             optPad.Parent = optBtn
@@ -4289,31 +4439,44 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
             table.insert(optionButtons, { Btn = optBtn, Value = opt })
 
             optBtn.MouseButton1Click:Connect(function()
+                elevateThreadIdentity()
                 local currentlyActive, idx = isOptionSelected(opt)
                 if currentlyActive and idx then
                     table.remove(selectedList, idx)
                 else
-                    if maxChoices and #selectedList >= maxChoices then
-                        notify("Core.xyz", "Maximum " .. tostring(maxChoices) .. " options can be selected at once!", 3)
-                        return
+                    if opt == "All" then
+                        table.clear(selectedList)
+                        table.insert(selectedList, "All")
+                    else
+                        local hasAll, allIdx = isOptionSelected("All")
+                        if hasAll and allIdx then
+                            table.remove(selectedList, allIdx)
+                        end
+                        if maxChoices and #selectedList >= maxChoices then
+                            notify("Core.xyz", "Maximum " .. tostring(maxChoices) .. " options can be selected at once!", 3)
+                            return
+                        end
+                        table.insert(selectedList, opt)
                     end
-                    table.insert(selectedList, opt)
                 end
                 refreshButtons()
                 callback(selectedList)
             end)
         end
+        searchBox.PlaceholderText = "Search (" .. tostring(#options) .. ")..."
+        applyMultiSearchFilter(searchBox.Text)
         refreshButtons()
     end
 
     rebuildMultiOptions(options, selectedList)
 
     headerBtn.MouseButton1Click:Connect(function()
+        elevateThreadIdentity()
         isOpen = not isOpen
-        local openHeight = 40 + (#options * 20)
-        listHolder.Size = UDim2.new(1, -20, 0, #options * 20)
+        applyMultiSearchFilter(searchBox.Text)
+        local h = listHolder.Size.Y.Offset
         tween(container, SmoothTween, {
-            Size = UDim2.new(1, 0, 0, isOpen and openHeight or 38),
+            Size = UDim2.new(1, 0, 0, isOpen and (40 + h) or 38),
         })
         arrow.Text = isOpen and "-" or "+"
         headerBtn.BorderColor3 = isOpen and Theme.Accent or Color3.fromRGB(48, 48, 48)
@@ -4323,10 +4486,9 @@ local function createMultiDropdown(page, text, options, defaultSelectedList, max
     return {
         Refresh = function(newOptions, newSelectedList)
             rebuildMultiOptions(newOptions, newSelectedList)
-            listHolder.Size = UDim2.new(1, -20, 0, #options * 20)
+            local h = listHolder.Size.Y.Offset
             if isOpen then
-                local openHeight = 40 + (#options * 20)
-                container.Size = UDim2.new(1, 0, 0, openHeight)
+                container.Size = UDim2.new(1, 0, 0, 40 + h)
             end
         end,
     }
@@ -9481,30 +9643,50 @@ end
 
 
 -- ============================================================================
--- BIKE FOR EGG CORE ENGINE V1.0 (DUMP-VERIFIED FOR PLACEID 74023858073178)
--- • Dynamic Directory Discovery (Assets, Areas, Trails, OurBikeSystem.Catalog)
--- • Smart Area Egg Auto-Farm (Rarity + Mutation + Area Filter + Plot Return)
--- • Anti-Guard Knockback / Anti-Ragdoll + Carry Speed Boost + Tutorial Skip
--- • Dynamic 25-Slot Plot Egg Placement + Instant Hatch + Auto Fuse Machine
--- • Smart Sell Protection (Never sells Mutated or Favorited Eggs/Pets)
--- • Auto Best Bike / Trail / Treadmill / Base Upgrade / Rebirth / Event Rewards
+-- BIKE FOR EGG CORE ENGINE V1.1 (MAKE-TABLE-STRICT SAFE & MYSTIC-VERIFIED)
+-- • Safe rawget Wrapper for ReplicatedStorage.Directory (Zero MakeTableStrict Errors)
+-- • Thread-Safe Identity-8 UI & Notification Isolation (Zero Plugin Capability Errors)
+-- • Mystic-Verified Area Egg Auto-Farm (GetAreaEggSnapshot.Records + Carry Wait + Claim)
+-- • Mystic-Verified Plot Egg Placement (Free 4x4 Grid ToObjectSpace + Tool Equip Handshake)
+-- • Mystic-Verified Ready Egg Hatch (PlacedEggGrowthPresentationPolicy.IsReady + 0.35s Complete)
+-- • Mystic-Verified Auto Treadmill (TreadmillBottom Teleport + REQUEST_EQUIP_STATIC)
+-- • Mystic-Verified Smart Sell Eggs & Pets (EggInventory + Inventory + SELL_ALL_ASSETS)
+-- • Mystic-Verified Auto Best Bike, Best Trail, Treadmill Upgrade, Base Upgrade & Index Claim
 -- ============================================================================
 do
     local ReplicatedStorage = safeGetService("ReplicatedStorage")
     local ProximityPromptService = safeGetService("ProximityPromptService")
     local VirtualUser = safeGetService("VirtualUser")
 
-    -- Default Bike for Egg Config State
+    -- Strict-Table-Safe Getter: NEVER triggers MakeTableStrict __index errors on missing or empty keys!
+    local function safeRawGet(tbl, key)
+        if type(tbl) ~= "table" or key == nil or key == "" then
+            return nil
+        end
+        local okRaw, valRaw = pcall(rawget, tbl, key)
+        if okRaw and valRaw ~= nil then
+            return valRaw
+        end
+        local okIdx, valIdx = pcall(function()
+            return tbl[key]
+        end)
+        if okIdx then
+            return valIdx
+        end
+        return nil
+    end
+
+    -- Default Bike for Egg Config State (Uses Arrays for MultiDropdowns)
     local BFE_DEFAULTS = {
         -- Auto Farm Tab
-        BFE_SelectedEggs = { ["All"] = true },
-        BFE_SelectedRarities = { ["All"] = true },
+        BFE_SelectedEggs = { "All" },
+        BFE_SelectedRarities = { "All" },
         BFE_MutationFilter = "All",
-        BFE_SelectedAreas = { ["All"] = true },
+        BFE_SelectedAreas = { "All" },
         BFE_AutoFarmEggs = false,
         BFE_PrioritizeHighestRarity = true,
         BFE_AutoReturnToPlot = true,
-        BFE_FarmStepDelay = 0.35,
+        BFE_FarmStepDelay = 0.05,
         BFE_AntiGuardKnockback = true,
         BFE_CarrySpeedBoost = false,
         BFE_CarrySpeed = 65,
@@ -9513,8 +9695,9 @@ do
         BFE_EggESP = false,
         BFE_GuardESP = false,
         -- Plot & Hatch Tab
-        BFE_PlaceEggSelection = "Best",
-        BFE_MaxPlotEggs = 25,
+        BFE_PlaceEggSelection = { "Best" },
+        BFE_HatchEggSelection = { "All" },
+        BFE_MaxPlotEggs = 10,
         BFE_AutoPlaceEggs = false,
         BFE_AutoHatchEggs = false,
         BFE_AutoEquipBestPets = false,
@@ -9526,9 +9709,9 @@ do
         -- Shop & Sell Tab
         BFE_ProtectMutatedAndFavorited = true,
         BFE_MaxAutoSellPrice = 0,
-        BFE_SellEggSelection = { ["All"] = true },
+        BFE_SellEggSelection = { "All" },
         BFE_AutoSellEggs = false,
-        BFE_SellPetSelection = { ["All"] = true },
+        BFE_SellPetSelection = { "All" },
         BFE_AutoSellPets = false,
         BFE_AutoBuyBestBike = false,
         BFE_AutoBuyBestTrail = false,
@@ -9547,7 +9730,7 @@ do
         end
     end
 
-    -- Built-in Fallback Catalogs (Immediate UI readiness + refreshed from ReplicatedStorage.Directory)
+    -- Built-in Fallback Catalogs (Immediate UI readiness + refreshed live from ReplicatedStorage.Directory)
     local FALLBACK_AREAS = {
         "Forest",
         "Lake",
@@ -9632,13 +9815,16 @@ do
         "Royal Griffin",
     }
 
-    -- Lazy-Loaded Game Module References (Safe pcall require)
+    -- Runtime & Module Registry
     local BFE = {
         modulesLoaded = false,
-        AssetsDir = {},
-        AreasDir = {},
-        TrailsDir = {},
-        BikeCatalog = {},
+        AssetsMod = nil,
+        AssetsDir = nil,
+        AreasMod = nil,
+        AreasDir = nil,
+        TrailsMod = nil,
+        TrailsDir = nil,
+        BikeCatalog = nil,
         BikeShopRemote = nil,
         SaveMod = nil,
         NetworkMod = nil,
@@ -9646,31 +9832,39 @@ do
         PlotCmds = nil,
         BaseUpgradeClient = nil,
         TreadmillUpgradeClient = nil,
-        EggPlacementPolicy = nil,
+        PlacedEggPolicy = nil,
+        PlacedEggRenderer = nil,
         EggItemUtil = nil,
         AssetItemSerialization = nil,
         GetPriceValueForItem = nil,
         NetworkFolder = nil,
-        -- Sorted Catalog Lists for UI Dropdowns
+        -- UI Dropdown Option Arrays
         EggDisplayList = { "All" },
         EggPlaceList = { "Best" },
+        EggHatchList = { "All" },
         PetDisplayList = { "All" },
         RarityDisplayList = { "All" },
         AreaDisplayList = { "All" },
         ZoneTeleportList = { "My Plot", "Lobby / Spawn" },
-        -- Name -> Id and Id -> Info maps
-        EggNameToId = {},
+        -- Lookup Maps
+        EggLookup = {},
+        PetLookup = {},
         EggIdToInfo = {},
-        PetNameToId = {},
         PetIdToInfo = {},
+        AreasNameById = {},
+        AreaIdByName = {},
         RarityNameOrder = {},
-        -- Runtime State
+        -- Controller State
+        FailCounts = {},
+        LastTargetUid = nil,
         isFarmingStepBusy = false,
         isPlacingEggsBusy = false,
         isHatchingEggsBusy = false,
         isSellingEggsBusy = false,
         isSellingPetsBusy = false,
         isShopTickBusy = false,
+        isTreadmillBusy = false,
+        treadmillWasActive = false,
         espPool = {},
         hiddenPlayerParts = setmetatable({}, { __mode = "k" }),
         reducedCpuInstances = setmetatable({}, { __mode = "k" }),
@@ -9685,23 +9879,34 @@ do
         table.insert(BFE.RarityDisplayList, rName)
     end
     for _, aName in ipairs(FALLBACK_AREAS) do
+        BFE.AreasNameById[aName] = aName
+        BFE.AreaIdByName[aName] = aName
         table.insert(BFE.AreaDisplayList, aName)
         table.insert(BFE.ZoneTeleportList, aName)
     end
     for _, eName in ipairs(FALLBACK_EGG_NAMES) do
         table.insert(BFE.EggDisplayList, eName)
         table.insert(BFE.EggPlaceList, eName)
-        BFE.EggNameToId[eName] = eName
-        BFE.EggIdToInfo[eName] = { Id = eName, DisplayName = eName, RarityName = "Common", RarityNumber = 1 }
+        table.insert(BFE.EggHatchList, eName)
+        BFE.EggLookup[eName] = eName
+        BFE.EggIdToInfo[eName] = { Id = eName, DisplayName = eName, RarityName = "Common", RarityNumber = 1, Luck = 0 }
     end
     for _, pName in ipairs(FALLBACK_PET_NAMES) do
         table.insert(BFE.PetDisplayList, pName)
-        BFE.PetNameToId[pName] = pName
+        BFE.PetLookup[pName] = pName
         BFE.PetIdToInfo[pName] = { Id = pName, DisplayName = pName, RarityName = "Common", RarityNumber = 1 }
     end
 
     local function safeRequire(inst)
-        if not inst then return nil end
+        if not inst then
+            return nil
+        end
+        local okIsMod, isMod = pcall(function()
+            return inst:IsA("ModuleScript")
+        end)
+        if okIsMod and not isMod then
+            return nil
+        end
         local ok, mod = pcall(require, inst)
         if ok and mod ~= nil then
             return mod
@@ -9709,21 +9914,24 @@ do
         return nil
     end
 
-    local function getNetworkChild(name)
-        if not ReplicatedStorage then return nil end
+    local function getNetworkRemote(remoteName)
+        if not ReplicatedStorage or type(remoteName) ~= "string" or remoteName == "" then
+            return nil
+        end
         local netFolder = BFE.NetworkFolder or ReplicatedStorage:FindFirstChild("Network")
         BFE.NetworkFolder = netFolder
         if netFolder then
-            local found = netFolder:FindFirstChild(name)
-            if found then return found end
+            local rem = netFolder:FindFirstChild(remoteName)
+            if rem then
+                return rem
+            end
         end
-        return ReplicatedStorage:FindFirstChild(name)
+        return ReplicatedStorage:FindFirstChild(remoteName)
     end
 
     local function safeInvokeNetwork(remoteName, ...)
         local args = { ... }
-        -- Try Library.Client.Network.Invoke first if available
-        if BFE.NetworkMod and type(BFE.NetworkMod.Invoke) == "function" then
+        if BFE.NetworkMod and type(safeRawGet(BFE.NetworkMod, "Invoke")) == "function" then
             local ok, res = pcall(function()
                 return BFE.NetworkMod.Invoke(remoteName, table.unpack(args))
             end)
@@ -9731,14 +9939,17 @@ do
                 return res
             end
         end
-        local rem = getNetworkChild(remoteName)
+        local rem = getNetworkRemote(remoteName)
         if rem then
-            if rem:IsA("RemoteFunction") then
+            local okRF, isRF = pcall(function() return rem:IsA("RemoteFunction") end)
+            if okRF and isRF then
                 local ok, res = pcall(function()
                     return rem:InvokeServer(table.unpack(args))
                 end)
-                if ok then return res end
-            elseif rem:IsA("RemoteEvent") then
+                if ok then
+                    return res
+                end
+            else
                 pcall(function()
                     rem:FireServer(table.unpack(args))
                 end)
@@ -9750,20 +9961,23 @@ do
 
     local function safeFireNetwork(remoteName, ...)
         local args = { ... }
-        if BFE.NetworkMod and type(BFE.NetworkMod.Fire) == "function" then
+        if BFE.NetworkMod and type(safeRawGet(BFE.NetworkMod, "Fire")) == "function" then
             local ok = pcall(function()
                 BFE.NetworkMod.Fire(remoteName, table.unpack(args))
             end)
-            if ok then return true end
+            if ok then
+                return true
+            end
         end
-        local rem = getNetworkChild(remoteName)
+        local rem = getNetworkRemote(remoteName)
         if rem then
-            if rem:IsA("RemoteEvent") then
+            local okRE, isRE = pcall(function() return rem:IsA("RemoteEvent") end)
+            if okRE and isRE then
                 pcall(function()
                     rem:FireServer(table.unpack(args))
                 end)
                 return true
-            elseif rem:IsA("RemoteFunction") then
+            else
                 pcall(function()
                     rem:InvokeServer(table.unpack(args))
                 end)
@@ -9773,6 +9987,104 @@ do
         return false
     end
 
+    -- Extract clean category name from "[Rarity] CategoryName" or plain "CategoryName"
+    local function stripRarityPrefix(labelStr)
+        if type(labelStr) ~= "string" or labelStr == "" then
+            return ""
+        end
+        if BFE.EggLookup[labelStr] then
+            return BFE.EggLookup[labelStr]
+        end
+        if BFE.PetLookup[labelStr] then
+            return BFE.PetLookup[labelStr]
+        end
+        local stripped = labelStr:match("^%[[^%]]+%]%s*(.+)$")
+        if stripped and stripped ~= "" then
+            return stripped
+        end
+        return labelStr
+    end
+
+    -- Normalize MultiDropdown or SingleDropdown selection into a lookup set + isAll/isBest flag
+    local function parseCategorySelection(selValue)
+        local lookup = {}
+        local matchAll = false
+        local count = 0
+
+        if type(selValue) == "string" then
+            if selValue == "All" or selValue == "Best" or selValue == "" then
+                matchAll = true
+            else
+                local clean = stripRarityPrefix(selValue)
+                lookup[clean] = true
+                lookup[selValue] = true
+                count = 1
+            end
+        elseif type(selValue) == "table" then
+            if #selValue > 0 then
+                for _, v in ipairs(selValue) do
+                    if type(v) == "string" and v ~= "" then
+                        if v == "All" or v == "Best" then
+                            matchAll = true
+                        else
+                            local clean = stripRarityPrefix(v)
+                            lookup[clean] = true
+                            lookup[v] = true
+                            count = count + 1
+                        end
+                    end
+                end
+            else
+                for k, v in pairs(selValue) do
+                    if v == true and type(k) == "string" and k ~= "" then
+                        if k == "All" or k == "Best" then
+                            matchAll = true
+                        else
+                            local clean = stripRarityPrefix(k)
+                            lookup[clean] = true
+                            lookup[k] = true
+                            count = count + 1
+                        end
+                    end
+                end
+            end
+        else
+            matchAll = true
+        end
+
+        if count == 0 then
+            matchAll = true
+        end
+        return matchAll, lookup, count
+    end
+
+    -- Safe Rarity Info Resolver from Assets.Directory (Never triggers MakeTableStrict!)
+    local function getAssetRarityInfo(categoryName)
+        if type(categoryName) ~= "string" or categoryName == "" then
+            return "Unknown", 0, 0
+        end
+        local cached = BFE.EggIdToInfo[categoryName] or BFE.PetIdToInfo[categoryName]
+        if cached and cached.RarityNumber and cached.RarityNumber > 0 then
+            return cached.RarityName or "Common", cached.RarityNumber or 0, cached.Luck or 0
+        end
+        if type(BFE.AssetsDir) ~= "table" then
+            return "Unknown", 0, 0
+        end
+        local entry = safeRawGet(BFE.AssetsDir, categoryName)
+        if type(entry) ~= "table" then
+            return "Unknown", 0, 0
+        end
+        local rar = safeRawGet(entry, "Rarity")
+        local luck = tonumber(safeRawGet(entry, "Luck")) or 0
+        if type(rar) ~= "table" then
+            return "Unknown", 0, luck
+        end
+        local rName = tostring(safeRawGet(rar, "DisplayName") or safeRawGet(rar, "_id") or safeRawGet(rar, "Name") or "Unknown")
+        local rNum = tonumber(safeRawGet(rar, "RarityNumber")) or (BFE.RarityNameOrder[rName] or 0)
+        return rName, rNum, luck
+    end
+
+    -- Discover & Sync All Game Modules & Directories Safely
     local function discoverBFEModules(forceRefresh)
         if BFE.modulesLoaded and not forceRefresh then
             return true
@@ -9787,25 +10099,36 @@ do
         if dirFolder then
             local assetsMod = safeRequire(dirFolder:FindFirstChild("Assets"))
             if type(assetsMod) == "table" then
-                BFE.AssetsDir = type(assetsMod.Directory) == "table" and assetsMod.Directory or assetsMod
+                BFE.AssetsMod = assetsMod
+                local innerDir = safeRawGet(assetsMod, "Directory")
+                BFE.AssetsDir = type(innerDir) == "table" and innerDir or assetsMod
             end
             local areasMod = safeRequire(dirFolder:FindFirstChild("Areas"))
             if type(areasMod) == "table" then
-                BFE.AreasDir = type(areasMod.Directory) == "table" and areasMod.Directory or areasMod
+                BFE.AreasMod = areasMod
+                local innerAreas = safeRawGet(areasMod, "Directory")
+                BFE.AreasDir = type(innerAreas) == "table" and innerAreas or areasMod
             end
             local trailsMod = safeRequire(dirFolder:FindFirstChild("Trails"))
             if type(trailsMod) == "table" then
-                BFE.TrailsDir = type(trailsMod.Directory) == "table" and trailsMod.Directory or trailsMod
+                BFE.TrailsMod = trailsMod
+                local innerTrails = safeRawGet(trailsMod, "Directory")
+                BFE.TrailsDir = type(innerTrails) == "table" and innerTrails or trailsMod
             end
         end
 
         local bikeSys = ReplicatedStorage:FindFirstChild("OurBikeSystem")
         if bikeSys then
-            local catMod = safeRequire(bikeSys:FindFirstChild("Catalog"))
+            local catInst = bikeSys:FindFirstChild("Catalog")
+            local catMod = safeRequire(catInst)
             if type(catMod) == "table" then
-                BFE.BikeCatalog = catMod
+                local innerCat = safeRawGet(catMod, "Catalog")
+                BFE.BikeCatalog = type(innerCat) == "table" and innerCat or catMod
             end
-            BFE.BikeShopRemote = bikeSys:FindFirstChild("ShopRequest")
+            local shopReq = bikeSys:FindFirstChild("ShopRequest")
+            if shopReq then
+                BFE.BikeShopRemote = shopReq
+            end
         end
 
         local libFolder = ReplicatedStorage:FindFirstChild("Library")
@@ -9817,11 +10140,12 @@ do
                 BFE.EggCmds = safeRequire(clientFolder:FindFirstChild("EggCmds")) or BFE.EggCmds
                 BFE.PlotCmds = safeRequire(clientFolder:FindFirstChild("PlotCmds")) or BFE.PlotCmds
                 BFE.BaseUpgradeClient = safeRequire(clientFolder:FindFirstChild("BaseUpgradeClient")) or BFE.BaseUpgradeClient
-                BFE.EggPlacementPolicy = safeRequire(clientFolder:FindFirstChild("EggPlacementPolicy")) or BFE.EggPlacementPolicy
-            end
-            local modulesFolder = libFolder:FindFirstChild("Modules")
-            if modulesFolder and not BFE.EggPlacementPolicy then
-                BFE.EggPlacementPolicy = safeRequire(modulesFolder:FindFirstChild("EggPlacementPolicy"))
+
+                local eggsClientFolder = clientFolder:FindFirstChild("Eggs")
+                if eggsClientFolder then
+                    BFE.PlacedEggPolicy = safeRequire(eggsClientFolder:FindFirstChild("PlacedEggGrowthPresentationPolicy")) or BFE.PlacedEggPolicy
+                    BFE.PlacedEggRenderer = safeRequire(eggsClientFolder:FindFirstChild("PlacedEggRenderer")) or BFE.PlacedEggRenderer
+                end
             end
             local utilFolder = libFolder:FindFirstChild("Util")
             if utilFolder then
@@ -9838,84 +10162,104 @@ do
             if tmFolder then
                 BFE.TreadmillUpgradeClient = safeRequire(tmFolder:FindFirstChild("Client")) or BFE.TreadmillUpgradeClient
             end
+            if not BFE.BaseUpgradeClient and guiFolder then
+                local buFolder = guiFolder:FindFirstChild("BaseUpgrade")
+                if buFolder then
+                    BFE.BaseUpgradeClient = safeRequire(buFolder:FindFirstChild("Client")) or BFE.BaseUpgradeClient
+                end
+            end
         end)
 
-        -- Rebuild live sorted Egg, Pet, Rarity, and Area catalogs if Directory.Assets has entries
-        if type(BFE.AssetsDir) == "table" and next(BFE.AssetsDir) ~= nil then
+        -- Check ReplicatedStorage.Assets.Models.Eggs exactly like Mystic's Farm_GetEggsList
+        local assetsFolder = ReplicatedStorage:FindFirstChild("Assets")
+        local modelsFolder = assetsFolder and assetsFolder:FindFirstChild("Models")
+        local eggsModelsFolder = modelsFolder and modelsFolder:FindFirstChild("Eggs")
+
+        -- Rebuild Egg, Pet, and Rarity Catalogs using safeRawGet (Zero MakeTableStrict errors!)
+        if type(BFE.AssetsDir) == "table" then
             local eggEntries = {}
             local petEntries = {}
             local rarityMap = {}
 
-            for assetId, info in pairs(BFE.AssetsDir) do
-                if type(info) == "table" then
-                    local dispName = tostring(info.DisplayName or info.Name or assetId)
-                    local rarTbl = type(info.Rarity) == "table" and info.Rarity or {}
-                    local rarName = tostring(rarTbl.DisplayName or rarTbl.Name or info.RarityName or "Common")
-                    local rarNum = tonumber(rarTbl.RarityNumber or info.RarityNumber) or (BFE.RarityNameOrder[rarName] or 1)
-                    rarityMap[rarName] = rarNum
+            for k, info in pairs(BFE.AssetsDir) do
+                if type(k) == "string" and k ~= "" and type(info) == "table" then
+                    local rarTbl = safeRawGet(info, "Rarity")
+                    if type(rarTbl) == "table" then
+                        local rName = tostring(safeRawGet(rarTbl, "DisplayName") or safeRawGet(rarTbl, "_id") or safeRawGet(rarTbl, "Name") or "Unknown")
+                        local rNum = tonumber(safeRawGet(rarTbl, "RarityNumber")) or 0
+                        local luckNum = tonumber(safeRawGet(info, "Luck")) or 0
+                        local dispName = tostring(safeRawGet(info, "DisplayName") or k)
 
-                    local itemType = tostring(info.ItemType or info.Type or info.AssetType or "")
-                    local isEgg = (itemType == "Egg")
-                        or (info.IsEgg == true)
-                        or (string.find(string.lower(tostring(assetId)), "egg", 1, true) ~= nil)
-                        or (string.find(string.lower(dispName), "egg", 1, true) ~= nil)
+                        if rName ~= "" and rName ~= "Unknown" then
+                            if not rarityMap[rName] or rNum > rarityMap[rName] then
+                                rarityMap[rName] = rNum
+                            end
+                        end
 
-                    local record = {
-                        Id = tostring(assetId),
-                        DisplayName = dispName,
-                        RarityName = rarName,
-                        RarityNumber = rarNum,
-                        Raw = info,
-                    }
-                    if isEgg then
-                        table.insert(eggEntries, record)
-                        BFE.EggNameToId[dispName] = tostring(assetId)
-                        BFE.EggNameToId[tostring(assetId)] = tostring(assetId)
-                        BFE.EggIdToInfo[tostring(assetId)] = record
-                    else
-                        table.insert(petEntries, record)
-                        BFE.PetNameToId[dispName] = tostring(assetId)
-                        BFE.PetNameToId[tostring(assetId)] = tostring(assetId)
-                        BFE.PetIdToInfo[tostring(assetId)] = record
+                        local hasEggField = (safeRawGet(info, "Egg") ~= nil)
+                        local hasEggModel = (eggsModelsFolder ~= nil and eggsModelsFolder:FindFirstChild(k) ~= nil)
+
+                        if hasEggField or hasEggModel then
+                            local rec = {
+                                Id = k,
+                                DisplayName = dispName,
+                                RarityName = rName,
+                                RarityNumber = rNum,
+                                Luck = luckNum,
+                                Formatted = "[" .. rName .. "] " .. k,
+                            }
+                            table.insert(eggEntries, rec)
+                            BFE.EggIdToInfo[k] = rec
+                            BFE.EggLookup[k] = k
+                            BFE.EggLookup[dispName] = k
+                            BFE.EggLookup[rec.Formatted] = k
+                        elseif safeRawGet(info, "DisplayName") ~= nil or safeRawGet(info, "Icon") ~= nil then
+                            local rec = {
+                                Id = k,
+                                DisplayName = dispName,
+                                RarityName = rName,
+                                RarityNumber = rNum,
+                                Formatted = "[" .. rName .. "] " .. k,
+                            }
+                            table.insert(petEntries, rec)
+                            BFE.PetIdToInfo[k] = rec
+                            BFE.PetLookup[k] = k
+                            BFE.PetLookup[dispName] = k
+                            BFE.PetLookup[rec.Formatted] = k
+                        end
                     end
                 end
             end
 
             table.sort(eggEntries, function(a, b)
                 if a.RarityNumber ~= b.RarityNumber then
-                    return a.RarityNumber < b.RarityNumber
+                    return a.RarityNumber > b.RarityNumber
                 end
-                return a.DisplayName < b.DisplayName
+                return a.Id < b.Id
             end)
 
             table.sort(petEntries, function(a, b)
                 if a.RarityNumber ~= b.RarityNumber then
-                    return a.RarityNumber < b.RarityNumber
+                    return a.RarityNumber > b.RarityNumber
                 end
-                return a.DisplayName < b.DisplayName
+                return a.Id < b.Id
             end)
 
             if #eggEntries > 0 then
                 BFE.EggDisplayList = { "All" }
                 BFE.EggPlaceList = { "Best" }
-                local seenEgg = {}
+                BFE.EggHatchList = { "All" }
                 for _, e in ipairs(eggEntries) do
-                    if not seenEgg[e.DisplayName] then
-                        seenEgg[e.DisplayName] = true
-                        table.insert(BFE.EggDisplayList, e.DisplayName)
-                        table.insert(BFE.EggPlaceList, e.DisplayName)
-                    end
+                    table.insert(BFE.EggDisplayList, e.Formatted)
+                    table.insert(BFE.EggPlaceList, e.Formatted)
+                    table.insert(BFE.EggHatchList, e.Formatted)
                 end
             end
 
             if #petEntries > 0 then
                 BFE.PetDisplayList = { "All" }
-                local seenPet = {}
                 for _, p in ipairs(petEntries) do
-                    if not seenPet[p.DisplayName] then
-                        seenPet[p.DisplayName] = true
-                        table.insert(BFE.PetDisplayList, p.DisplayName)
-                    end
+                    table.insert(BFE.PetDisplayList, p.Formatted)
                 end
             end
 
@@ -9925,7 +10269,9 @@ do
                 BFE.RarityNameOrder[rName] = rNum
             end
             table.sort(rarList, function(a, b)
-                if a.Num ~= b.Num then return a.Num < b.Num end
+                if a.Num ~= b.Num then
+                    return a.Num > b.Num
+                end
                 return a.Name < b.Name
             end)
             if #rarList > 0 then
@@ -9936,32 +10282,75 @@ do
             end
         end
 
-        if type(BFE.AreasDir) == "table" and next(BFE.AreasDir) ~= nil then
-            local areaEntries = {}
+        -- Rebuild Areas Catalog exactly like Mystic's Farm_GetAreasList
+        local areaEntries = {}
+        local seenAreaIds = {}
+        if type(BFE.AreasDir) == "table" then
             for areaId, aInfo in pairs(BFE.AreasDir) do
-                local aName = (type(aInfo) == "table" and tostring(aInfo.DisplayName or aInfo.Name or areaId)) or tostring(areaId)
-                local aOrder = (type(aInfo) == "table" and tonumber(aInfo.Order or aInfo.Index or aInfo.AreaNumber or aInfo.Price)) or 999
-                table.insert(areaEntries, { Name = aName, Order = aOrder })
+                if type(areaId) == "string" and areaId ~= "" and type(aInfo) == "table" then
+                    local dispName = tostring(safeRawGet(aInfo, "DisplayName") or areaId)
+                    local maxDropRarity = 0
+                    local dropTbl = safeRawGet(aInfo, "DropTable")
+                    if type(dropTbl) == "table" then
+                        for _, dropItem in ipairs(dropTbl) do
+                            if type(dropItem) == "table" and type(dropItem[1]) == "string" then
+                                local _, rNum = getAssetRarityInfo(dropItem[1])
+                                if rNum > maxDropRarity then
+                                    maxDropRarity = rNum
+                                end
+                            end
+                        end
+                    end
+                    seenAreaIds[areaId] = true
+                    table.insert(areaEntries, {
+                        Id = areaId,
+                        Name = dispName,
+                        RarityNum = maxDropRarity,
+                    })
+                end
             end
-            table.sort(areaEntries, function(a, b)
-                if a.Order ~= b.Order then return a.Order < b.Order end
-                return a.Name < b.Name
-            end)
-            if #areaEntries > 0 then
-                BFE.AreaDisplayList = { "All" }
-                BFE.ZoneTeleportList = { "My Plot", "Lobby / Spawn" }
-                local seenArea = {}
-                for _, a in ipairs(areaEntries) do
-                    if not seenArea[a.Name] then
-                        seenArea[a.Name] = true
-                        table.insert(BFE.AreaDisplayList, a.Name)
-                        table.insert(BFE.ZoneTeleportList, a.Name)
+        end
+
+        -- Also check EggCmds.GetAreaEggSnapshot() for any live AreaId not in Areas.Directory
+        if BFE.EggCmds and type(safeRawGet(BFE.EggCmds, "GetAreaEggSnapshot")) == "function" then
+            local okSnap, snap = pcall(BFE.EggCmds.GetAreaEggSnapshot)
+            if okSnap and type(snap) == "table" and type(snap.Records) == "table" then
+                for _, rec in ipairs(snap.Records) do
+                    if type(rec) == "table" and type(rec.AreaId) == "string" and rec.AreaId ~= "" and not seenAreaIds[rec.AreaId] then
+                        seenAreaIds[rec.AreaId] = true
+                        table.insert(areaEntries, {
+                            Id = rec.AreaId,
+                            Name = rec.AreaId,
+                            RarityNum = 0,
+                        })
                     end
                 end
             end
         end
 
-        -- Refresh UI dropdowns if already created
+        if #areaEntries > 0 then
+            table.sort(areaEntries, function(a, b)
+                if a.RarityNum ~= b.RarityNum then
+                    return a.RarityNum > b.RarityNum
+                end
+                return a.Name < b.Name
+            end)
+            BFE.AreaDisplayList = { "All" }
+            BFE.ZoneTeleportList = { "My Plot", "Lobby / Spawn" }
+            local seenNames = {}
+            for _, a in ipairs(areaEntries) do
+                BFE.AreasNameById[a.Id] = a.Name
+                BFE.AreaIdByName[a.Name] = a.Id
+                BFE.AreaIdByName[a.Id] = a.Id
+                if not seenNames[a.Name] then
+                    seenNames[a.Name] = true
+                    table.insert(BFE.AreaDisplayList, a.Name)
+                    table.insert(BFE.ZoneTeleportList, a.Name)
+                end
+            end
+        end
+
+        -- Refresh UI Dropdowns if already constructed
         if BFE.uiDropdownHandles.FarmEggs and BFE.uiDropdownHandles.FarmEggs.Refresh then
             pcall(function() BFE.uiDropdownHandles.FarmEggs.Refresh(BFE.EggDisplayList) end)
         end
@@ -9975,7 +10364,10 @@ do
             pcall(function() BFE.uiDropdownHandles.TeleportZone.Refresh(BFE.ZoneTeleportList, ConfigState.BFE_SelectedTeleportZone or "My Plot") end)
         end
         if BFE.uiDropdownHandles.PlaceEgg and BFE.uiDropdownHandles.PlaceEgg.Refresh then
-            pcall(function() BFE.uiDropdownHandles.PlaceEgg.Refresh(BFE.EggPlaceList, ConfigState.BFE_PlaceEggSelection or "Best") end)
+            pcall(function() BFE.uiDropdownHandles.PlaceEgg.Refresh(BFE.EggPlaceList) end)
+        end
+        if BFE.uiDropdownHandles.HatchEgg and BFE.uiDropdownHandles.HatchEgg.Refresh then
+            pcall(function() BFE.uiDropdownHandles.HatchEgg.Refresh(BFE.EggHatchList) end)
         end
         if BFE.uiDropdownHandles.SellEggs and BFE.uiDropdownHandles.SellEggs.Refresh then
             pcall(function() BFE.uiDropdownHandles.SellEggs.Refresh(BFE.EggDisplayList) end)
@@ -9990,148 +10382,497 @@ do
 
     pcall(discoverBFEModules, false)
 
+    -- Wait for Save.IsLocalDataLoaded() and retrieve Save.Get()
     local function getLocalSaveData()
         discoverBFEModules(false)
         if BFE.SaveMod then
-            if type(BFE.SaveMod.Get) == "function" then
-                local ok, data = pcall(BFE.SaveMod.Get)
+            local isLoadedFn = safeRawGet(BFE.SaveMod, "IsLocalDataLoaded")
+            if type(isLoadedFn) == "function" then
+                local okL, loaded = pcall(isLoadedFn)
+                if okL and not loaded then
+                    local loadedSig = safeRawGet(BFE.SaveMod, "LoadedStats")
+                    if loadedSig and type(safeRawGet(loadedSig, "Wait")) == "function" then
+                        pcall(function() loadedSig:Wait() end)
+                    end
+                end
+            end
+            local getFn = safeRawGet(BFE.SaveMod, "Get")
+            if type(getFn) == "function" then
+                local ok, data = pcall(getFn)
                 if ok and type(data) == "table" then
                     return data
                 end
             end
-            if type(BFE.SaveMod.LoadedStats) == "table" then
-                return BFE.SaveMod.LoadedStats
-            end
         end
         return nil
     end
 
-    local function getLocalCash(saveData)
-        saveData = saveData or getLocalSaveData()
-        if type(saveData) == "table" then
-            local c = tonumber(saveData.Cash or saveData.Coins or saveData.Money or saveData.Currency)
-            if c then return c end
+    -- ========================================================================
+    -- MYSTIC-VERIFIED AUTO FARM & TELEPORT ENGINE
+    -- ========================================================================
+    local function Farm_IsCarrying()
+        local char = LocalPlayer and LocalPlayer.Character
+        if not char then
+            return false
         end
-        local ls = LocalPlayer and LocalPlayer:FindFirstChild("leaderstats")
-        if ls then
-            local cashObj = ls:FindFirstChild("Cash") or ls:FindFirstChild("Money") or ls:FindFirstChild("Coins")
-            if cashObj and tonumber(cashObj.Value) then
-                return tonumber(cashObj.Value)
+        for _, child in ipairs(char:GetChildren()) do
+            if (child:IsA("Tool") and child:GetAttribute("AreaEggCarryVisual") == true) or child.Name == "AreaEggCarryVisual" or child:GetAttribute("AreaEggCarryVisual") == true then
+                return true
             end
         end
-        return 0
+        return false
+    end
+
+    local function Farm_Teleport(targetPos)
+        if not targetPos then
+            return false
+        end
+        local char = LocalPlayer and LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            return false
+        end
+        local lookVec = hrp.CFrame.LookVector
+        local ok = pcall(function()
+            hrp.CFrame = CFrame.new(targetPos, targetPos + lookVec)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end)
+        return ok
+    end
+
+    local function Farm_FindEggModel(uid)
+        if type(uid) ~= "string" or uid == "" or not workspace then
+            return nil
+        end
+        local direct = workspace:FindFirstChild(uid)
+        if direct and (direct:IsA("Model") or direct:IsA("BasePart")) then
+            return direct
+        end
+        local slotsFolder = workspace:FindFirstChild("AreaEggSlotsClient")
+        if slotsFolder then
+            local inSlot = slotsFolder:FindFirstChild(uid)
+            if inSlot and (inSlot:IsA("Model") or inSlot:IsA("BasePart")) then
+                return inSlot
+            end
+        end
+        local carriedFolder = workspace:FindFirstChild("GuardCarriedEggsClient")
+        if carriedFolder then
+            local inCarried = carriedFolder:FindFirstChild(uid)
+            if inCarried and (inCarried:IsA("Model") or inCarried:IsA("BasePart")) then
+                return inCarried
+            end
+        end
+        return nil
     end
 
     local function getMyPlotData()
         discoverBFEModules(false)
-        if BFE.PlotCmds and type(BFE.PlotCmds.GetPlotData) == "function" then
-            local ok, plotData = pcall(BFE.PlotCmds.GetPlotData)
-            if ok and type(plotData) == "table" then
-                return plotData
-            end
-        end
-        -- Workspace Plot fallback scan
-        local plotsFolder = workspace:FindFirstChild("Plots") or workspace:FindFirstChild("PlayerPlots")
-        if plotsFolder then
-            for _, plot in ipairs(plotsFolder:GetChildren()) do
-                local ownerAttr = plot:GetAttribute("Owner") or plot:GetAttribute("OwnerId") or plot:GetAttribute("UserId")
-                if ownerAttr == LocalPlayer.Name or ownerAttr == LocalPlayer.UserId then
-                    local petArea = plot:FindFirstChild("PetArea", true) or plot:FindFirstChild("EggArea", true) or plot:FindFirstChild("CenterPoint", true)
-                    return {
-                        Model = plot,
-                        PetArea = petArea,
-                        CenterPoint = plot:FindFirstChild("CenterPoint", true) or petArea or plot.PrimaryPart,
-                    }
+        if BFE.PlotCmds then
+            local plotFn = safeRawGet(BFE.PlotCmds, "GetPlotData") or safeRawGet(BFE.PlotCmds, "GetMyPlot")
+            if type(plotFn) == "function" then
+                local ok, plotData = pcall(plotFn)
+                if ok and type(plotData) == "table" then
+                    return plotData
                 end
             end
         end
         return nil
     end
 
-    local function getPlotTargetCFrame()
+    local function Farm_ReturnToBase()
         local plotData = getMyPlotData()
-        if type(plotData) == "table" then
-            local ref = plotData.CenterPoint or plotData.PetArea or plotData.SpawnCFrame or plotData.RootPart
-            if typeof and typeof(ref) == "CFrame" then
-                return ref + Vector3.new(0, 4, 0)
-            elseif typeof and typeof(ref) == "Vector3" then
-                return CFrame.new(ref + Vector3.new(0, 4, 0))
-            elseif type(ref) == "userdata" or type(ref) == "table" then
-                if ref.IsA and ref:IsA("BasePart") then
-                    return ref.CFrame + Vector3.new(0, 4, 0)
-                elseif ref.IsA and ref:IsA("Model") then
-                    local ok, piv = pcall(function() return ref:GetPivot() end)
-                    if ok and piv then return piv + Vector3.new(0, 4, 0) end
-                elseif ref.CFrame then
-                    return ref.CFrame + Vector3.new(0, 4, 0)
-                end
-            end
+        if type(plotData) ~= "table" then
+            return false
         end
-        return nil
-    end
-
-    local function safeTeleportCharacterTo(targetCF)
-        if not targetCF then return false end
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return false end
-        pcall(function()
-            if char.PivotTo then
-                char:PivotTo(targetCF)
-            else
-                hrp.CFrame = targetCF
-            end
-            hrp.Velocity = Vector3.zero
-            hrp.AssemblyLinearVelocity = Vector3.zero
-        end)
+        local pos = nil
+        local petArea = safeRawGet(plotData, "PetArea")
+        local centerPoint = safeRawGet(plotData, "CenterPoint")
+        if petArea and petArea.Position then
+            pos = petArea.Position
+        elseif centerPoint and centerPoint.CFrame then
+            pos = centerPoint.CFrame.Position
+        elseif centerPoint and centerPoint.Position then
+            pos = centerPoint.Position
+        end
+        if not pos then
+            return false
+        end
+        Farm_Teleport(pos + Vector3.new(0, 5, 0))
+        task.wait(0.03)
+        if Farm_IsCarrying() then
+            Farm_Teleport(pos + Vector3.new(0, 5, 0))
+        end
         return true
     end
 
+    local function Farm_WaitClaim()
+        local deadline = os.clock() + 2.5
+        while os.clock() < deadline do
+            if not Farm_IsCarrying() then
+                return true
+            end
+            task.wait(0.03)
+        end
+        return not Farm_IsCarrying()
+    end
+
+    local function matchesMutationFilter(mutationStr)
+        local filter = tostring(ConfigState.BFE_MutationFilter or "All")
+        if filter == "All" or filter == "" then
+            return true
+        end
+        local cleanMut = tostring(mutationStr or "None")
+        local hasMut = (cleanMut ~= "" and cleanMut ~= "None" and cleanMut ~= "nil" and cleanMut ~= "false")
+        if filter == "Mutated Only" then
+            return hasMut
+        end
+        return string.lower(cleanMut) == string.lower(filter)
+    end
+
+    -- Collect all available uncarried Area Eggs from EggCmds.GetAreaEggSnapshot().Records
+    local function collectAvailableAreaEggs()
+        discoverBFEModules(false)
+        local list = {}
+        if not BFE.EggCmds or type(safeRawGet(BFE.EggCmds, "GetAreaEggSnapshot")) ~= "function" then
+            return list
+        end
+        local ok, snap = pcall(BFE.EggCmds.GetAreaEggSnapshot)
+        if not ok or type(snap) ~= "table" or type(snap.Records) ~= "table" then
+            return list
+        end
+
+        for _, rec in pairs(snap.Records) do
+            if type(rec) == "table" then
+                local uid = safeRawGet(rec, "Uid") or safeRawGet(rec, "UID")
+                local cat = safeRawGet(rec, "AssetCategory") or safeRawGet(rec, "EggId")
+                local carrier = safeRawGet(rec, "CarrierUserId")
+                if carrier == nil then
+                    local cAlt = safeRawGet(rec, "CarriedByUserId")
+                    if cAlt ~= nil and cAlt ~= 0 then
+                        carrier = cAlt
+                    end
+                end
+                local state = safeRawGet(rec, "State") or "Slot"
+                local areaId = tostring(safeRawGet(rec, "AreaId") or "Forest")
+                local areaName = BFE.AreasNameById[areaId] or areaId
+                local mut = tostring(safeRawGet(rec, "Mutation") or safeRawGet(rec, "MutationId") or "None")
+                if mut == "" or mut == "nil" or mut == "false" then
+                    mut = "None"
+                end
+
+                if type(uid) == "string" and uid ~= "" and type(cat) == "string" and cat ~= "" and carrier == nil then
+                    if state == "Slot" or state == "Dropped" then
+                        local rName, rNum, luck = getAssetRarityInfo(cat)
+                        local pos = nil
+                        local bcf = safeRawGet(rec, "BottomCFrame")
+                        if bcf then
+                            pcall(function() pos = bcf.Position end)
+                        end
+                        local model = Farm_FindEggModel(uid)
+                        if not pos and model then
+                            pcall(function()
+                                pos = model:IsA("BasePart") and model.Position or model:GetPivot().Position
+                            end)
+                        end
+                        table.insert(list, {
+                            Uid = uid,
+                            AssetCategory = cat,
+                            DisplayName = cat,
+                            RarityName = rName,
+                            RarityNumber = rNum,
+                            Luck = luck,
+                            Mutation = mut,
+                            AreaId = areaId,
+                            AreaName = areaName,
+                            Position = pos,
+                            Model = model,
+                            Record = rec,
+                        })
+                    end
+                end
+            end
+        end
+        return list
+    end
+
+    local function filterAvailableAreaEggs(allEggs)
+        local allEggsPass, eggLookup = parseCategorySelection(ConfigState.BFE_SelectedEggs)
+        local allRarPass, rarLookup = parseCategorySelection(ConfigState.BFE_SelectedRarities)
+        local allAreaPass, areaLookup = parseCategorySelection(ConfigState.BFE_SelectedAreas)
+
+        local filtered = {}
+        for _, item in ipairs(allEggs) do
+            local passEgg = allEggsPass or (eggLookup[item.AssetCategory] == true)
+            local passRar = allRarPass or (rarLookup[item.RarityName] == true)
+            local passArea = allAreaPass or (areaLookup[item.AreaName] == true) or (areaLookup[item.AreaId] == true)
+            local passMut = matchesMutationFilter(item.Mutation)
+            if passEgg and passRar and passArea and passMut then
+                table.insert(filtered, item)
+            end
+        end
+        return filtered
+    end
+
+    local function Farm_FindBestTarget()
+        BFE.FailCounts = BFE.FailCounts or {}
+        local allAvailable = collectAvailableAreaEggs()
+        local matching = filterAvailableAreaEggs(allAvailable)
+        if #matching == 0 then
+            return nil
+        end
+
+        local candidates = {}
+        for _, item in ipairs(matching) do
+            if (BFE.FailCounts[item.Uid] or 0) < 2 then
+                table.insert(candidates, item)
+            end
+        end
+        if #candidates == 0 then
+            BFE.FailCounts = {}
+            candidates = matching
+        end
+
+        local best = candidates[1]
+        for i = 2, #candidates do
+            local cur = candidates[i]
+            local curMutBonus = (cur.Mutation ~= "None" and ConfigState.BFE_PrioritizeHighestRarity ~= false) and 1000 or 0
+            local bestMutBonus = (best.Mutation ~= "None" and ConfigState.BFE_PrioritizeHighestRarity ~= false) and 1000 or 0
+            local curScore = (cur.RarityNumber or 0) + curMutBonus
+            local bestScore = (best.RarityNumber or 0) + bestMutBonus
+            if curScore > bestScore then
+                best = cur
+            elseif curScore == bestScore and tostring(cur.Uid) < tostring(best.Uid) then
+                best = cur
+            end
+        end
+        return best
+    end
+
+    local function Farm_StealEgg(rec)
+        if type(rec) ~= "table" then
+            return false
+        end
+        local uid = safeRawGet(rec, "Uid") or safeRawGet(rec, "UID")
+        if type(uid) ~= "string" or uid == "" then
+            return false
+        end
+        BFE.FailCounts = BFE.FailCounts or {}
+        if not BFE.EggCmds or type(safeRawGet(BFE.EggCmds, "GetAreaEggSnapshot")) ~= "function" then
+            return false
+        end
+
+        local okSnap, snap = pcall(BFE.EggCmds.GetAreaEggSnapshot)
+        if not okSnap or type(snap) ~= "table" or type(snap.Records) ~= "table" then
+            return false
+        end
+
+        local targetPos = nil
+        local stillAvailable = false
+        for _, r in pairs(snap.Records) do
+            if type(r) == "table" and (safeRawGet(r, "Uid") == uid or safeRawGet(r, "UID") == uid) then
+                local rCarrier = safeRawGet(r, "CarrierUserId")
+                if rCarrier == nil then
+                    local cAlt = safeRawGet(r, "CarriedByUserId")
+                    if cAlt ~= nil and cAlt ~= 0 then
+                        rCarrier = cAlt
+                    end
+                end
+                local rState = safeRawGet(r, "State") or "Slot"
+                if rCarrier == nil and (rState == "Slot" or rState == "Dropped") then
+                    stillAvailable = true
+                    local bcf = safeRawGet(r, "BottomCFrame")
+                    if bcf then
+                        pcall(function() targetPos = bcf.Position end)
+                    end
+                end
+                break
+            end
+        end
+
+        if not stillAvailable then
+            BFE.FailCounts[uid] = 999
+            return false
+        end
+
+        if not targetPos then
+            local mdl = Farm_FindEggModel(uid)
+            if mdl then
+                pcall(function()
+                    targetPos = mdl:IsA("BasePart") and mdl.Position or mdl:GetPivot().Position
+                end)
+            end
+        end
+        if not targetPos then
+            return false
+        end
+
+        BFE.LastTargetUid = uid
+        Farm_Teleport(targetPos + Vector3.new(0, 2, 0))
+        pcall(function()
+            BFE.EggCmds.RequestCarryAreaEgg(uid)
+        end)
+
+        local mdl = Farm_FindEggModel(uid)
+        if mdl and Env.fireproximityprompt then
+            local prompt = mdl:FindFirstChild("CarryAreaEgg", true)
+            if prompt and prompt:IsA("ProximityPrompt") then
+                pcall(Env.fireproximityprompt, prompt)
+            end
+        end
+
+        local wait1 = os.clock() + 1.0
+        while os.clock() < wait1 do
+            if Farm_IsCarrying() then
+                BFE.FailCounts[uid] = nil
+                return true
+            end
+            task.wait(0.03)
+        end
+
+        -- Second attempt retry (just like Mystic's Farm_StealEgg)
+        Farm_Teleport(targetPos + Vector3.new(0, 2, 0))
+        pcall(function()
+            BFE.EggCmds.RequestCarryAreaEgg(uid)
+        end)
+        if mdl and Env.fireproximityprompt then
+            local prompt2 = mdl:FindFirstChild("CarryAreaEgg", true)
+            if prompt2 and prompt2:IsA("ProximityPrompt") then
+                pcall(Env.fireproximityprompt, prompt2)
+            end
+        end
+
+        local wait2 = os.clock() + 0.5
+        while os.clock() < wait2 do
+            if Farm_IsCarrying() then
+                BFE.FailCounts[uid] = nil
+                return true
+            end
+            task.wait(0.03)
+        end
+
+        if not Farm_IsCarrying() then
+            BFE.FailCounts[uid] = (BFE.FailCounts[uid] or 0) + 1
+        end
+        return Farm_IsCarrying()
+    end
+
+    local function stepAutoFarmAreaEggs()
+        if BFE.isFarmingStepBusy or not ConfigState.BFE_AutoFarmEggs then
+            return
+        end
+        BFE.isFarmingStepBusy = true
+        pcall(function()
+            if Farm_IsCarrying() then
+                if ConfigState.BFE_AutoReturnToPlot ~= false then
+                    Farm_ReturnToBase()
+                    Farm_WaitClaim()
+                end
+                return
+            end
+            local target = Farm_FindBestTarget()
+            if not target then
+                task.wait(0.1)
+                return
+            end
+            if Farm_StealEgg(target.Record) then
+                if ConfigState.BFE_AutoReturnToPlot ~= false then
+                    Farm_ReturnToBase()
+                    Farm_WaitClaim()
+                end
+            end
+            local extraWait = tonumber(ConfigState.BFE_FarmStepDelay) or 0.03
+            if extraWait > 0.03 then
+                task.wait(extraWait)
+            end
+        end)
+        BFE.isFarmingStepBusy = false
+    end
+
+    -- 1-Click Zone & Plot Teleporter (Uses Workspace.__OBJECTS.Areas.GuardAreas + AreaEggSnapshot)
     local function teleportToZoneByName(zoneName)
         zoneName = tostring(zoneName or "My Plot")
         if zoneName == "My Plot" then
-            local plotCF = getPlotTargetCFrame()
-            if plotCF then
-                safeTeleportCharacterTo(plotCF)
+            if Farm_ReturnToBase() then
                 notify("Bike for Egg", "Teleported to your Plot!", 2.5)
                 return true
             end
             safeFireNetwork("Plots: RequestLobbyTeleport")
-            notify("Bike for Egg", "Requested Plot/Lobby teleport.", 2.5)
+            notify("Bike for Egg", "Requested Plot teleport!", 2.5)
             return true
         elseif zoneName == "Lobby / Spawn" then
-            safeFireNetwork("Plots: RequestLobbyTeleport")
-            local spawnLoc = workspace:FindFirstChildOfClass("SpawnLocation") or workspace:FindFirstChild("Spawn", true)
+            local spawnLoc = workspace and (workspace:FindFirstChildOfClass("SpawnLocation") or workspace:FindFirstChild("Spawn", true))
             if spawnLoc and spawnLoc:IsA("BasePart") then
-                safeTeleportCharacterTo(spawnLoc.CFrame + Vector3.new(0, 4, 0))
+                Farm_Teleport(spawnLoc.Position + Vector3.new(0, 5, 0))
+            else
+                safeFireNetwork("Plots: RequestLobbyTeleport")
             end
             notify("Bike for Egg", "Teleported to Lobby / Spawn!", 2.5)
             return true
         end
 
-        -- Search GuardAreasClient / Areas / GuardAreas / Workspace for the named zone
-        local searchContainers = {
-            workspace:FindFirstChild("GuardAreasClient"),
-            workspace:FindFirstChild("GuardAreas"),
-            workspace:FindFirstChild("Areas"),
-            workspace:FindFirstChild("Zones"),
-            workspace:FindFirstChild("Map"),
+        local targetAreaId = BFE.AreaIdByName[zoneName] or zoneName
+        local lowerZone = string.lower(zoneName)
+        local lowerId = string.lower(tostring(targetAreaId))
+
+        -- 1. Check Workspace.__OBJECTS.Areas.GuardAreas.<AreaId> (Exact path from Roblox Console!)
+        local objectsFolder = workspace and workspace:FindFirstChild("__OBJECTS")
+        local areasRoot = objectsFolder and objectsFolder:FindFirstChild("Areas")
+        local guardAreas = areasRoot and areasRoot:FindFirstChild("GuardAreas")
+        local searchRoots = {
+            guardAreas,
+            areasRoot,
+            workspace and workspace:FindFirstChild("GuardAreasClient"),
+            workspace and workspace:FindFirstChild("AreaEggSlotsClient"),
+            objectsFolder,
         }
-        local lowerTarget = string.lower(zoneName)
-        for _, container in ipairs(searchContainers) do
-            if container then
-                for _, child in ipairs(container:GetDescendants()) do
-                    local cName = string.lower(tostring(child.Name or ""))
-                    local attrArea = string.lower(tostring((child.GetAttribute and (child:GetAttribute("Area") or child:GetAttribute("AreaId") or child:GetAttribute("Zone"))) or ""))
-                    if cName == lowerTarget or attrArea == lowerTarget or string.find(cName, lowerTarget, 1, true) then
-                        if child:IsA("BasePart") then
-                            safeTeleportCharacterTo(child.CFrame + Vector3.new(0, 5, 0))
+
+        for _, root in ipairs(searchRoots) do
+            if root then
+                local exactChild = root:FindFirstChild(targetAreaId) or root:FindFirstChild(zoneName)
+                if exactChild then
+                    local pos = nil
+                    pcall(function()
+                        pos = exactChild:IsA("BasePart") and exactChild.Position or exactChild:GetPivot().Position
+                    end)
+                    if pos then
+                        Farm_Teleport(pos + Vector3.new(0, 5, 0))
+                        notify("Bike for Egg", "Teleported to " .. zoneName .. "!", 2.5)
+                        return true
+                    end
+                end
+                for _, child in ipairs(root:GetChildren()) do
+                    local cLower = string.lower(tostring(child.Name or ""))
+                    if cLower == lowerZone or cLower == lowerId or string.find(cLower, lowerZone, 1, true) then
+                        local pos = nil
+                        pcall(function()
+                            pos = child:IsA("BasePart") and child.Position or child:GetPivot().Position
+                        end)
+                        if pos then
+                            Farm_Teleport(pos + Vector3.new(0, 5, 0))
                             notify("Bike for Egg", "Teleported to " .. zoneName .. "!", 2.5)
                             return true
-                        elseif child:IsA("Model") then
-                            local ok, piv = pcall(function() return child:GetPivot() end)
-                            if ok and piv then
-                                safeTeleportCharacterTo(piv + Vector3.new(0, 5, 0))
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 2. Fallback: Check EggCmds.GetAreaEggSnapshot().Records for any egg located in that AreaId
+        if BFE.EggCmds and type(safeRawGet(BFE.EggCmds, "GetAreaEggSnapshot")) == "function" then
+            local okS, snap = pcall(BFE.EggCmds.GetAreaEggSnapshot)
+            if okS and type(snap) == "table" and type(snap.Records) == "table" then
+                for _, rec in ipairs(snap.Records) do
+                    if type(rec) == "table" then
+                        local aId = tostring(rec.AreaId or "")
+                        local aName = BFE.AreasNameById[aId] or aId
+                        if string.lower(aId) == lowerId or string.lower(aName) == lowerZone then
+                            local pos = nil
+                            if rec.BottomCFrame then
+                                pcall(function() pos = rec.BottomCFrame.Position end)
+                            end
+                            if pos then
+                                Farm_Teleport(pos + Vector3.new(0, 5, 0))
                                 notify("Bike for Egg", "Teleported to " .. zoneName .. "!", 2.5)
                                 return true
                             end
@@ -10141,304 +10882,16 @@ do
             end
         end
 
-        notify("Bike for Egg", "Zone '" .. zoneName .. "' is not streamed in yet.", 3)
+        notify("Bike for Egg", "Could not locate zone '" .. zoneName .. "' in Workspace.", 3)
         return false
     end
 
-    -- Helper: Extract Egg/Pet metadata (Id, DisplayName, Rarity, Mutation, Price, Favorited)
-    local function extractItemMetadata(rawEntry, isEggHint)
-        if type(rawEntry) ~= "table" then
-            return nil
-        end
-        local itemObj = rawEntry
-        if isEggHint and BFE.EggItemUtil and type(BFE.EggItemUtil.DeserializeSavedEgg) == "function" then
-            local ok, des = pcall(BFE.EggItemUtil.DeserializeSavedEgg, rawEntry)
-            if ok and type(des) == "table" then
-                itemObj = des
-            end
-        elseif not isEggHint and BFE.AssetItemSerialization and type(BFE.AssetItemSerialization.DeserializeItem) == "function" then
-            local ok, des = pcall(BFE.AssetItemSerialization.DeserializeItem, rawEntry)
-            if ok and type(des) == "table" then
-                itemObj = des
-            end
-        end
-
-        local id = tostring(itemObj.Id or itemObj.EggId or itemObj.AssetId or itemObj.ItemId or rawEntry.Id or rawEntry.EggId or rawEntry.id or "")
-        local uid = tostring(itemObj.Uid or itemObj.UID or itemObj.uid or rawEntry.Uid or rawEntry.UID or rawEntry.uid or "")
-        local dirInfo = BFE.EggIdToInfo[id] or BFE.PetIdToInfo[id] or (BFE.AssetsDir and BFE.AssetsDir[id])
-        local displayName = tostring(
-            itemObj.DisplayName
-            or itemObj.Name
-            or (dirInfo and (dirInfo.DisplayName or (dirInfo.Raw and dirInfo.Raw.DisplayName)))
-            or id
-        )
-
-        local rarityName = "Common"
-        local rarityNumber = 1
-        if dirInfo then
-            rarityName = tostring(dirInfo.RarityName or (dirInfo.Rarity and dirInfo.Rarity.DisplayName) or "Common")
-            rarityNumber = tonumber(dirInfo.RarityNumber or (dirInfo.Rarity and dirInfo.Rarity.RarityNumber)) or (BFE.RarityNameOrder[rarityName] or 1)
-        elseif type(itemObj.Rarity) == "table" then
-            rarityName = tostring(itemObj.Rarity.DisplayName or itemObj.Rarity.Name or "Common")
-            rarityNumber = tonumber(itemObj.Rarity.RarityNumber) or (BFE.RarityNameOrder[rarityName] or 1)
-        elseif itemObj.Rarity then
-            rarityName = tostring(itemObj.Rarity)
-            rarityNumber = BFE.RarityNameOrder[rarityName] or 1
-        end
-
-        local mutation = tostring(
-            itemObj.Mutation
-            or itemObj.MutationId
-            or itemObj.MutationType
-            or rawEntry.Mutation
-            or rawEntry.MutationId
-            or rawEntry.mt
-            or "None"
-        )
-        if mutation == "" or mutation == "nil" or mutation == "false" then
-            mutation = "None"
-        end
-
-        local isFavorited = (itemObj.Favorited == true)
-            or (itemObj.Locked == true)
-            or (rawEntry.Favorited == true)
-            or (rawEntry.Locked == true)
-            or (rawEntry.lk == true)
-
-        local sellPrice = tonumber(itemObj.SellPrice or itemObj.Price or rawEntry.SellPrice or 0) or 0
-        if sellPrice <= 0 then
-            if isEggHint and BFE.EggItemUtil and type(BFE.EggItemUtil.GetSellPrice) == "function" then
-                local okP, val = pcall(BFE.EggItemUtil.GetSellPrice, itemObj)
-                if okP and tonumber(val) then sellPrice = tonumber(val) end
-            elseif BFE.GetPriceValueForItem and type(BFE.GetPriceValueForItem) == "function" then
-                local okP, val = pcall(BFE.GetPriceValueForItem, itemObj, 1)
-                if okP and tonumber(val) then sellPrice = tonumber(val) end
-            end
-        end
-
-        return {
-            Uid = uid,
-            Id = id,
-            DisplayName = displayName,
-            RarityName = rarityName,
-            RarityNumber = rarityNumber,
-            Mutation = mutation,
-            IsMutated = (mutation ~= "None"),
-            IsFavorited = isFavorited,
-            SellPrice = sellPrice,
-            Raw = rawEntry,
-            Deserialized = itemObj,
-        }
-    end
-
-    local function matchesMultiSelection(selTable, candidateName, candidateId)
-        if type(selTable) ~= "table" then return true end
-        if selTable["All"] then return true end
-        if candidateName and selTable[candidateName] then return true end
-        if candidateId and selTable[candidateId] then return true end
-        return false
-    end
-
-    local function matchesMutationFilter(mutationStr)
-        local filter = tostring(ConfigState.BFE_MutationFilter or "All")
-        if filter == "All" then
-            return true
-        end
-        local cleanMut = tostring(mutationStr or "None")
-        local hasMut = (cleanMut ~= "" and cleanMut ~= "None" and cleanMut ~= "nil")
-        if filter == "Mutated Only" then
-            return hasMut
-        end
-        return string.lower(cleanMut) == string.lower(filter)
-    end
-
-    -- Scan World & EggCmds Snapshot for Farmable Area Eggs
-    local function collectAvailableAreaEggs()
-        discoverBFEModules(false)
-        local results = {}
-        local seenUids = {}
-
-        -- 1. Query EggCmds.GetAreaEggSnapshot() if available
-        if BFE.EggCmds and type(BFE.EggCmds.GetAreaEggSnapshot) == "function" then
-            local ok, snap = pcall(BFE.EggCmds.GetAreaEggSnapshot)
-            if ok and type(snap) == "table" then
-                for k, rec in pairs(snap) do
-                    if type(rec) == "table" then
-                        local uid = tostring(rec.Uid or rec.UID or rec.Id or k)
-                        local eggId = tostring(rec.EggId or rec.AssetId or rec.ItemId or rec.Id or "")
-                        local areaName = tostring(rec.Area or rec.AreaId or rec.Zone or "Forest")
-                        local meta = extractItemMetadata(rec, true)
-                        local pos = nil
-                        if typeof and typeof(rec.Position) == "Vector3" then
-                            pos = rec.Position
-                        elseif typeof and typeof(rec.CFrame) == "CFrame" then
-                            pos = rec.CFrame.Position
-                        elseif rec.Model and rec.Model.GetPivot then
-                            local okP, piv = pcall(function() return rec.Model:GetPivot() end)
-                            if okP and piv then pos = piv.Position end
-                        end
-
-                        if meta and uid ~= "" then
-                            seenUids[uid] = true
-                            table.insert(results, {
-                                Uid = uid,
-                                EggId = eggId ~= "" and eggId or meta.Id,
-                                DisplayName = meta.DisplayName,
-                                RarityName = meta.RarityName,
-                                RarityNumber = meta.RarityNumber,
-                                Mutation = meta.Mutation,
-                                Area = areaName,
-                                Position = pos,
-                                Instance = rec.Model or rec.Part,
-                                Prompt = nil,
-                            })
-                        end
-                    end
-                end
-            end
-        end
-
-        -- 2. Also scan Workspace.GuardAreasClient & Workspace.GuardCarriedEggsClient for physical egg models & prompts
-        local folders = {
-            workspace:FindFirstChild("GuardAreasClient"),
-            workspace:FindFirstChild("GuardCarriedEggsClient"),
-            workspace:FindFirstChild("AreaEggs"),
-        }
-        for _, folder in ipairs(folders) do
-            if folder then
-                for _, desc in ipairs(folder:GetDescendants()) do
-                    if desc:IsA("Model") or desc:IsA("BasePart") then
-                        local uidAttr = desc.GetAttribute and (desc:GetAttribute("Uid") or desc:GetAttribute("UID") or desc:GetAttribute("EggUid"))
-                        local eggIdAttr = desc.GetAttribute and (desc:GetAttribute("EggId") or desc:GetAttribute("AssetId") or desc:GetAttribute("Id"))
-                        local prompt = desc:FindFirstChildOfClass("ProximityPrompt")
-                        if uidAttr or eggIdAttr or (prompt and string.find(string.lower(tostring(desc.Name)), "egg", 1, true)) then
-                            local uid = tostring(uidAttr or desc.Name)
-                            if not seenUids[uid] then
-                                seenUids[uid] = true
-                                local rawId = tostring(eggIdAttr or desc.Name)
-                                local dirInfo = BFE.EggIdToInfo[rawId]
-                                local dispName = (dirInfo and dirInfo.DisplayName) or tostring(desc:GetAttribute("DisplayName") or rawId)
-                                local rarName = (dirInfo and dirInfo.RarityName) or tostring(desc:GetAttribute("Rarity") or "Common")
-                                local rarNum = (dirInfo and dirInfo.RarityNumber) or (BFE.RarityNameOrder[rarName] or 1)
-                                local mutAttr = tostring((desc.GetAttribute and (desc:GetAttribute("Mutation") or desc:GetAttribute("MutationId"))) or "None")
-                                if mutAttr == "nil" or mutAttr == "" then mutAttr = "None" end
-                                local areaAttr = tostring((desc.GetAttribute and (desc:GetAttribute("Area") or desc:GetAttribute("AreaId"))) or (desc.Parent and desc.Parent.Name) or "Forest")
-
-                                local pos = nil
-                                if desc:IsA("BasePart") then
-                                    pos = desc.Position
-                                elseif desc:IsA("Model") then
-                                    local okP, piv = pcall(function() return desc:GetPivot() end)
-                                    if okP and piv then pos = piv.Position end
-                                end
-
-                                table.insert(results, {
-                                    Uid = uid,
-                                    EggId = rawId,
-                                    DisplayName = dispName,
-                                    RarityName = rarName,
-                                    RarityNumber = rarNum,
-                                    Mutation = mutAttr,
-                                    Area = areaAttr,
-                                    Position = pos,
-                                    Instance = desc,
-                                    Prompt = prompt or desc:FindFirstChildWhichIsA("ProximityPrompt", true),
-                                })
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        return results
-    end
-
-    local function filterAndRankAreaEggs(allEggs)
-        local filtered = {}
-        local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        local myPos = myHRP and myHRP.Position or Vector3.zero
-
-        for _, egg in ipairs(allEggs) do
-            local passEgg = matchesMultiSelection(ConfigState.BFE_SelectedEggs, egg.DisplayName, egg.EggId)
-            local passRarity = matchesMultiSelection(ConfigState.BFE_SelectedRarities, egg.RarityName, egg.RarityName)
-            local passArea = matchesMultiSelection(ConfigState.BFE_SelectedAreas, egg.Area, egg.Area)
-            local passMut = matchesMutationFilter(egg.Mutation)
-
-            if passEgg and passRarity and passArea and passMut then
-                local dist = egg.Position and (egg.Position - myPos).Magnitude or 9999
-                local mutBonus = (egg.Mutation and egg.Mutation ~= "None") and 100 or 0
-                egg.Score = (ConfigState.BFE_PrioritizeHighestRarity ~= false)
-                    and ((egg.RarityNumber or 1) * 1000 + mutBonus - (dist * 0.05))
-                    or (-dist)
-                table.insert(filtered, egg)
-            end
-        end
-
-        table.sort(filtered, function(a, b)
-            return (a.Score or 0) > (b.Score or 0)
-        end)
-        return filtered
-    end
-
-    -- Execute 1 Auto-Farm Area Egg Step
-    local function stepAutoFarmAreaEggs()
-        if BFE.isFarmingStepBusy or not ConfigState.BFE_AutoFarmEggs then
-            return
-        end
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum or hum.Health <= 0 then
-            return
-        end
-
-        BFE.isFarmingStepBusy = true
-        pcall(function()
-            local candidates = filterAndRankAreaEggs(collectAvailableAreaEggs())
-            local chosen = candidates[1]
-            if not chosen then
-                return
-            end
-
-            local stepDelay = math.clamp(tonumber(ConfigState.BFE_FarmStepDelay) or 0.35, 0.10, 2.0)
-
-            -- 1. Teleport to target area egg if position is known
-            if chosen.Position then
-                safeTeleportCharacterTo(CFrame.new(chosen.Position + Vector3.new(0, 3.2, 0)))
-                task.wait(math.min(0.18, stepDelay * 0.5))
-            end
-
-            -- 2. Request carry via EggCmds + Remote + ProximityPrompt fallback
-            if BFE.EggCmds and type(BFE.EggCmds.RequestCarryAreaEgg) == "function" then
-                pcall(BFE.EggCmds.RequestCarryAreaEgg, chosen.Uid)
-            end
-            safeInvokeNetwork("Eggs: RequestAreaEggCarry", chosen.Uid)
-            if chosen.Prompt and Env.fireproximityprompt then
-                pcall(Env.fireproximityprompt, chosen.Prompt)
-            end
-
-            task.wait(stepDelay)
-
-            -- 3. Teleport back to player Plot to bank/claim the carried egg
-            if ConfigState.BFE_AutoReturnToPlot ~= false then
-                local plotCF = getPlotTargetCFrame()
-                if plotCF then
-                    safeTeleportCharacterTo(plotCF)
-                    task.wait(math.max(0.25, stepDelay))
-                else
-                    safeFireNetwork("Plots: RequestLobbyTeleport")
-                    task.wait(math.max(0.25, stepDelay))
-                end
-            end
-        end)
-        BFE.isFarmingStepBusy = false
-    end
-
-    -- Anti-Guard Knockback & Anti-Ragdoll Enforcement
+    -- Anti-Guard Knockback & Carry Speed Enforcement
     local function enforceAntiGuardAndCarryMobility()
-        local char = LocalPlayer.Character
-        if not char then return end
+        local char = LocalPlayer and LocalPlayer.Character
+        if not char then
+            return
+        end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
 
@@ -10453,7 +10906,6 @@ do
                     end
                 end)
             end
-            -- Strip any knockback / pushback velocity objects injected onto character
             for _, desc in ipairs(char:GetDescendants()) do
                 if desc:IsA("BodyVelocity") or desc:IsA("LinearVelocity") or desc:IsA("VectorForce") or desc:IsA("BodyForce") then
                     local n = string.lower(tostring(desc.Name))
@@ -10472,285 +10924,689 @@ do
         end
     end
 
-    -- Auto Place Eggs on Plot (Supports up to 25 Plot Stands!)
-    local function stepAutoPlaceEggs()
-        if BFE.isPlacingEggsBusy or not ConfigState.BFE_AutoPlaceEggs then
-            return
+    -- ========================================================================
+    -- MYSTIC-VERIFIED PLOT, HATCH, BEST PETS & TREADMILL ENGINE
+    -- ========================================================================
+    local function Plot_GetPlacedEggPositions(plotData)
+        local positions = {}
+        if not BFE.EggCmds or type(safeRawGet(BFE.EggCmds, "GetOwnerRuntimeRecords")) ~= "function" then
+            return positions
         end
-        BFE.isPlacingEggsBusy = true
-        pcall(function()
-            local saveData = getLocalSaveData()
-            if type(saveData) ~= "table" then return end
-
-            -- Count currently placed eggs on our plot
-            local currentPlacedCount = 0
-            if BFE.EggCmds and type(BFE.EggCmds.GetOwnerRuntimeRecords) == "function" then
-                local okR, records = pcall(BFE.EggCmds.GetOwnerRuntimeRecords, LocalPlayer.UserId)
-                if okR and type(records) == "table" then
-                    for _ in pairs(records) do
-                        currentPlacedCount = currentPlacedCount + 1
-                    end
-                end
-            end
-
-            local maxStands = math.clamp(tonumber(ConfigState.BFE_MaxPlotEggs) or 25, 1, 25)
-            if currentPlacedCount >= maxStands then
-                return
-            end
-
-            -- Gather inventory eggs from SaveData
-            local invEggsRaw = saveData.Eggs
-                or (type(saveData.Inventory) == "table" and saveData.Inventory.Eggs)
-                or (type(saveData.AssetInventory) == "table" and saveData.AssetInventory.Eggs)
-            if type(invEggsRaw) ~= "table" then return end
-
-            local candidateEggs = {}
-            local wantSelection = tostring(ConfigState.BFE_PlaceEggSelection or "Best")
-
-            for k, rawEgg in pairs(invEggsRaw) do
-                local meta = extractItemMetadata(rawEgg, true)
-                if meta then
-                    if meta.Uid == "" then meta.Uid = tostring(k) end
-                    if wantSelection == "Best" or meta.DisplayName == wantSelection or meta.Id == wantSelection then
-                        table.insert(candidateEggs, meta)
-                    end
-                end
-            end
-
-            table.sort(candidateEggs, function(a, b)
-                if a.RarityNumber ~= b.RarityNumber then
-                    return a.RarityNumber > b.RarityNumber
-                end
-                if a.IsMutated ~= b.IsMutated then
-                    return a.IsMutated and not b.IsMutated
-                end
-                return (a.SellPrice or 0) > (b.SellPrice or 0)
-            end)
-
-            local chosenEgg = candidateEggs[1]
-            if not chosenEgg or chosenEgg.Uid == "" then
-                return
-            end
-
-            -- Compute clean grid offset within PetArea (5x5 grid supporting up to 25 stands)
-            local slotIdx = currentPlacedCount
-            local col = (slotIdx % 5) - 2
-            local row = math.floor(slotIdx / 5) - 2
-            local localCF = CFrame.new(col * 5.5, 0, row * 5.5)
-
-            safeInvokeNetwork("Eggs: RequestEquipTool", chosenEgg.Uid)
-            safeInvokeNetwork("Eggs: RequestPlaceEgg", {
-                Uid = chosenEgg.Uid,
-                LocalCFrame = localCF,
-            })
+        if type(plotData) ~= "table" or not plotData.CenterPoint then
+            return positions
+        end
+        local ok, records = pcall(function()
+            return BFE.EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
         end)
-        BFE.isPlacingEggsBusy = false
+        if not ok or type(records) ~= "table" then
+            return positions
+        end
+        for _, rec in pairs(records) do
+            if type(rec) == "table" and rec.Placement and rec.Placement.LocalCFrame then
+                local lcf = rec.Placement.LocalCFrame
+                if typeof and typeof(lcf) == "CFrame" then
+                    local worldPos = (plotData.CenterPoint.CFrame * lcf).Position
+                    table.insert(positions, Vector3.new(worldPos.X, 0, worldPos.Z))
+                end
+            end
+        end
+        return positions
     end
 
-    -- Auto Hatch Ready Plot Eggs
-    local function stepAutoHatchEggs(forceAll)
-        if BFE.isHatchingEggsBusy then return 0 end
-        BFE.isHatchingEggsBusy = true
-        local hatchedCount = 0
-        pcall(function()
-            discoverBFEModules(false)
-            if BFE.EggCmds and type(BFE.EggCmds.GetOwnerRuntimeRecords) == "function" then
-                local okR, records = pcall(BFE.EggCmds.GetOwnerRuntimeRecords, LocalPlayer.UserId)
-                if okR and type(records) == "table" then
-                    for key, rec in pairs(records) do
-                        local uid = tostring((type(rec) == "table" and (rec.Uid or rec.UID or rec.Id)) or key)
-                        local isReady = forceAll == true
-                        if not isReady and BFE.EggPlacementPolicy and type(BFE.EggPlacementPolicy.IsReady) == "function" then
-                            local okP, readyRes = pcall(BFE.EggPlacementPolicy.IsReady, rec)
-                            if okP and readyRes == true then
-                                isReady = true
-                            end
-                        elseif not isReady and type(rec) == "table" then
-                            local rem = tonumber(rec.RemainingTime or rec.TimeLeft or rec.HatchTimeLeft)
-                            if (rem and rem <= 0) or rec.Ready == true or rec.IsReady == true then
-                                isReady = true
-                            end
-                        end
-
-                        if isReady and uid ~= "" then
-                            safeInvokeNetwork("Eggs: RequestHatchEgg", uid)
-                            safeInvokeNetwork("Eggs: RequestCompleteHatchEgg", uid)
-                            hatchedCount = hatchedCount + 1
-                        end
-                    end
-                end
-            end
+    local function Plot_CountPlacedEggs()
+        discoverBFEModules(false)
+        if not BFE.EggCmds or type(safeRawGet(BFE.EggCmds, "GetOwnerRuntimeRecords")) ~= "function" then
+            return 0
+        end
+        local ok, records = pcall(function()
+            return BFE.EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
         end)
-        BFE.isHatchingEggsBusy = false
-        return hatchedCount
+        if not ok or type(records) ~= "table" then
+            return 0
+        end
+        local count = 0
+        for _, rec in pairs(records) do
+            if type(rec) == "table" and rec.Placement then
+                count = count + 1
+            end
+        end
+        return count
     end
 
-    -- Smart Sell Inventory Eggs / Pets (Respects Mutated & Favorited Protection!)
-    local function executeSmartSell(isEggs, sellAllUnconditional)
+    local function Plot_GetFreePlacement(plotData)
+        if type(plotData) ~= "table" or not plotData.PetArea or not plotData.CenterPoint then
+            return nil
+        end
+        local petArea = plotData.PetArea
+        local okBase, isBase = pcall(function() return petArea:IsA("BasePart") end)
+        if okBase and not isBase then
+            return nil
+        end
+        local occupied = Plot_GetPlacedEggPositions(plotData)
+        local size = petArea.Size
+        local cf = petArea.CFrame
+        local cols = math.max(math.floor((size.X - 4) / 4), 1)
+        local rows = math.max(math.floor((size.Z - 4) / 4), 1)
+
+        for r = 0, rows - 1 do
+            for c = 0, cols - 1 do
+                local worldPos = (cf * CFrame.new(
+                    -((cols - 1) * 4) / 2 + c * 4,
+                    size.Y / 2,
+                    -((rows - 1) * 4) / 2 + r * 4
+                )).Position
+                local tooClose = false
+                for _, occ in ipairs(occupied) do
+                    local dx = worldPos.X - occ.X
+                    local dz = worldPos.Z - occ.Z
+                    if math.sqrt(dx * dx + dz * dz) < 3.4 then
+                        tooClose = true
+                        break
+                    end
+                end
+                if not tooClose then
+                    return plotData.CenterPoint.CFrame:ToObjectSpace(CFrame.new(worldPos))
+                end
+            end
+        end
+        return nil
+    end
+
+    local function Plot_RunPlaceOnce()
+        discoverBFEModules(false)
+        local plotData = getMyPlotData()
+        if type(plotData) ~= "table" then
+            return false, "Plot data not loaded"
+        end
+        local maxStands = math.clamp(tonumber(ConfigState.BFE_MaxPlotEggs) or 10, 1, 25)
+        local placedCount = Plot_CountPlacedEggs()
+        if placedCount >= maxStands then
+            return false, "Plot full (" .. tostring(placedCount) .. ")"
+        end
+
         local saveData = getLocalSaveData()
-        if type(saveData) ~= "table" then
-            if sellAllUnconditional and not ConfigState.BFE_ProtectMutatedAndFavorited then
-                safeFireNetwork("AssetInventory: SellAllAssets", isEggs and "Egg" or "Pet")
+        if type(saveData) ~= "table" or not BFE.EggItemUtil then
+            return false, "Save / EggItemUtil unavailable"
+        end
+        local eggInv = safeRawGet(saveData, "EggInventory")
+        if type(eggInv) ~= "table" then
+            return false, "EggInventory empty"
+        end
+
+        local matchAll, wantMap = parseCategorySelection(ConfigState.BFE_PlaceEggSelection)
+        local candidates = {}
+
+        for uid, rawEgg in pairs(eggInv) do
+            if type(rawEgg) == "table" and safeRawGet(rawEgg, "Placement") == nil then
+                local okDes, des = pcall(function()
+                    return BFE.EggItemUtil.DeserializeSavedEgg(rawEgg)
+                end)
+                if okDes and type(des) == "table" then
+                    local cat = safeRawGet(des, "AssetCategory")
+                    if type(cat) == "string" and cat ~= "" and (matchAll or wantMap[cat]) then
+                        local _, rNum, luck = getAssetRarityInfo(cat)
+                        table.insert(candidates, {
+                            uid = uid,
+                            cat = cat,
+                            score = rNum,
+                            luck = luck,
+                        })
+                    end
+                end
             end
+        end
+
+        if #candidates == 0 then
+            return false, "No matching unplaced eggs in inventory"
+        end
+
+        table.sort(candidates, function(a, b)
+            if a.score ~= b.score then
+                return a.score > b.score
+            end
+            if a.luck ~= b.luck then
+                return a.luck > b.luck
+            end
+            return a.cat < b.cat
+        end)
+
+        local chosen = candidates[1]
+        local freeLocalCF = Plot_GetFreePlacement(plotData)
+        if not freeLocalCF then
+            return false, "No free placement spot on plot"
+        end
+
+        local equipRem = getNetworkRemote("Eggs: RequestEquipTool")
+        local placeRem = getNetworkRemote("Eggs: RequestPlaceEgg")
+        if not equipRem or not placeRem then
+            return false, "Egg equip/place remote missing"
+        end
+
+        local char = LocalPlayer and LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum then
+            return false, "No character humanoid"
+        end
+
+        pcall(function() hum:UnequipTools() end)
+        task.wait(0.15)
+
+        local okEq, resEq = pcall(function()
+            return equipRem:InvokeServer(chosen.uid)
+        end)
+        if not okEq or not resEq then
+            return false, "Equip tool rejected"
+        end
+
+        -- Wait up to 4.0s for the equipped egg Tool to appear in LocalPlayer.Character
+        local deadline = os.clock() + 4.0
+        local toolReady = false
+        while os.clock() < deadline do
+            for _, child in ipairs(char:GetChildren()) do
+                if child:IsA("Tool") and child:GetAttribute("ItemType") == "AssetEgg" and child:GetAttribute("UID") == chosen.uid then
+                    toolReady = true
+                    break
+                end
+            end
+            if toolReady then
+                break
+            end
+            task.wait(0.05)
+        end
+
+        if not toolReady then
+            pcall(function() hum:UnequipTools() end)
+            return false, "Egg tool did not equip within 4s"
+        end
+
+        task.wait(0.20)
+        local okPl, resPl = pcall(function()
+            return placeRem:InvokeServer({ Uid = chosen.uid, LocalCFrame = freeLocalCF })
+        end)
+        task.wait(0.15)
+        pcall(function() hum:UnequipTools() end)
+
+        if not okPl or not resPl then
+            return false, "Place egg rejected"
+        end
+        return true, "Placed " .. tostring(chosen.cat)
+    end
+
+    local function Plot_HatchOne(uid)
+        if type(uid) ~= "string" or uid == "" then
+            return false
+        end
+        local hatchRem = getNetworkRemote("Eggs: RequestHatchEgg")
+        local compRem = getNetworkRemote("Eggs: RequestCompleteHatchEgg")
+        if not hatchRem then
+            return false
+        end
+        local okH, resH = pcall(function()
+            return hatchRem:InvokeServer(uid)
+        end)
+        if not okH or not resH then
+            return false
+        end
+        task.wait(0.35)
+        if compRem then
+            pcall(function()
+                return compRem:InvokeServer(uid)
+            end)
+        end
+        return true
+    end
+
+    local function Plot_RunHatchOnce(forceAll)
+        discoverBFEModules(false)
+        if not BFE.EggCmds or type(safeRawGet(BFE.EggCmds, "GetOwnerRuntimeRecords")) ~= "function" then
+            return 0
+        end
+        local okR, records = pcall(function()
+            return BFE.EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+        end)
+        if not okR or type(records) ~= "table" then
             return 0
         end
 
-        local rawContainer = nil
-        if isEggs then
-            rawContainer = saveData.Eggs
-                or (type(saveData.Inventory) == "table" and saveData.Inventory.Eggs)
-                or (type(saveData.AssetInventory) == "table" and saveData.AssetInventory.Eggs)
+        local matchAll, wantMap = parseCategorySelection(ConfigState.BFE_HatchEggSelection)
+        local readyUids = {}
+
+        for uid, rec in pairs(records) do
+            if type(rec) == "table" and rec.Placement then
+                local cat = tostring(rec.AssetCategory or "")
+                if forceAll or matchAll or wantMap[cat] then
+                    local isReady = (forceAll == true)
+                    if not isReady and BFE.PlacedEggPolicy and type(safeRawGet(BFE.PlacedEggPolicy, "IsReady")) == "function" then
+                        pcall(function()
+                            isReady = (BFE.PlacedEggPolicy.IsReady(rec) == true)
+                        end)
+                    end
+                    if isReady then
+                        table.insert(readyUids, uid)
+                    end
+                end
+            end
+        end
+
+        local hatched = 0
+        for _, uid in ipairs(readyUids) do
+            if Plot_HatchOne(uid) then
+                hatched = hatched + 1
+            end
+        end
+        return hatched
+    end
+
+    local function Plot_EquipBestPets()
+        local rem = getNetworkRemote("Backpack: EquipBest")
+        if not rem then
+            return false
+        end
+        local ok, res = pcall(function()
+            if rem:IsA("RemoteFunction") then
+                return rem:InvokeServer()
+            else
+                rem:FireServer()
+                return true
+            end
+        end)
+        return ok and (res ~= false)
+    end
+
+    local function Plot_GetTreadmillPart()
+        local plotData = getMyPlotData()
+        if type(plotData) ~= "table" or not plotData.PlotFolder then
+            return nil
+        end
+        local direct = plotData.PlotFolder:FindFirstChild("TreadmillBottom")
+        if direct and direct:IsA("BasePart") then
+            return direct
+        end
+        local deep = plotData.PlotFolder:FindFirstChild("TreadmillBottom", true)
+        if deep and deep:IsA("BasePart") then
+            return deep
+        end
+        return nil
+    end
+
+    local function Plot_EquipTreadmill()
+        local tmPart = Plot_GetTreadmillPart()
+        if not tmPart then
+            return false
+        end
+        local topPos = tmPart.Position + Vector3.new(0, tmPart.Size.Y / 2 + 3, 0)
+        Farm_Teleport(topPos)
+        task.wait(0.30)
+        if BFE.NetworkMod and BFE.NetworkMod.NET_MAP and BFE.NetworkMod.NET_MAP.Treadmills then
+            pcall(function()
+                BFE.NetworkMod.Invoke(BFE.NetworkMod.NET_MAP.Treadmills.REQUEST_EQUIP_STATIC)
+            end)
         else
-            rawContainer = saveData.Pets
-                or saveData.Mobs
-                or (type(saveData.Inventory) == "table" and (saveData.Inventory.Pets or saveData.Inventory.Mobs))
-                or (type(saveData.AssetInventory) == "table" and (saveData.AssetInventory.Pets or saveData.AssetInventory.Mobs))
+            safeInvokeNetwork("Treadmills: RequestEquipStatic")
         end
+        safeFireNetwork("Treadmills: SpeedGain")
+        return true
+    end
 
-        if type(rawContainer) ~= "table" then
+    local function Plot_ExitTreadmill()
+        if BFE.NetworkMod and BFE.NetworkMod.NET_MAP and BFE.NetworkMod.NET_MAP.Treadmills then
+            pcall(function()
+                BFE.NetworkMod.Invoke(BFE.NetworkMod.NET_MAP.Treadmills.REQUEST_UNEQUIP)
+            end)
+        else
+            safeInvokeNetwork("Treadmills: RequestUnequip")
+        end
+        task.wait(0.20)
+        Farm_ReturnToBase()
+        return true
+    end
+
+    -- ========================================================================
+    -- MYSTIC-VERIFIED SMART SELL, BIKE SHOP, TRAIL SHOP & UPGRADES ENGINE
+    -- ========================================================================
+    local function Sell_GetSellableEggs()
+        discoverBFEModules(false)
+        local saveData = getLocalSaveData()
+        if type(saveData) ~= "table" or not BFE.EggItemUtil then
+            return {}
+        end
+        local eggInv = safeRawGet(saveData, "EggInventory")
+        if type(eggInv) ~= "table" then
+            return {}
+        end
+        local list = {}
+        for uid, rawEgg in pairs(eggInv) do
+            if type(rawEgg) == "table" and safeRawGet(rawEgg, "Placement") == nil then
+                local okDes, des = pcall(function()
+                    return BFE.EggItemUtil.DeserializeSavedEgg(rawEgg)
+                end)
+                if okDes and type(des) == "table" then
+                    local cat = tostring(safeRawGet(des, "AssetCategory") or "")
+                    local okP, priceVal = pcall(function()
+                        return BFE.EggItemUtil.GetSellPrice(des)
+                    end)
+                    local rName, rNum = getAssetRarityInfo(cat)
+                    local mut = tostring(safeRawGet(des, "Mutation") or safeRawGet(des, "MutationId") or safeRawGet(rawEgg, "Mutation") or "None")
+                    if mut == "" or mut == "nil" or mut == "false" then
+                        mut = "None"
+                    end
+                    local isFav = (safeRawGet(des, "IsFavorite") == true) or (safeRawGet(des, "Favorited") == true) or (safeRawGet(rawEgg, "IsFavorite") == true)
+                    table.insert(list, {
+                        uid = uid,
+                        category = cat,
+                        price = (okP and tonumber(priceVal)) and math.floor(tonumber(priceVal)) or 0,
+                        rarity = rName,
+                        rarityNum = rNum,
+                        isMutated = (mut ~= "None"),
+                        isFavorite = isFav,
+                    })
+                end
+            end
+        end
+        return list
+    end
+
+    local function Sell_GetSellablePets()
+        discoverBFEModules(false)
+        local saveData = getLocalSaveData()
+        if type(saveData) ~= "table" or not BFE.AssetItemSerialization then
+            return {}
+        end
+        local inv = safeRawGet(saveData, "Inventory")
+        if type(inv) ~= "table" then
+            return {}
+        end
+        local equipped = safeRawGet(saveData, "EquippedAssets") or {}
+        local favorites = safeRawGet(saveData, "FavoriteAssets") or {}
+        local vipMult = (LocalPlayer and LocalPlayer:GetAttribute("VIP")) and 2 or 1
+        local list = {}
+
+        for uid, rawPet in pairs(inv) do
+            if type(rawPet) == "table" then
+                local isEquipped = (type(equipped) == "table" and (table.find(equipped, uid) ~= nil or equipped[uid] == true))
+                local isFavMap = (type(favorites) == "table" and favorites[uid] ~= nil and favorites[uid] ~= false)
+                if not isEquipped and not isFavMap then
+                    local okDes, des = pcall(function()
+                        return BFE.AssetItemSerialization.Deserialize(rawPet)
+                    end)
+                    if okDes and type(des) == "table" then
+                        if not safeRawGet(des, "IsFavorite") and not safeRawGet(des, "InFuse") then
+                            local cat = tostring(safeRawGet(des, "Category") or "")
+                            local price = 0
+                            if type(BFE.GetPriceValueForItem) == "function" then
+                                local okP, pVal = pcall(function()
+                                    return BFE.GetPriceValueForItem(rawPet) * 1.33 * vipMult
+                                end)
+                                if okP and tonumber(pVal) then
+                                    price = math.floor(tonumber(pVal))
+                                end
+                            end
+                            local rName, rNum = getAssetRarityInfo(cat)
+                            local mut = tostring(safeRawGet(des, "Mutation") or safeRawGet(des, "MutationId") or "None")
+                            if mut == "" or mut == "nil" or mut == "false" then
+                                mut = "None"
+                            end
+                            table.insert(list, {
+                                uid = uid,
+                                category = cat,
+                                price = price,
+                                rarity = rName,
+                                rarityNum = rNum,
+                                isMutated = (mut ~= "None"),
+                                isFavorite = false,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+        return list
+    end
+
+    local function Sell_Items(uidArray, mode)
+        if type(uidArray) ~= "table" or #uidArray == 0 then
+            return false
+        end
+        discoverBFEModules(false)
+        local netMap = BFE.NetworkMod and safeRawGet(BFE.NetworkMod, "NET_MAP")
+        local assetInvMap = netMap and safeRawGet(netMap, "AssetInventory")
+
+        if mode == "Pet" then
+            local sellAllKey = (assetInvMap and safeRawGet(assetInvMap, "SELL_ALL_ASSETS")) or "AssetInventory: SellAllAssets"
+            safeFireNetwork(sellAllKey, uidArray)
+        else
+            local sellOneKey = (assetInvMap and safeRawGet(assetInvMap, "SELL_ASSET")) or "AssetInventory: SellAsset"
+            for _, uid in ipairs(uidArray) do
+                safeFireNetwork(sellOneKey, uid)
+            end
+        end
+        return true
+    end
+
+    local function executeSmartSell(isEggs, sellAllUnconditional)
+        local items = isEggs and Sell_GetSellableEggs() or Sell_GetSellablePets()
+        if #items == 0 then
             return 0
         end
-
-        local selTable = isEggs and ConfigState.BFE_SellEggSelection or ConfigState.BFE_SellPetSelection
+        local selConfig = isEggs and ConfigState.BFE_SellEggSelection or ConfigState.BFE_SellPetSelection
+        local matchAll, wantMap = parseCategorySelection(selConfig)
         local protectSpecial = (ConfigState.BFE_ProtectMutatedAndFavorited ~= false)
         local maxPriceCap = tonumber(ConfigState.BFE_MaxAutoSellPrice) or 0
-        local soldCount = 0
 
-        for k, rawEntry in pairs(rawContainer) do
-            local meta = extractItemMetadata(rawEntry, isEggs)
-            if meta then
-                if meta.Uid == "" then meta.Uid = tostring(k) end
-                local matchesTarget = sellAllUnconditional or matchesMultiSelection(selTable, meta.DisplayName, meta.Id)
-                if matchesTarget then
-                    local blockedByProtection = protectSpecial and (meta.IsMutated or meta.IsFavorited)
-                    local blockedByPrice = (maxPriceCap > 0) and ((meta.SellPrice or 0) > maxPriceCap)
-                    if not blockedByProtection and not blockedByPrice and meta.Uid ~= "" then
-                        safeFireNetwork("AssetInventory: SellAsset", meta.Uid)
-                        soldCount = soldCount + 1
-                    end
+        local toSell = {}
+        for _, item in ipairs(items) do
+            if sellAllUnconditional or matchAll or wantMap[item.category] then
+                local blockedByProt = protectSpecial and (item.isMutated or item.isFavorite)
+                local blockedByPrice = (maxPriceCap > 0) and ((item.price or 0) > maxPriceCap)
+                if not blockedByProt and not blockedByPrice then
+                    table.insert(toSell, item.uid)
                 end
             end
         end
 
-        return soldCount
+        if #toSell > 0 then
+            Sell_Items(toSell, isEggs and "Egg" or "Pet")
+        end
+        return #toSell
     end
 
     local function sellHeldItem()
-        local char = LocalPlayer.Character
-        if not char then return false end
-        local tool = char:FindFirstChildOfClass("Tool")
-        if tool then
-            local uid = tool:GetAttribute("Uid") or tool:GetAttribute("UID") or tool:GetAttribute("AssetUid") or tool.Name
-            if uid then
-                safeFireNetwork("AssetInventory: SellAsset", tostring(uid))
-                notify("Shop & Sell", "Sold held item (" .. tostring(tool.Name) .. ")!", 2.5)
-                return true
+        local char = LocalPlayer and LocalPlayer.Character
+        local tool = char and char:FindFirstChildOfClass("Tool")
+        if not tool then
+            notify("Shop & Sell", "Hold an Egg or Pet tool in your hand first!", 2.5)
+            return false
+        end
+        local itemType = tool:GetAttribute("ItemType")
+        local uid = tool:GetAttribute("UID") or tool:GetAttribute("Uid")
+        if not uid or (itemType ~= "AssetEgg" and itemType ~= "Asset") then
+            notify("Shop & Sell", "Held tool is not a sellable Egg or Pet.", 2.5)
+            return false
+        end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function() hum:UnequipTools() end)
+        end
+        task.wait(0.15)
+        local mode = (itemType == "AssetEgg") and "Egg" or "Pet"
+        Sell_Items({ uid }, mode)
+        notify("Shop & Sell", "Sold held " .. mode .. " (" .. tostring(tool.Name) .. ")!", 2.5)
+        return true
+    end
+
+    local function Shop_BuyAndEquipBestTrail()
+        discoverBFEModules(false)
+        local saveData = getLocalSaveData()
+        if type(saveData) ~= "table" or type(BFE.TrailsDir) ~= "table" or not BFE.NetworkMod then
+            return false
+        end
+        local netMap = safeRawGet(BFE.NetworkMod, "NET_MAP")
+        local trailsMap = netMap and safeRawGet(netMap, "Trails")
+        if not trailsMap then
+            return false
+        end
+        local money = tonumber(safeRawGet(saveData, "Money") or safeRawGet(saveData, "Cash")) or 0
+        local ownedTrails = safeRawGet(saveData, "TrailInventory") or {}
+        local equippedTrail = safeRawGet(saveData, "EquippedTrail")
+        local currentMult = 0
+        if equippedTrail then
+            local eqEntry = safeRawGet(BFE.TrailsDir, equippedTrail)
+            if type(eqEntry) == "table" then
+                currentMult = tonumber(safeRawGet(eqEntry, "SpeedMultiplier")) or 0
             end
         end
-        notify("Shop & Sell", "Equip an Egg or Pet tool in your hand first.", 2.5)
+
+        local shopTrails = {}
+        for id, info in pairs(BFE.TrailsDir) do
+            if type(id) == "string" and id ~= "" and type(info) == "table" then
+                if safeRawGet(info, "DisplayInShop") and not safeRawGet(info, "RobuxOnly") then
+                    table.insert(shopTrails, {
+                        id = id,
+                        cost = tonumber(safeRawGet(info, "Price")) or 0,
+                        mult = tonumber(safeRawGet(info, "SpeedMultiplier")) or 0,
+                    })
+                end
+            end
+        end
+        table.sort(shopTrails, function(a, b) return a.mult > b.mult end)
+
+        for _, t in ipairs(shopTrails) do
+            if t.mult <= currentMult then
+                break
+            end
+            if ownedTrails[t.id] then
+                if equippedTrail ~= t.id then
+                    pcall(function() BFE.NetworkMod.Invoke(trailsMap.REQUEST_SELECT, t.id) end)
+                end
+                return true
+            end
+            if t.cost <= money then
+                local okB, resB = pcall(function()
+                    return BFE.NetworkMod.Invoke(trailsMap.REQUEST_PURCHASE, t.id)
+                end)
+                if okB and resB then
+                    task.wait(0.2)
+                    pcall(function() BFE.NetworkMod.Invoke(trailsMap.REQUEST_SELECT, t.id) end)
+                    return true
+                end
+            end
+        end
         return false
     end
 
-    -- Auto Buy & Equip Best Bike / Trail / Treadmill / Base Upgrades
+    local function Shop_BuyAndEquipBestBike()
+        discoverBFEModules(false)
+        if type(BFE.BikeCatalog) ~= "table" or not BFE.BikeShopRemote then
+            return false
+        end
+        local okSt, state = pcall(function()
+            return BFE.BikeShopRemote:InvokeServer("State")
+        end)
+        if not okSt or type(state) ~= "table" then
+            return false
+        end
+        local cash = tonumber(state.Cash) or 0
+        local owned = type(state.Owned) == "table" and state.Owned or {}
+        local equipped = state.Equipped
+
+        local multById = {}
+        local bikes = {}
+        for _, entry in ipairs(BFE.BikeCatalog) do
+            if type(entry) == "table" and entry.Id then
+                local m = tonumber(entry.SpeedMultiplier) or 0
+                multById[entry.Id] = m
+                if not entry.RobuxOnly and not entry.AdminOnly and (tonumber(entry.Price) or 0) >= 0 then
+                    table.insert(bikes, {
+                        id = entry.Id,
+                        price = tonumber(entry.Price) or 0,
+                        mult = m,
+                    })
+                end
+            end
+        end
+        table.sort(bikes, function(a, b) return a.mult > b.mult end)
+
+        local currentMult = equipped and (multById[equipped] or 0) or 0
+        for _, b in ipairs(bikes) do
+            if b.mult <= currentMult then
+                break
+            end
+            if owned[b.id] then
+                if equipped ~= b.id then
+                    pcall(function() BFE.BikeShopRemote:InvokeServer("Equip", b.id) end)
+                end
+                return true
+            end
+            if b.price > 0 and b.price <= cash then
+                local okB, resB = pcall(function()
+                    return BFE.BikeShopRemote:InvokeServer("Buy", b.id)
+                end)
+                if okB and type(resB) == "table" and resB.Success then
+                    task.wait(0.2)
+                    if resB.State and resB.State.Equipped ~= b.id then
+                        pcall(function() BFE.BikeShopRemote:InvokeServer("Equip", b.id) end)
+                    end
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function Shop_UpgradeTreadmill()
+        discoverBFEModules(false)
+        local saveData = getLocalSaveData()
+        if type(saveData) ~= "table" or not BFE.TreadmillUpgradeClient then
+            return false
+        end
+        local canFn = safeRawGet(BFE.TreadmillUpgradeClient, "CanAffordNext")
+        local reqFn = safeRawGet(BFE.TreadmillUpgradeClient, "RequestCashUpgrade")
+        if type(canFn) == "function" and type(reqFn) == "function" then
+            local okC, canAff = pcall(canFn, saveData)
+            if okC and canAff then
+                local okU, resU = pcall(reqFn)
+                return okU and (resU ~= false)
+            end
+        end
+        return false
+    end
+
+    local function Shop_UpgradePlot()
+        discoverBFEModules(false)
+        local saveData = getLocalSaveData()
+        if type(saveData) ~= "table" or not BFE.BaseUpgradeClient then
+            return false
+        end
+        local canFn = safeRawGet(BFE.BaseUpgradeClient, "CanAffordNext")
+        local reqFn = safeRawGet(BFE.BaseUpgradeClient, "RequestCashUpgrade")
+        if type(canFn) == "function" and type(reqFn) == "function" then
+            local okC, canAff = pcall(canFn, saveData)
+            if okC and canAff then
+                local okU, resU = pcall(reqFn)
+                return okU and (resU ~= false)
+            end
+        end
+        return false
+    end
+
     local function stepShopAndUpgrades()
-        if BFE.isShopTickBusy then return end
+        if BFE.isShopTickBusy then
+            return
+        end
         BFE.isShopTickBusy = true
         pcall(function()
-            discoverBFEModules(false)
-            local saveData = getLocalSaveData()
-            local myCash = getLocalCash(saveData)
-
-            -- 1. Auto Buy & Equip Best Bike
-            if ConfigState.BFE_AutoBuyBestBike and BFE.BikeShopRemote and type(BFE.BikeCatalog) == "table" then
-                local okState, shopState = pcall(function()
-                    return BFE.BikeShopRemote:InvokeServer("State")
-                end)
-                local ownedMap = (okState and type(shopState) == "table" and type(shopState.Owned) == "table") and shopState.Owned or {}
-                local equippedBike = (okState and type(shopState) == "table") and tostring(shopState.Equipped or "") or ""
-
-                local bestOwnedId = nil
-                local bestOwnedMult = -1
-
-                for _, bike in pairs(BFE.BikeCatalog) do
-                    if type(bike) == "table" and not bike.AdminOnly and not bike.RobuxOnly then
-                        local bId = tostring(bike.Id or bike.Name or "")
-                        local bPrice = tonumber(bike.Price or bike.Cost or 0) or 0
-                        local bMult = tonumber(bike.SpeedMultiplier or bike.Multiplier or 1) or 1
-                        local isOwned = (ownedMap[bId] == true)
-
-                        if not isOwned and bId ~= "" and bPrice > 0 and myCash >= bPrice and bMult > bestOwnedMult then
-                            local okBuy = pcall(function()
-                                BFE.BikeShopRemote:InvokeServer("Buy", bId)
-                            end)
-                            if okBuy then
-                                isOwned = true
-                                myCash = math.max(0, myCash - bPrice)
-                            end
-                        end
-
-                        if isOwned and bMult > bestOwnedMult then
-                            bestOwnedMult = bMult
-                            bestOwnedId = bId
-                        end
-                    end
-                end
-
-                if bestOwnedId and bestOwnedId ~= "" and bestOwnedId ~= equippedBike then
-                    pcall(function()
-                        BFE.BikeShopRemote:InvokeServer("Equip", bestOwnedId)
-                    end)
-                end
+            if ConfigState.BFE_AutoBuyBestBike then
+                pcall(Shop_BuyAndEquipBestBike)
             end
-
-            -- 2. Auto Buy & Equip Best Trail
-            if ConfigState.BFE_AutoBuyBestTrail and type(BFE.TrailsDir) == "table" then
-                local bestTrailId = nil
-                local bestTrailMult = -1
-                local purchaseRemoteName = (BFE.NetworkMod and BFE.NetworkMod.NET_MAP and BFE.NetworkMod.NET_MAP.Trails and BFE.NetworkMod.NET_MAP.Trails.REQUEST_PURCHASE) or "Trails: RequestPurchase"
-                local selectRemoteName = (BFE.NetworkMod and BFE.NetworkMod.NET_MAP and BFE.NetworkMod.NET_MAP.Trails and BFE.NetworkMod.NET_MAP.Trails.REQUEST_SELECT) or "Trails: RequestSelect"
-
-                for trailId, tInfo in pairs(BFE.TrailsDir) do
-                    if type(tInfo) == "table" and tInfo.DisplayInShop ~= false and not tInfo.RobuxOnly then
-                        local tId = tostring(tInfo.Id or trailId)
-                        local tPrice = tonumber(tInfo.Price or tInfo.Cost or 0) or 0
-                        local tMult = tonumber(tInfo.SpeedMultiplier or tInfo.Multiplier or 1) or 1
-                        if myCash >= tPrice and tMult > bestTrailMult then
-                            safeInvokeNetwork(purchaseRemoteName, tId)
-                            bestTrailMult = tMult
-                            bestTrailId = tId
-                        end
-                    end
-                end
-                if bestTrailId then
-                    safeInvokeNetwork(selectRemoteName, bestTrailId)
-                end
+            if ConfigState.BFE_AutoBuyBestTrail then
+                pcall(Shop_BuyAndEquipBestTrail)
             end
-
-            -- 3. Auto Upgrade Treadmill
             if ConfigState.BFE_AutoUpgradeTreadmill then
-                if BFE.TreadmillUpgradeClient and type(BFE.TreadmillUpgradeClient.CanAffordNext) == "function" then
-                    local okAff, canAff = pcall(BFE.TreadmillUpgradeClient.CanAffordNext, saveData)
-                    if okAff and canAff and type(BFE.TreadmillUpgradeClient.RequestCashUpgrade) == "function" then
-                        pcall(BFE.TreadmillUpgradeClient.RequestCashUpgrade)
-                    end
-                else
-                    safeInvokeNetwork("Treadmills: RequestUpgrade")
-                end
+                pcall(Shop_UpgradeTreadmill)
             end
-
-            -- 4. Auto Upgrade Base / Plot
             if ConfigState.BFE_AutoUpgradeBase then
-                if BFE.BaseUpgradeClient and type(BFE.BaseUpgradeClient.CanAffordNext) == "function" then
-                    local okAff, canAff = pcall(BFE.BaseUpgradeClient.CanAffordNext, saveData)
-                    if okAff and canAff and type(BFE.BaseUpgradeClient.RequestCashUpgrade) == "function" then
-                        pcall(BFE.BaseUpgradeClient.RequestCashUpgrade)
-                    end
-                else
-                    safeFireNetwork("Plots: RequestBaseUpgrade")
-                end
+                pcall(Shop_UpgradePlot)
             end
-
-            -- 5. Auto Rebirth
             if ConfigState.BFE_AutoRebirth then
                 safeInvokeNetwork("Rebirth: RequestRebirth")
                 safeInvokeNetwork("Rebirth: RequestRebirthCommit")
@@ -10759,11 +11615,18 @@ do
         BFE.isShopTickBusy = false
     end
 
-    -- Claim All Index, Group, Royal Egg & Event Rewards
     local function claimAllBFERewards(showToast)
         task.spawn(function()
+            elevateThreadIdentity()
             pcall(function()
-                safeInvokeNetwork("Index: RequestClaimAll")
+                discoverBFEModules(false)
+                if BFE.NetworkMod and BFE.NetworkMod.NET_MAP and BFE.NetworkMod.NET_MAP.Index and BFE.NetworkMod.NET_MAP.Index.REQUEST_CLAIM_ALL then
+                    pcall(function()
+                        BFE.NetworkMod.Invoke(BFE.NetworkMod.NET_MAP.Index.REQUEST_CLAIM_ALL)
+                    end)
+                else
+                    safeInvokeNetwork("Index: RequestClaimAll")
+                end
                 safeInvokeNetwork("Index: RequestClaimLimitedEggReward")
                 safeInvokeNetwork("Index: RequestEquipAreaBat")
                 safeInvokeNetwork("GroupReward: ClaimReward")
@@ -10783,56 +11646,51 @@ do
                 end
             end)
             if showToast then
-                notify("Bike for Egg", "Requested all Index, Group, Bat, Royal Egg & Event Rewards!", 3)
+                notify("Bike for Egg", "Claimed Index, Group, Bat, Royal Egg & Event Rewards!", 3)
             end
         end)
     end
 
-    -- Auto Fuse Duplicate Pets
     local function stepAutoFuseDuplicatePets(showToast)
-        pcall(function()
-            local saveData = getLocalSaveData()
-            if type(saveData) ~= "table" then return end
-            local rawPets = saveData.Pets
-                or saveData.Mobs
-                or (type(saveData.Inventory) == "table" and (saveData.Inventory.Pets or saveData.Inventory.Mobs))
-                or (type(saveData.AssetInventory) == "table" and (saveData.AssetInventory.Pets or saveData.AssetInventory.Mobs))
-            if type(rawPets) ~= "table" then return end
+        task.spawn(function()
+            elevateThreadIdentity()
+            pcall(function()
+                local pets = Sell_GetSellablePets()
+                local buckets = {}
+                local wantRarity = tostring(ConfigState.BFE_FuseRarityFilter or "Any Duplicate")
 
-            local buckets = {}
-            local wantRarity = tostring(ConfigState.BFE_FuseRarityFilter or "Any Duplicate")
-
-            for k, rawPet in pairs(rawPets) do
-                local meta = extractItemMetadata(rawPet, false)
-                if meta and not meta.IsFavorited and not meta.IsMutated then
-                    if meta.Uid == "" then meta.Uid = tostring(k) end
-                    if wantRarity == "Any Duplicate" or meta.RarityName == wantRarity then
-                        buckets[meta.Id] = buckets[meta.Id] or {}
-                        table.insert(buckets[meta.Id], meta.Uid)
+                for _, p in ipairs(pets) do
+                    if not p.isFavorite and not p.isMutated then
+                        if wantRarity == "Any Duplicate" or p.rarity == wantRarity then
+                            buckets[p.category] = buckets[p.category] or {}
+                            table.insert(buckets[p.category], p.uid)
+                        end
                     end
                 end
-            end
 
-            for _, uidList in pairs(buckets) do
-                if #uidList >= 3 then
-                    for i = 1, math.min(#uidList, 5) do
-                        safeInvokeNetwork("FuseMachine: InsertMob", uidList[i])
+                for _, uidList in pairs(buckets) do
+                    if #uidList >= 3 then
+                        for i = 1, math.min(#uidList, 5) do
+                            safeInvokeNetwork("FuseMachine: InsertMob", uidList[i])
+                        end
+                        safeInvokeNetwork("FuseMachine: StartFuse")
+                        safeInvokeNetwork("FuseMachine: CompleteReveal")
+                        if showToast then
+                            notify("Fuse Machine", "Submitted duplicate pets to the Fuse Machine!", 2.5)
+                        end
+                        return
                     end
-                    safeInvokeNetwork("FuseMachine: StartFuse")
-                    safeInvokeNetwork("FuseMachine: CompleteReveal")
-                    if showToast then
-                        notify("Fuse Machine", "Submitted duplicate pets to the Fuse Machine!", 2.5)
-                    end
-                    return
                 end
-            end
-            if showToast then
-                notify("Fuse Machine", "No 3+ unmutated duplicate pets matched filter.", 2.5)
-            end
+                if showToast then
+                    notify("Fuse Machine", "No 3+ unmutated duplicate pets matched filter.", 2.5)
+                end
+            end)
         end)
     end
 
-    -- Rare/Mutated Egg ESP & NPC Guard ESP Pool
+    -- ========================================================================
+    -- WORLD ESP (RARE/MUTATED EGGS & NPC GUARDS — SAFE IN PLAYERGUI)
+    -- ========================================================================
     local function clearBFEWorldESP()
         for inst, guiObj in pairs(BFE.espPool) do
             if guiObj and guiObj.Parent then
@@ -10843,100 +11701,118 @@ do
     end
 
     local function attachBillboardESP(targetInst, titleText, subText, badgeColor)
-        if not targetInst or not targetInst.Parent then return end
-        local existing = BFE.espPool[targetInst]
-        if existing and existing.Parent then
-            local tLbl = existing:FindFirstChild("TitleLabel")
-            local sLbl = existing:FindFirstChild("SubLabel")
-            if tLbl then
-                tLbl.Text = titleText
-                tLbl.TextColor3 = badgeColor
-            end
-            if sLbl then
-                sLbl.Text = subText
-            end
+        if not targetInst or not targetInst.Parent then
             return
         end
+        pcall(function()
+            elevateThreadIdentity()
+            local existing = BFE.espPool[targetInst]
+            if existing and existing.Parent then
+                local tLbl = existing:FindFirstChild("TitleLabel")
+                local sLbl = existing:FindFirstChild("SubLabel")
+                if tLbl then
+                    tLbl.Text = titleText
+                    tLbl.TextColor3 = badgeColor
+                end
+                if sLbl then
+                    sLbl.Text = subText
+                end
+                return
+            end
 
-        local bb = Instance.new("BillboardGui")
-        bb.Name = "CoreXYZ_BFE_ESP"
-        bb.Adornee = targetInst
-        bb.Size = UDim2.fromOffset(170, 36)
-        bb.StudsOffset = Vector3.new(0, 3.2, 0)
-        bb.AlwaysOnTop = true
-        bb.MaxDistance = 850
-        bb.Parent = guiParent
+            local bb = Instance.new("BillboardGui")
+            bb.Name = "CoreXYZ_BFE_ESP"
+            bb.Adornee = targetInst
+            bb.Size = UDim2.fromOffset(170, 36)
+            bb.StudsOffset = Vector3.new(0, 3.2, 0)
+            bb.AlwaysOnTop = true
+            bb.MaxDistance = 850
+            bb.Parent = guiParent
 
-        local tLbl = Instance.new("TextLabel")
-        tLbl.Name = "TitleLabel"
-        tLbl.Size = UDim2.new(1, 0, 0, 18)
-        tLbl.BackgroundTransparency = 1
-        tLbl.Font = Enum.Font.GothamBlack
-        tLbl.Text = titleText
-        tLbl.TextColor3 = badgeColor
-        tLbl.TextStrokeTransparency = 0.15
-        tLbl.TextSize = 12
-        tLbl.Parent = bb
+            local tLbl = Instance.new("TextLabel")
+            tLbl.Name = "TitleLabel"
+            tLbl.Size = UDim2.new(1, 0, 0, 18)
+            tLbl.BackgroundTransparency = 1
+            tLbl.Font = Enum.Font.GothamBlack
+            tLbl.Text = titleText
+            tLbl.TextColor3 = badgeColor
+            tLbl.TextStrokeTransparency = 0.15
+            tLbl.TextSize = 12
+            tLbl.Parent = bb
 
-        local sLbl = Instance.new("TextLabel")
-        sLbl.Name = "SubLabel"
-        sLbl.Position = UDim2.fromOffset(0, 17)
-        sLbl.Size = UDim2.new(1, 0, 0, 15)
-        sLbl.BackgroundTransparency = 1
-        sLbl.Font = Enum.Font.Code
-        sLbl.Text = subText
-        sLbl.TextColor3 = Color3.fromRGB(230, 235, 245)
-        sLbl.TextStrokeTransparency = 0.2
-        sLbl.TextSize = 10
-        sLbl.Parent = bb
+            local sLbl = Instance.new("TextLabel")
+            sLbl.Name = "SubLabel"
+            sLbl.Position = UDim2.fromOffset(0, 17)
+            sLbl.Size = UDim2.new(1, 0, 0, 15)
+            sLbl.BackgroundTransparency = 1
+            sLbl.Font = Enum.Font.Code
+            sLbl.Text = subText
+            sLbl.TextColor3 = Color3.fromRGB(230, 235, 245)
+            sLbl.TextStrokeTransparency = 0.2
+            sLbl.TextSize = 10
+            sLbl.Parent = bb
 
-        BFE.espPool[targetInst] = bb
+            BFE.espPool[targetInst] = bb
+        end)
     end
 
     local function stepBFEWorldESP()
-        if not ConfigState.BFE_EggESP and not ConfigState.BFE_GuardESP then
-            if next(BFE.espPool) ~= nil then
-                clearBFEWorldESP()
-            end
-            return
-        end
-
-        local activeSet = {}
-
-        if ConfigState.BFE_EggESP then
-            local matchingEggs = filterAndRankAreaEggs(collectAvailableAreaEggs())
-            for _, egg in ipairs(matchingEggs) do
-                if egg.Instance and egg.Instance.Parent then
-                    activeSet[egg.Instance] = true
-                    local isMut = (egg.Mutation and egg.Mutation ~= "None")
-                    local col = isMut and Color3.fromRGB(255, 215, 70) or Color3.fromRGB(95, 235, 155)
-                    local title = isMut and string.format("★ %s [%s]", egg.DisplayName, egg.Mutation) or egg.DisplayName
-                    local sub = string.format("%s · %s", tostring(egg.RarityName), tostring(egg.Area))
-                    attachBillboardESP(egg.Instance, title, sub, col)
+        pcall(function()
+            if not ConfigState.BFE_EggESP and not ConfigState.BFE_GuardESP then
+                if next(BFE.espPool) ~= nil then
+                    clearBFEWorldESP()
                 end
+                return
             end
-        end
 
-        if ConfigState.BFE_GuardESP then
-            local guardContainer = workspace:FindFirstChild("GuardAreasClient") or workspace:FindFirstChild("Guards")
-            if guardContainer then
-                for _, desc in ipairs(guardContainer:GetDescendants()) do
-                    if desc:IsA("Model") and desc:FindFirstChildOfClass("Humanoid") then
-                        activeSet[desc] = true
-                        attachBillboardESP(desc, "⚠ GUARD", tostring(desc.Name), Color3.fromRGB(255, 85, 95))
+            local activeSet = {}
+
+            if ConfigState.BFE_EggESP then
+                local matchingEggs = filterAvailableAreaEggs(collectAvailableAreaEggs())
+                for _, egg in ipairs(matchingEggs) do
+                    local mdl = egg.Model or Farm_FindEggModel(egg.Uid)
+                    if mdl and mdl.Parent then
+                        activeSet[mdl] = true
+                        local isMut = (egg.Mutation and egg.Mutation ~= "None")
+                        local col = isMut and Color3.fromRGB(255, 215, 70) or Color3.fromRGB(95, 235, 155)
+                        local title = isMut and string.format("★ %s [%s]", egg.DisplayName, egg.Mutation) or egg.DisplayName
+                        local sub = string.format("%s · %s", tostring(egg.RarityName), tostring(egg.AreaName))
+                        attachBillboardESP(mdl, title, sub, col)
                     end
                 end
             end
-        end
 
-        for inst, guiObj in pairs(BFE.espPool) do
-            if not activeSet[inst] or not inst.Parent then
-                if guiObj and guiObj.Parent then
-                    pcall(function() guiObj:Destroy() end)
+            if ConfigState.BFE_GuardESP then
+                local objectsFolder = workspace and workspace:FindFirstChild("__OBJECTS")
+                local areasRoot = objectsFolder and objectsFolder:FindFirstChild("Areas")
+                local guardAreas = areasRoot and areasRoot:FindFirstChild("GuardAreas")
+                local guardContainers = {
+                    guardAreas,
+                    workspace and workspace:FindFirstChild("GuardAreasClient"),
+                    workspace and workspace:FindFirstChild("Guards"),
+                }
+                for _, container in ipairs(guardContainers) do
+                    if container then
+                        for _, desc in ipairs(container:GetDescendants()) do
+                            if desc:IsA("Model") and (desc.Name == "Guard" or desc:FindFirstChildOfClass("Humanoid")) then
+                                activeSet[desc] = true
+                                local zoneLabel = (desc.Parent and desc.Parent.Name) or "Guard"
+                                attachBillboardESP(desc, "⚠ GUARD", tostring(zoneLabel), Color3.fromRGB(255, 85, 95))
+                            end
+                        end
+                    end
                 end
-                BFE.espPool[inst] = nil
             end
-        end
+
+            for inst, guiObj in pairs(BFE.espPool) do
+                if not activeSet[inst] or not inst.Parent then
+                    if guiObj and guiObj.Parent then
+                        pcall(function() guiObj:Destroy() end)
+                    end
+                    BFE.espPool[inst] = nil
+                end
+            end
+        end)
     end
 
     -- Quick Interact (Instant ProximityPrompts)
@@ -11059,8 +11935,10 @@ do
 
         createToggle(FarmTab, "Auto Farm Area Eggs", ConfigState.BFE_AutoFarmEggs == true, function(val)
             ConfigState.BFE_AutoFarmEggs = val
+            BFE.FailCounts = {}
             if val then
-                notify("Auto Farm", "Auto Farm Area Eggs enabled!", 2.5)
+                notify("Auto Farm", "Auto Farm Area Eggs started!", 2.5)
+                task.spawn(stepAutoFarmAreaEggs)
             end
         end)
 
@@ -11072,8 +11950,29 @@ do
             ConfigState.BFE_AutoReturnToPlot = val
         end)
 
-        createSlider(FarmTab, "Farm Teleport Delay", 0.10, 2.00, ConfigState.BFE_FarmStepDelay or 0.35, 0.05, "s", function(val)
+        createSlider(FarmTab, "Farm Step Delay", 0.03, 1.50, ConfigState.BFE_FarmStepDelay or 0.05, 0.02, "s", function(val)
             ConfigState.BFE_FarmStepDelay = val
+        end)
+
+        createButton(FarmTab, "Steal 1 Matching Area Egg Now", function()
+            local ok, msg = pcall(function()
+                if Farm_IsCarrying() then
+                    Farm_ReturnToBase()
+                    Farm_WaitClaim()
+                    return "Claimed carried egg at Plot!"
+                end
+                local target = Farm_FindBestTarget()
+                if not target then
+                    return "No matching uncarried Area Egg found."
+                end
+                if Farm_StealEgg(target.Record) then
+                    Farm_ReturnToBase()
+                    Farm_WaitClaim()
+                    return "Stole & claimed " .. tostring(target.DisplayName) .. "!"
+                end
+                return "Steal attempt did not pick up egg."
+            end)
+            notify("Auto Farm", ok and tostring(msg) or "Steal step finished.", 3)
         end)
 
         createButton(FarmTab, "Instant Bank Held Area Egg (Teleport to Plot)", function()
@@ -11081,6 +11980,9 @@ do
         end)
 
         createButton(FarmTab, "Drop Currently Carried Area Egg", function()
+            if BFE.EggCmds and type(safeRawGet(BFE.EggCmds, "RequestDropAreaEgg")) == "function" then
+                pcall(BFE.EggCmds.RequestDropAreaEgg)
+            end
             safeInvokeNetwork("Eggs: RequestAreaEggDrop")
             notify("Auto Farm", "Requested to drop currently carried Area Egg.", 2.5)
         end)
@@ -11143,50 +12045,82 @@ do
     end
 
     -- ========================================================================
-    -- TAB 3: PLOT & HATCH (AUTO PLACE UP TO 25 STANDS, HATCH, EQUIP, FUSE)
+    -- TAB 3: PLOT & HATCH (AUTO PLACE, HATCH, BEST PETS, TREADMILL, FUSE)
     -- ========================================================================
     do
-        createLabel(PlotTab, "Auto Place & Hatch Plot Eggs (Up to 25 Stands)")
+        createLabel(PlotTab, "Auto Place & Hatch Plot Eggs")
 
-        BFE.uiDropdownHandles.PlaceEgg = createDropdown(PlotTab, "Egg to Auto-Place", BFE.EggPlaceList, ConfigState.BFE_PlaceEggSelection or "Best", function(opt)
-            ConfigState.BFE_PlaceEggSelection = opt
+        BFE.uiDropdownHandles.PlaceEgg = createMultiDropdown(PlotTab, "Eggs to Auto-Place", BFE.EggPlaceList, ConfigState.BFE_PlaceEggSelection, nil, function(sel)
+            ConfigState.BFE_PlaceEggSelection = sel
         end)
 
-        createSlider(PlotTab, "Max Plot Egg Stands", 1, 25, ConfigState.BFE_MaxPlotEggs or 25, 1, "stands", function(val)
+        BFE.uiDropdownHandles.HatchEgg = createMultiDropdown(PlotTab, "Eggs to Auto-Hatch", BFE.EggHatchList, ConfigState.BFE_HatchEggSelection, nil, function(sel)
+            ConfigState.BFE_HatchEggSelection = sel
+        end)
+
+        createSlider(PlotTab, "Max Plot Egg Stands", 1, 25, ConfigState.BFE_MaxPlotEggs or 10, 1, "stands", function(val)
             ConfigState.BFE_MaxPlotEggs = val
         end)
 
         createToggle(PlotTab, "Auto Place Eggs on Plot", ConfigState.BFE_AutoPlaceEggs == true, function(val)
             ConfigState.BFE_AutoPlaceEggs = val
             if val then
-                task.spawn(stepAutoPlaceEggs)
+                notify("Plot & Hatch", "Auto Place Eggs enabled!", 2.5)
+            end
+        end)
+
+        createButton(PlotTab, "Place Matching Eggs on Plot Now", function()
+            local placedCount = 0
+            local lastReason = "Plot full or no eggs"
+            for _ = 1, 10 do
+                local ok, didPlace, msg = pcall(Plot_RunPlaceOnce)
+                if ok and didPlace then
+                    placedCount = placedCount + 1
+                    task.wait(1.0)
+                else
+                    lastReason = ok and tostring(msg) or tostring(didPlace)
+                    break
+                end
+            end
+            if placedCount > 0 then
+                notify("Plot & Hatch", string.format("Placed %d egg(s) on your Plot!", placedCount), 3)
+            else
+                notify("Plot & Hatch", "Place skipped: " .. tostring(lastReason), 3)
             end
         end)
 
         createToggle(PlotTab, "Auto Hatch Ready Eggs", ConfigState.BFE_AutoHatchEggs == true, function(val)
             ConfigState.BFE_AutoHatchEggs = val
             if val then
-                task.spawn(function() stepAutoHatchEggs(false) end)
+                notify("Plot & Hatch", "Auto Hatch Ready Eggs enabled!", 2.5)
             end
         end)
 
-        createButton(PlotTab, "Instant Hatch All Ready Eggs Now", function()
-            local count = stepAutoHatchEggs(true)
-            notify("Plot & Hatch", string.format("Triggered hatch sequence on %d plot egg(s)!", count), 2.5)
+        createButton(PlotTab, "Hatch Ready Eggs Now", function()
+            local count = Plot_RunHatchOnce(false)
+            if count > 0 then
+                notify("Plot & Hatch", string.format("Hatched %d ready egg(s)!", count), 2.5)
+            else
+                notify("Plot & Hatch", "No placed eggs are ready to hatch yet.", 2.5)
+            end
         end)
 
         createLabel(PlotTab, "Pets, Plot Cash & Offline Earnings")
 
-        createToggle(PlotTab, "Auto Equip Best Pets", ConfigState.BFE_AutoEquipBestPets == true, function(val)
+        createToggle(PlotTab, "Auto Place / Equip Best Pets", ConfigState.BFE_AutoEquipBestPets == true, function(val)
             ConfigState.BFE_AutoEquipBestPets = val
             if val then
-                safeInvokeNetwork("Backpack: EquipBest")
+                Plot_EquipBestPets()
+                notify("Plot & Hatch", "Auto Place Best Pets enabled!", 2.5)
             end
         end)
 
         createButton(PlotTab, "Equip Best Pets Now", function()
-            safeInvokeNetwork("Backpack: EquipBest")
-            notify("Plot & Hatch", "Equipped your highest-multiplier pets!", 2.5)
+            if Plot_EquipBestPets() then
+                notify("Plot & Hatch", "Equipped your highest-multiplier pets!", 2.5)
+            else
+                notify("Plot & Hatch", "Requested EquipBest pets.", 2.5)
+            end
         end)
 
         createToggle(PlotTab, "Auto Collect Plot Cash & Money Piles", ConfigState.BFE_AutoCollectCash == true, function(val)
@@ -11209,13 +12143,17 @@ do
 
         createLabel(PlotTab, "Auto Treadmill & Fuse Machine")
 
-        createToggle(PlotTab, "Auto Treadmill Training (Speed Gain)", ConfigState.BFE_AutoTreadmill == true, function(val)
+        createToggle(PlotTab, "Auto Treadmill Training (Teleport + Equip)", ConfigState.BFE_AutoTreadmill == true, function(val)
             ConfigState.BFE_AutoTreadmill = val
             if val then
-                safeInvokeNetwork("Treadmills: RequestEquipStatic")
-                safeFireNetwork("Treadmills: SpeedGain")
+                BFE.treadmillWasActive = true
+                Plot_EquipTreadmill()
+                notify("Plot & Hatch", "Auto Treadmill started!", 2.5)
             else
-                safeInvokeNetwork("Treadmills: RequestUnequip")
+                if BFE.treadmillWasActive then
+                    BFE.treadmillWasActive = false
+                    Plot_ExitTreadmill()
+                end
             end
         end)
 
@@ -11268,7 +12206,7 @@ do
             notify("Shop & Sell", string.format("Sold %d matching egg(s)!", n), 2.5)
         end)
 
-        createButton(ShopTab, "Sell Held Egg / Item", function()
+        createButton(ShopTab, "Sell Held Egg / Pet Tool", function()
             sellHeldItem()
         end)
 
@@ -11394,25 +12332,23 @@ do
         end)
 
         createButton(MiscTab, "Check Server Luck & Active Admin Events", function()
-            task.spawn(function()
-                local luckStr = "1x"
-                local eventsCount = 0
-                pcall(function()
-                    local luckRes = safeInvokeNetwork("ServerLuck:GetState")
-                    if type(luckRes) == "table" then
-                        luckStr = tostring(luckRes.Multiplier or luckRes.Luck or luckRes.Value or "1x")
-                    elseif luckRes ~= nil then
-                        luckStr = tostring(luckRes)
+            local luckStr = "1x"
+            local eventsCount = 0
+            pcall(function()
+                local luckRes = safeInvokeNetwork("ServerLuck:GetState")
+                if type(luckRes) == "table" then
+                    luckStr = tostring(luckRes.Multiplier or luckRes.Luck or luckRes.Value or "1x")
+                elseif luckRes ~= nil then
+                    luckStr = tostring(luckRes)
+                end
+                local evRes = safeInvokeNetwork("AdminAbuse_GetActiveEvents")
+                if type(evRes) == "table" then
+                    for _ in pairs(evRes) do
+                        eventsCount = eventsCount + 1
                     end
-                    local evRes = safeInvokeNetwork("AdminAbuse_GetActiveEvents")
-                    if type(evRes) == "table" then
-                        for _ in pairs(evRes) do
-                            eventsCount = eventsCount + 1
-                        end
-                    end
-                end)
-                notify("Server Telemetry", string.format("Server Luck: %s · Active Admin Events: %d", luckStr, eventsCount), 4)
+                end
             end)
+            notify("Server Telemetry", string.format("Server Luck: %s · Active Admin Events: %d", luckStr, eventsCount), 4)
         end)
 
         createToggle(MiscTab, "Hide Other Players", ConfigState.BFE_HideOtherPlayers == true, function(val)
@@ -11452,19 +12388,14 @@ do
     -- ========================================================================
     task.spawn(function()
         local slowTick = 0
-        while task.wait(0.25) do
+        while task.wait(0.20) do
             if State.isAuthorized then
                 slowTick = slowTick + 1
 
                 pcall(enforceAntiGuardAndCarryMobility)
 
-                if ConfigState.BFE_AutoFarmEggs then
+                if ConfigState.BFE_AutoFarmEggs and not BFE.isFarmingStepBusy then
                     task.spawn(stepAutoFarmAreaEggs)
-                end
-
-                if ConfigState.BFE_AutoTreadmill then
-                    safeInvokeNetwork("Treadmills: RequestEquipStatic")
-                    safeFireNetwork("Treadmills: SpeedGain")
                 end
 
                 if ConfigState.BFE_AutoCollectCash then
@@ -11483,11 +12414,12 @@ do
                 end
 
                 if slowTick % 3 == 0 then
-                    if ConfigState.BFE_AutoPlaceEggs then
-                        task.spawn(stepAutoPlaceEggs)
-                    end
-                    if ConfigState.BFE_AutoHatchEggs then
-                        task.spawn(function() stepAutoHatchEggs(false) end)
+                    if ConfigState.BFE_AutoHatchEggs and not BFE.isHatchingEggsBusy then
+                        BFE.isHatchingEggsBusy = true
+                        task.spawn(function()
+                            pcall(Plot_RunHatchOnce, false)
+                            BFE.isHatchingEggsBusy = false
+                        end)
                     end
                     if ConfigState.BFE_EggESP or ConfigState.BFE_GuardESP then
                         pcall(stepBFEWorldESP)
@@ -11495,14 +12427,28 @@ do
                 end
 
                 if slowTick % 6 == 0 then
-                    if ConfigState.BFE_AutoEquipBestPets then
-                        safeInvokeNetwork("Backpack: EquipBest")
+                    if ConfigState.BFE_AutoPlaceEggs and not BFE.isPlacingEggsBusy then
+                        BFE.isPlacingEggsBusy = true
+                        task.spawn(function()
+                            pcall(Plot_RunPlaceOnce)
+                            BFE.isPlacingEggsBusy = false
+                        end)
                     end
                     if ConfigState.BFE_AutoSellEggs then
                         pcall(executeSmartSell, true, false)
                     end
                     if ConfigState.BFE_AutoSellPets then
                         pcall(executeSmartSell, false, false)
+                    end
+                end
+
+                if slowTick % 10 == 0 then
+                    if ConfigState.BFE_AutoTreadmill and not BFE.isTreadmillBusy then
+                        BFE.isTreadmillBusy = true
+                        task.spawn(function()
+                            pcall(Plot_EquipTreadmill)
+                            BFE.isTreadmillBusy = false
+                        end)
                     end
                     if ConfigState.BFE_AutoBuyBestBike or ConfigState.BFE_AutoBuyBestTrail or ConfigState.BFE_AutoUpgradeTreadmill or ConfigState.BFE_AutoUpgradeBase or ConfigState.BFE_AutoRebirth then
                         task.spawn(stepShopAndUpgrades)
@@ -11511,6 +12457,9 @@ do
 
                 if slowTick % 20 == 0 then
                     discoverBFEModules(false)
+                    if ConfigState.BFE_AutoEquipBestPets then
+                        pcall(Plot_EquipBestPets)
+                    end
                     if ConfigState.BFE_AutoClaimOffline then
                         safeInvokeNetwork("OfflineAssets: GetSummary")
                         safeInvokeNetwork("OfflineAssets: Redeem")
