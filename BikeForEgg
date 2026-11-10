@@ -3805,7 +3805,11 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
 
     local function setValue(rawVal, fireCallback)
         local stepped = math.floor((rawVal / step) + 0.5) * step
-        stepped = tonumber(string.format("%.2f", math.clamp(stepped, minVal, maxVal))) or defaultVal
+        if step >= 1 and math.floor(step) == step then
+            stepped = math.floor(math.clamp(stepped, minVal, maxVal) + 0.5)
+        else
+            stepped = tonumber(string.format("%.2f", math.clamp(stepped, minVal, maxVal))) or defaultVal
+        end
         currentVal = stepped
         local pct = math.clamp((stepped - minVal) / math.max(maxVal - minVal, 0.0001), 0, 1)
         tween(fill, TweenInfo.new(0.08), { Size = UDim2.fromScale(pct, 1) })
@@ -3813,6 +3817,32 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
         valBadge.Text = tostring(stepped) .. suffix
         if fireCallback ~= false then
             callback(stepped)
+        end
+    end
+
+    local function setMax(newMax, autoExpandIfAtMax)
+        local nMax = tonumber(newMax)
+        if not nMax or nMax < minVal then
+            return
+        end
+        if step >= 1 and math.floor(step) == step then
+            nMax = math.floor(nMax + 0.5)
+        else
+            nMax = math.floor((nMax / step) + 0.5) * step
+        end
+        if nMax == maxVal then
+            return
+        end
+        local wasAtMax = (currentVal >= maxVal)
+        maxVal = nMax
+        if autoExpandIfAtMax and wasAtMax then
+            setValue(maxVal, true)
+        elseif currentVal > maxVal then
+            setValue(maxVal, true)
+        else
+            local pct = math.clamp((currentVal - minVal) / math.max(maxVal - minVal, 0.0001), 0, 1)
+            tween(fill, TweenInfo.new(0.08), { Size = UDim2.fromScale(pct, 1) })
+            tween(knob, TweenInfo.new(0.08), { Position = UDim2.fromScale(pct, 0.5) })
         end
     end
 
@@ -3856,7 +3886,15 @@ local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix
         end
     end)
 
-    return { Set = setValue, Get = function() return currentVal end, Card = card, MinusBtn = minusBtn, PlusBtn = plusBtn }
+    return {
+        Set = setValue,
+        Get = function() return currentVal end,
+        SetMax = setMax,
+        GetMax = function() return maxVal end,
+        Card = card,
+        MinusBtn = minusBtn,
+        PlusBtn = plusBtn,
+    }
 end
 
 local function createTextInputRow(page, labelText, placeholder, defaultText, onCommit)
@@ -9709,6 +9747,9 @@ do
         -- Shop & Sell Tab
         BFE_ProtectMutatedAndFavorited = true,
         BFE_MaxAutoSellPrice = 0,
+        BFE_FavoriteRarities = { "Mythical", "Divine", "Secret", "Exclusive" },
+        BFE_FavoriteMutated = true,
+        BFE_AutoFavorite = false,
         BFE_SellEggSelection = { "All" },
         BFE_AutoSellEggs = false,
         BFE_SellPetSelection = { "All" },
@@ -9870,8 +9911,16 @@ do
         reducedCpuInstances = setmetatable({}, { __mode = "k" }),
         promptOrigHold = setmetatable({}, { __mode = "k" }),
         promptConn = nil,
+        farmPromptConn = nil,
+        farmPromptShownConn = nil,
+        isFarmFastInteractRunning = false,
+        plotUpgradeConn = nil,
+        petAreaSizeConn = nil,
+        boundPetArea = nil,
+        favoritedSessionCache = {},
         afkConn = nil,
         uiDropdownHandles = {},
+        uiSliderHandles = {},
     }
 
     for idx, rName in ipairs(FALLBACK_RARITIES) do
@@ -10375,6 +10424,9 @@ do
         if BFE.uiDropdownHandles.SellPets and BFE.uiDropdownHandles.SellPets.Refresh then
             pcall(function() BFE.uiDropdownHandles.SellPets.Refresh(BFE.PetDisplayList) end)
         end
+        if BFE.uiDropdownHandles.FavoriteRarities and BFE.uiDropdownHandles.FavoriteRarities.Refresh then
+            pcall(function() BFE.uiDropdownHandles.FavoriteRarities.Refresh(BFE.RarityDisplayList) end)
+        end
 
         BFE.modulesLoaded = (BFE.SaveMod ~= nil or BFE.EggCmds ~= nil or BFE.NetworkFolder ~= nil)
         return BFE.modulesLoaded
@@ -10649,6 +10701,110 @@ do
         return best
     end
 
+    -- Internal dedicated fast instant-interact & auto-fire prompts for Auto Farm Area Eggs
+    local function fireFastEggPrompt(prompt)
+        if not prompt or not prompt.Parent then
+            return
+        end
+        pcall(function()
+            if BFE.promptOrigHold[prompt] == nil then
+                BFE.promptOrigHold[prompt] = prompt.HoldDuration
+            end
+            prompt.HoldDuration = 0
+            prompt.RequiresLineOfSight = false
+            if (tonumber(prompt.MaxActivationDistance) or 0) < 32 then
+                prompt.MaxActivationDistance = 32
+            end
+        end)
+        if Env.fireproximityprompt and not Farm_IsCarrying() then
+            pcall(Env.fireproximityprompt, prompt)
+        end
+    end
+
+    local function stepInternalFarmFastPrompts(specificModel)
+        pcall(function()
+            if specificModel and specificModel.Parent then
+                local directP = specificModel:FindFirstChild("CarryAreaEgg", true) or specificModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if directP and directP:IsA("ProximityPrompt") then
+                    fireFastEggPrompt(directP)
+                end
+            end
+            local char = LocalPlayer and LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local myPos = hrp and hrp.Position
+            local containers = {
+                workspace and workspace:FindFirstChild("AreaEggSlotsClient"),
+                workspace and workspace:FindFirstChild("GuardCarriedEggsClient"),
+                (BFE.LastTargetUid and Farm_FindEggModel(BFE.LastTargetUid)) or nil,
+            }
+            for _, container in ipairs(containers) do
+                if container then
+                    for _, desc in ipairs(container:GetDescendants()) do
+                        if desc:IsA("ProximityPrompt") and desc.Enabled then
+                            if BFE.promptOrigHold[desc] == nil then
+                                BFE.promptOrigHold[desc] = desc.HoldDuration
+                            end
+                            desc.HoldDuration = 0
+                            desc.RequiresLineOfSight = false
+                            if (tonumber(desc.MaxActivationDistance) or 0) < 32 then
+                                desc.MaxActivationDistance = 32
+                            end
+                            if myPos and Env.fireproximityprompt and not Farm_IsCarrying() then
+                                local pPart = desc.Parent
+                                local pPos = nil
+                                if pPart then
+                                    pcall(function()
+                                        pPos = pPart:IsA("BasePart") and pPart.Position or pPart:GetPivot().Position
+                                    end)
+                                end
+                                if not pPos or (pPos - myPos).Magnitude <= 32 then
+                                    pcall(Env.fireproximityprompt, desc)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    local function ensureInternalFarmPromptHooks()
+        if ProximityPromptService then
+            if not BFE.farmPromptConn and ProximityPromptService.PromptButtonHoldBegan then
+                pcall(function()
+                    BFE.farmPromptConn = ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt)
+                        if ConfigState.BFE_AutoFarmEggs then
+                            fireFastEggPrompt(prompt)
+                        end
+                    end)
+                end)
+            end
+            if not BFE.farmPromptShownConn and ProximityPromptService.PromptShown then
+                pcall(function()
+                    BFE.farmPromptShownConn = ProximityPromptService.PromptShown:Connect(function(prompt)
+                        if ConfigState.BFE_AutoFarmEggs then
+                            fireFastEggPrompt(prompt)
+                        end
+                    end)
+                end)
+            end
+        end
+        if not BFE.isFarmFastInteractRunning then
+            BFE.isFarmFastInteractRunning = true
+            task.spawn(function()
+                while ConfigState.BFE_AutoFarmEggs do
+                    if State.isAuthorized and not Farm_IsCarrying() then
+                        stepInternalFarmFastPrompts(nil)
+                    end
+                    if not task.wait(0.06) then
+                        break
+                    end
+                end
+                BFE.isFarmFastInteractRunning = false
+            end)
+        end
+    end
+
     local function Farm_StealEgg(rec)
         if type(rec) ~= "table" then
             return false
@@ -10695,13 +10851,11 @@ do
             return false
         end
 
-        if not targetPos then
-            local mdl = Farm_FindEggModel(uid)
-            if mdl then
-                pcall(function()
-                    targetPos = mdl:IsA("BasePart") and mdl.Position or mdl:GetPivot().Position
-                end)
-            end
+        local mdl = Farm_FindEggModel(uid)
+        if not targetPos and mdl then
+            pcall(function()
+                targetPos = mdl:IsA("BasePart") and mdl.Position or mdl:GetPivot().Position
+            end)
         end
         if not targetPos then
             return false
@@ -10709,17 +10863,11 @@ do
 
         BFE.LastTargetUid = uid
         Farm_Teleport(targetPos + Vector3.new(0, 2, 0))
+        stepInternalFarmFastPrompts(mdl)
         pcall(function()
             BFE.EggCmds.RequestCarryAreaEgg(uid)
         end)
-
-        local mdl = Farm_FindEggModel(uid)
-        if mdl and Env.fireproximityprompt then
-            local prompt = mdl:FindFirstChild("CarryAreaEgg", true)
-            if prompt and prompt:IsA("ProximityPrompt") then
-                pcall(Env.fireproximityprompt, prompt)
-            end
-        end
+        stepInternalFarmFastPrompts(mdl)
 
         local wait1 = os.clock() + 1.0
         while os.clock() < wait1 do
@@ -10727,7 +10875,10 @@ do
                 BFE.FailCounts[uid] = nil
                 return true
             end
-            task.wait(0.03)
+            stepInternalFarmFastPrompts(mdl)
+            if not task.wait(0.03) then
+                break
+            end
         end
 
         -- Second attempt retry (just like Mystic's Farm_StealEgg)
@@ -10735,12 +10886,7 @@ do
         pcall(function()
             BFE.EggCmds.RequestCarryAreaEgg(uid)
         end)
-        if mdl and Env.fireproximityprompt then
-            local prompt2 = mdl:FindFirstChild("CarryAreaEgg", true)
-            if prompt2 and prompt2:IsA("ProximityPrompt") then
-                pcall(Env.fireproximityprompt, prompt2)
-            end
-        end
+        stepInternalFarmFastPrompts(mdl)
 
         local wait2 = os.clock() + 0.5
         while os.clock() < wait2 do
@@ -10748,7 +10894,10 @@ do
                 BFE.FailCounts[uid] = nil
                 return true
             end
-            task.wait(0.03)
+            stepInternalFarmFastPrompts(mdl)
+            if not task.wait(0.03) then
+                break
+            end
         end
 
         if not Farm_IsCarrying() then
@@ -10917,7 +11066,7 @@ do
         end
 
         if ConfigState.BFE_CarrySpeedBoost and hum and hrp then
-            local targetSpd = math.clamp(tonumber(ConfigState.BFE_CarrySpeed) or 65, 16, 200)
+            local targetSpd = math.clamp(tonumber(ConfigState.BFE_CarrySpeed) or 65, 16, 1000)
             if hum.WalkSpeed < targetSpd then
                 hum.WalkSpeed = targetSpd
             end
@@ -11012,16 +11161,84 @@ do
         return nil
     end
 
+    -- Calculate exact maximum eggs that can fit on the player's current Plot right now
+    local function Plot_GetMaxEggCapacity(plotData)
+        plotData = plotData or getMyPlotData()
+        if type(plotData) == "table" then
+            local explicitMax = tonumber(safeRawGet(plotData, "MaximumEggs") or safeRawGet(plotData, "MaxEggs"))
+            if explicitMax and explicitMax >= 1 then
+                return math.floor(explicitMax)
+            end
+            local petArea = safeRawGet(plotData, "PetArea")
+            if petArea then
+                local okBase, isBase = pcall(function() return petArea:IsA("BasePart") end)
+                if not okBase or isBase then
+                    local okSz, size = pcall(function() return petArea.Size end)
+                    if okSz and size and size.X and size.Z then
+                        local cols = math.max(math.floor((size.X - 4) / 4), 1)
+                        local rows = math.max(math.floor((size.Z - 4) / 4), 1)
+                        return math.max(cols * rows, 1)
+                    end
+                end
+            end
+        end
+        return math.max(tonumber(ConfigState.BFE_MaxPlotEggs) or 10, 1)
+    end
+
+    local function syncPlotMaxEggsSlider(autoExpandIfAtMax)
+        local plotData = getMyPlotData()
+        if type(plotData) ~= "table" then
+            return
+        end
+        local liveCap = Plot_GetMaxEggCapacity(plotData)
+        if liveCap and liveCap >= 1 and BFE.uiSliderHandles.MaxPlotEggs and BFE.uiSliderHandles.MaxPlotEggs.SetMax then
+            BFE.uiSliderHandles.MaxPlotEggs.SetMax(liveCap, autoExpandIfAtMax ~= false)
+        end
+        local petArea = safeRawGet(plotData, "PetArea")
+        if petArea and BFE.boundPetArea ~= petArea then
+            BFE.boundPetArea = petArea
+            if BFE.petAreaSizeConn and BFE.petAreaSizeConn.Disconnect then
+                pcall(function() BFE.petAreaSizeConn:Disconnect() end)
+            end
+            pcall(function()
+                if petArea.GetPropertyChangedSignal then
+                    BFE.petAreaSizeConn = petArea:GetPropertyChangedSignal("Size"):Connect(function()
+                        local newCap = Plot_GetMaxEggCapacity()
+                        if BFE.uiSliderHandles.MaxPlotEggs and BFE.uiSliderHandles.MaxPlotEggs.SetMax then
+                            BFE.uiSliderHandles.MaxPlotEggs.SetMax(newCap, true)
+                        end
+                    end)
+                end
+            end)
+        end
+        if not BFE.plotUpgradeConn then
+            local upgRem = getNetworkRemote("Plots: OnBaseUpgraded")
+            if upgRem and upgRem.OnClientEvent and upgRem.OnClientEvent.Connect then
+                pcall(function()
+                    BFE.plotUpgradeConn = upgRem.OnClientEvent:Connect(function()
+                        task.wait(0.15)
+                        local newCap = Plot_GetMaxEggCapacity()
+                        if BFE.uiSliderHandles.MaxPlotEggs and BFE.uiSliderHandles.MaxPlotEggs.SetMax then
+                            BFE.uiSliderHandles.MaxPlotEggs.SetMax(newCap, true)
+                        end
+                    end)
+                end)
+            end
+        end
+    end
+
     local function Plot_RunPlaceOnce()
         discoverBFEModules(false)
         local plotData = getMyPlotData()
         if type(plotData) ~= "table" then
             return false, "Plot data not loaded"
         end
-        local maxStands = math.clamp(tonumber(ConfigState.BFE_MaxPlotEggs) or 10, 1, 25)
+        pcall(syncPlotMaxEggsSlider, true)
+        local livePlotCap = Plot_GetMaxEggCapacity(plotData)
+        local maxStands = math.clamp(tonumber(ConfigState.BFE_MaxPlotEggs) or livePlotCap, 1, math.max(livePlotCap, 1))
         local placedCount = Plot_CountPlacedEggs()
         if placedCount >= maxStands then
-            return false, "Plot full (" .. tostring(placedCount) .. ")"
+            return false, "Plot full (" .. tostring(placedCount) .. "/" .. tostring(maxStands) .. ")"
         end
 
         local saveData = getLocalSaveData()
@@ -11571,6 +11788,63 @@ do
         return false
     end
 
+    local function Favorite_SetItem(uid, isEgg)
+        if type(uid) ~= "string" or uid == "" then
+            return false
+        end
+        discoverBFEModules(false)
+        local netMap = BFE.NetworkMod and safeRawGet(BFE.NetworkMod, "NET_MAP")
+        local assetInvMap = netMap and safeRawGet(netMap, "AssetInventory")
+        local favKey = (assetInvMap and (safeRawGet(assetInvMap, "SET_FAVORITE") or safeRawGet(assetInvMap, "TOGGLE_FAVORITE"))) or "AssetInventory: SetFavorite"
+        safeFireNetwork(favKey, uid, true)
+        if isEgg then
+            safeInvokeNetwork("Eggs: RequestToggleFavorite", uid, true)
+        end
+        BFE.favoritedSessionCache[uid] = true
+        return true
+    end
+
+    local function stepAutoFavoriteItems(showToast)
+        local favCount = 0
+        pcall(function()
+            local matchAllRar, wantRarMap, rarSelectionCount = parseCategorySelection(ConfigState.BFE_FavoriteRarities)
+            local checkRarities = (rarSelectionCount > 0 or (type(ConfigState.BFE_FavoriteRarities) == "table" and table.find(ConfigState.BFE_FavoriteRarities, "All") ~= nil))
+            local favMutated = (ConfigState.BFE_FavoriteMutated ~= false)
+
+            local eggs = Sell_GetSellableEggs()
+            for _, egg in ipairs(eggs) do
+                if not egg.isFavorite and not BFE.favoritedSessionCache[egg.uid] then
+                    local shouldFav = (favMutated and egg.isMutated) or (checkRarities and (matchAllRar or wantRarMap[egg.rarity]))
+                    if shouldFav then
+                        if Favorite_SetItem(egg.uid, true) then
+                            favCount = favCount + 1
+                        end
+                    end
+                end
+            end
+
+            local pets = Sell_GetSellablePets()
+            for _, pet in ipairs(pets) do
+                if not pet.isFavorite and not BFE.favoritedSessionCache[pet.uid] then
+                    local shouldFav = (favMutated and pet.isMutated) or (checkRarities and (matchAllRar or wantRarMap[pet.rarity]))
+                    if shouldFav then
+                        if Favorite_SetItem(pet.uid, false) then
+                            favCount = favCount + 1
+                        end
+                    end
+                end
+            end
+        end)
+        if showToast then
+            if favCount > 0 then
+                notify("Sell Automation", string.format("Favorited %d matching Egg(s) & Pet(s)!", favCount), 2.5)
+            else
+                notify("Sell Automation", "All matching Eggs & Pets are already favorited.", 2.5)
+            end
+        end
+        return favCount
+    end
+
     local function Shop_UpgradePlot()
         discoverBFEModules(false)
         local saveData = getLocalSaveData()
@@ -11583,7 +11857,13 @@ do
             local okC, canAff = pcall(canFn, saveData)
             if okC and canAff then
                 local okU, resU = pcall(reqFn)
-                return okU and (resU ~= false)
+                if okU and (resU ~= false) then
+                    task.defer(function()
+                        task.wait(0.2)
+                        pcall(syncPlotMaxEggsSlider, true)
+                    end)
+                    return true
+                end
             end
         end
         return false
@@ -11931,16 +12211,20 @@ do
             notify("Bike for Egg", string.format("Synced %d Eggs, %d Pets & %d Zones!", math.max(0, #BFE.EggDisplayList - 1), math.max(0, #BFE.PetDisplayList - 1), math.max(0, #BFE.AreaDisplayList - 1)), 3)
         end)
 
-        createLabel(FarmTab, "Auto Farm Area Eggs Engine")
+        createLabel(FarmTab, "Farm")
 
         createToggle(FarmTab, "Auto Farm Area Eggs", ConfigState.BFE_AutoFarmEggs == true, function(val)
             ConfigState.BFE_AutoFarmEggs = val
             BFE.FailCounts = {}
             if val then
+                pcall(ensureInternalFarmPromptHooks)
                 notify("Auto Farm", "Auto Farm Area Eggs started!", 2.5)
                 task.spawn(stepAutoFarmAreaEggs)
             end
         end)
+        if ConfigState.BFE_AutoFarmEggs then
+            pcall(ensureInternalFarmPromptHooks)
+        end
 
         createToggle(FarmTab, "Prioritize Highest Rarity & Mutation", ConfigState.BFE_PrioritizeHighestRarity ~= false, function(val)
             ConfigState.BFE_PrioritizeHighestRarity = val
@@ -11987,7 +12271,7 @@ do
             notify("Auto Farm", "Requested to drop currently carried Area Egg.", 2.5)
         end)
 
-        createLabel(FarmTab, "Guard Bypass & Carry Mobility")
+        createLabel(FarmTab, "Guard & Carry Bypass")
 
         createToggle(FarmTab, "Anti-Guard Knockback & Anti-Ragdoll", ConfigState.BFE_AntiGuardKnockback ~= false, function(val)
             ConfigState.BFE_AntiGuardKnockback = val
@@ -12002,7 +12286,7 @@ do
             end
         end)
 
-        createSlider(FarmTab, "Carry Speed", 16, 180, ConfigState.BFE_CarrySpeed or 65, 1, "st/s", function(val)
+        createSlider(FarmTab, "Carry Speed", 16, 1000, ConfigState.BFE_CarrySpeed or 65, 1, "st/s", function(val)
             ConfigState.BFE_CarrySpeed = val
         end)
 
@@ -12013,7 +12297,7 @@ do
             end
         end)
 
-        createLabel(FarmTab, "1-Click Zone & Plot Teleporter")
+        createLabel(FarmTab, "Zone & Plot Teleporter")
 
         BFE.uiDropdownHandles.TeleportZone = createDropdown(FarmTab, "Select Destination Zone", BFE.ZoneTeleportList, ConfigState.BFE_SelectedTeleportZone or "My Plot", function(opt)
             ConfigState.BFE_SelectedTeleportZone = opt
@@ -12031,7 +12315,7 @@ do
             teleportToZoneByName("Lobby / Spawn")
         end)
 
-        createLabel(FarmTab, "World ESP (Rare Eggs & Guards)")
+        createLabel(FarmTab, "World Esp")
 
         createToggle(FarmTab, "Rare & Mutated Egg ESP", ConfigState.BFE_EggESP == true, function(val)
             ConfigState.BFE_EggESP = val
@@ -12058,13 +12342,19 @@ do
             ConfigState.BFE_HatchEggSelection = sel
         end)
 
-        createSlider(PlotTab, "Max Plot Egg Stands", 1, 25, ConfigState.BFE_MaxPlotEggs or 10, 1, "stands", function(val)
+        local initPlotCap = Plot_GetMaxEggCapacity()
+        if ConfigState.BFE_MaxPlotEggs == nil or ConfigState.BFE_MaxPlotEggs == 10 or ConfigState.BFE_MaxPlotEggs > initPlotCap then
+            ConfigState.BFE_MaxPlotEggs = initPlotCap
+        end
+        BFE.uiSliderHandles.MaxPlotEggs = createSlider(PlotTab, "Max Plot Egg Stands", 1, math.max(initPlotCap, 1), ConfigState.BFE_MaxPlotEggs, 1, "stands", function(val)
             ConfigState.BFE_MaxPlotEggs = val
         end)
+        pcall(syncPlotMaxEggsSlider, true)
 
         createToggle(PlotTab, "Auto Place Eggs on Plot", ConfigState.BFE_AutoPlaceEggs == true, function(val)
             ConfigState.BFE_AutoPlaceEggs = val
             if val then
+                pcall(syncPlotMaxEggsSlider, true)
                 notify("Plot & Hatch", "Auto Place Eggs enabled!", 2.5)
             end
         end)
@@ -12181,7 +12471,7 @@ do
     -- TAB 4: SHOP & SELL (SMART SELL PROTECTION, BIKES, TRAILS, UPGRADES)
     -- ========================================================================
     do
-        createLabel(ShopTab, "Smart Sell Safety & Protection")
+        createLabel(ShopTab, "Sell Automation")
 
         createToggle(ShopTab, "Protect Mutated & Favorited Items", ConfigState.BFE_ProtectMutatedAndFavorited ~= false, function(val)
             ConfigState.BFE_ProtectMutatedAndFavorited = val
@@ -12189,6 +12479,25 @@ do
 
         createSlider(ShopTab, "Max Auto-Sell Item Value (0 = No Cap)", 0, 500000, ConfigState.BFE_MaxAutoSellPrice or 0, 5000, "$", function(val)
             ConfigState.BFE_MaxAutoSellPrice = val
+        end)
+
+        BFE.uiDropdownHandles.FavoriteRarities = createMultiDropdown(ShopTab, "Rarities to Auto-Favorite", BFE.RarityDisplayList, ConfigState.BFE_FavoriteRarities, nil, function(sel)
+            ConfigState.BFE_FavoriteRarities = sel
+        end)
+
+        createToggle(ShopTab, "Auto-Favorite Mutated Items", ConfigState.BFE_FavoriteMutated ~= false, function(val)
+            ConfigState.BFE_FavoriteMutated = val
+        end)
+
+        createToggle(ShopTab, "Auto-Favorite Matching Eggs & Pets", ConfigState.BFE_AutoFavorite == true, function(val)
+            ConfigState.BFE_AutoFavorite = val
+            if val then
+                stepAutoFavoriteItems(true)
+            end
+        end)
+
+        createButton(ShopTab, "Favorite Matching Eggs & Pets Now", function()
+            stepAutoFavoriteItems(true)
         end)
 
         createLabel(ShopTab, "Smart Sell Eggs")
@@ -12267,7 +12576,7 @@ do
             if val then claimAllBFERewards(false) end
         end)
 
-        createButton(ShopTab, "Claim All Index, Group, Royal Egg & Event Rewards Now", function()
+        createButton(ShopTab, "Claim All Group, Event Rewards", function()
             claimAllBFERewards(true)
         end)
     end
@@ -12278,7 +12587,7 @@ do
     do
         createLabel(MiscTab, "Interaction & Movement Modifiers")
 
-        createToggle(MiscTab, "Quick Interact (Instant ProximityPrompts)", ConfigState.BFE_QuickInteract == true, function(val)
+        createToggle(MiscTab, "Instant Interact", ConfigState.BFE_QuickInteract == true, function(val)
             applyQuickInteract(val)
         end)
 
@@ -12427,6 +12736,10 @@ do
                 end
 
                 if slowTick % 6 == 0 then
+                    pcall(syncPlotMaxEggsSlider, true)
+                    if ConfigState.BFE_AutoFavorite then
+                        pcall(stepAutoFavoriteItems, false)
+                    end
                     if ConfigState.BFE_AutoPlaceEggs and not BFE.isPlacingEggsBusy then
                         BFE.isPlacingEggsBusy = true
                         task.spawn(function()
