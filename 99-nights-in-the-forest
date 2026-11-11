@@ -3467,6 +3467,7 @@ do
         return { SetColor = setCol, GetColor = getCol, SwatchBtn = swatchBtn, Row = row }
     end
 end
+local createColorPicker = UI.createColorRow
 
 local function isPCDevice()
     local kb = false
@@ -3703,6 +3704,15 @@ local function createToggle(page, text, defaultVal, callback, extraOpts)
 end
 
 local function createSlider(page, text, minVal, maxVal, defaultVal, step, suffix, callback)
+    if type(step) == "function" then
+        callback = step
+        step = 1
+        suffix = ""
+    elseif type(suffix) == "function" then
+        callback = suffix
+        suffix = ""
+    end
+    step = step or 1
     local targetParent = resolveTargetParent(page)
     suffix = suffix or ""
     local currentVal = defaultVal
@@ -14035,7 +14045,7 @@ do
             Circle.Show(v)
         end)
 
-        createColorPicker(CombatTab, "Aura Range Circle Color", N99.RangeCircleColor, function(col)
+        UI.createColorRow(CombatTab, "Aura Range Circle Color", N99.RangeCircleColor, function(col)
             N99.RangeCircleColor = col
         end)
 
@@ -14501,7 +14511,7 @@ do
             Visual.Shader(v)
         end)
 
-        createColorPicker(VisualsTab, "Rich Shader Tint Color", N99.ShaderColor, function(col)
+        UI.createColorRow(VisualsTab, "Rich Shader Tint Color", N99.ShaderColor, function(col)
             N99.ShaderColor = col
             if N99.RichShader then Visual.Shader(true) end
         end)
