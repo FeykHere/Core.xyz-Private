@@ -9477,10 +9477,6 @@ do
 end
 
 
--- ============================================================================
--- ONESHOT CORE ENGINE V5.1 (DUMP-VERIFIED FOR PLACEID 90568084448279)
--- • Separated Sniper / Pistol / Knife Catalogs + Fixed Knife Skin Sync
--- • Workspace.Effects Bullet Tracers & Hit Effects
 
 -- ============================================================================
 -- CORE.XYZ v4.4 — RIVALS EDITION (PLACEID: 17625359962 / GAMEID: 6035872082)
@@ -10589,6 +10585,13 @@ do
     end)
 end
 
+-- TAB 8: SETTINGS (PERFORMANCE + CLIENT + SERVER + BACKGROUND + THEMES + FLOATING PILL + CONFIG MANAGER)
+do
+    createLabel(SettingsTab, "Customizable Floating Pill & Telemetry (Max 3)")
+
+    createTextInputRow(SettingsTab, "Floating Pill Title", "e.g. CORE.XYZ, FEYK.XYZ", "CORE.XYZ", function(txt)
+        local cleaned = (txt or ""):gsub("^%s*(.-)%s*$", "%1")
+        ConfigState.CustomPillTitle = (cleaned ~= "") and cleaned or "CORE.XYZ"
         updateFloatingPillTelemetry()
     end)
 
