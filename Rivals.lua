@@ -4345,7 +4345,14 @@ local function isOneShotBotModel(model)
     if LocalPlayer and model == LocalPlayer.Character then return false end
     if Players:GetPlayerFromCharacter(model) then return false end
     local hum = model:FindFirstChildOfClass("Humanoid")
-    local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("Head")
+    local hrp = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("HitboxBody") or model:FindFirstChild("Torso") or model:FindFirstChild("Head")
+    if hrp then
+        if model:FindFirstChild("HitboxHead")
+            or model:FindFirstChild("HitboxBody")
+            or (model.Parent and model.Parent.Name == "ShootingRangeEntities") then
+            return ConfigState.ShootingRangeDummyESP ~= false
+        end
+    end
     if hum and hrp then
         if model:FindFirstChild("Hitbox_Bots")
             or model:FindFirstChild("Hitbox")
@@ -4372,6 +4379,25 @@ local function cleanupBotProxyESP(proxy)
     end
 end
 
+local function registerBotModelProxy(child)
+    local existingProxy = State.botProxies[child]
+    if not existingProxy then
+        State.botProxies[child] = {
+            Name = child.Name,
+            DisplayName = child.Name .. " [BOT]",
+            Character = child,
+            Team = nil,
+            UserId = -1,
+            IsOneShotBot = true,
+            GetAttribute = function(_, attr)
+                return child:GetAttribute(attr)
+            end,
+        }
+    else
+        existingProxy.Character = child
+    end
+end
+
 local function refreshOneShotBotProxies(forceScan)
     local now = os.clock()
     if not forceScan and (now - (State.lastBotScanClock or 0)) < 0.20 then
@@ -4380,26 +4406,27 @@ local function refreshOneShotBotProxies(forceScan)
     State.lastBotScanClock = now
 
     for model, proxy in pairs(State.botProxies) do
-        if not model or not model.Parent or not model:FindFirstChildOfClass("Humanoid") then
+        local keep = model and model.Parent and (model:FindFirstChildOfClass("Humanoid") or model:FindFirstChild("HitboxHead") or model:FindFirstChild("HitboxBody"))
+        if ConfigState.ShootingRangeDummyESP == false and model and (model:FindFirstChild("HitboxHead") or (model.Parent and model.Parent.Name == "ShootingRangeEntities")) then
+            keep = false
+        end
+        if not keep then
             cleanupBotProxyESP(proxy)
             State.botProxies[model] = nil
         end
     end
     for _, child in ipairs(workspace:GetChildren()) do
         if isOneShotBotModel(child) then
-            local existingProxy = State.botProxies[child]
-            if not existingProxy then
-                -- Check if a previous proxy had the same bot name so ESP pool stays warm
-                State.botProxies[child] = {
-                    Name = child.Name,
-                    DisplayName = child.Name .. " [BOT]",
-                    Character = child,
-                    Team = nil,
-                    UserId = -1,
-                    IsOneShotBot = true,
-                }
-            else
-                existingProxy.Character = child
+            registerBotModelProxy(child)
+        end
+    end
+    if ConfigState.ShootingRangeDummyESP ~= false then
+        local rangeFolder = workspace:FindFirstChild("ShootingRangeEntities")
+        if rangeFolder then
+            for _, dummy in ipairs(rangeFolder:GetChildren()) do
+                if isOneShotBotModel(dummy) then
+                    registerBotModelProxy(dummy)
+                end
             end
         end
     end
@@ -4407,7 +4434,7 @@ end
 
 workspace.ChildAdded:Connect(function(child)
     task.defer(function()
-        if isOneShotBotModel(child) then
+        if isOneShotBotModel(child) or child.Name == "ShootingRangeEntities" then
             refreshOneShotBotProxies(true)
         end
     end)
@@ -4431,10 +4458,6 @@ local function getAllTargetEntities()
 end
 State.getAllTargetEntities = getAllTargetEntities
 
--- Dump-verified spawn protection check:
--- In OneShot, EVERY character and bot permanently has a child [Highlight] DeployHighlight!
--- Checking char:FindFirstChild("DeployHighlight") caused Aimbot, Triggerbot & Hitbox to skip 100% of bots.
--- Real spawn protection is controlled by the @deployed attribute (false when in lobby/spawn protection).
 local function isCharacterSpawnProtected(char)
     if not char then return false end
     if char:GetAttribute("deployed") == false then return true end
@@ -4446,14 +4469,26 @@ local function getTargetPartFromCharacter(char, partName)
     if not char then
         return nil
     end
+    -- RIVALS native hitboxes (HitboxHead / HitboxBody directly on Character)
+    if partName == "HitboxHead" or partName == "Head" then
+        local rHead = char:FindFirstChild("HitboxHead") or char:FindFirstChild("Head")
+        if rHead and rHead:IsA("BasePart") then
+            return rHead
+        end
+    elseif partName == "HitboxBody" or partName == "Torso" or partName == "HumanoidRootPart" or partName == "UpperTorso" or partName == "LowerTorso" then
+        local rBody = char:FindFirstChild("HitboxBody") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+        if rBody and rBody:IsA("BasePart") then
+            return rBody
+        end
+    end
     local hbFolder = char:FindFirstChild("Hitbox") or char:FindFirstChild("Hitbox_Bots")
     if hbFolder then
-        if partName == "Head" then
+        if partName == "Head" or partName == "HitboxHead" then
             local hbHead = hbFolder:FindFirstChild("Hitbox_Head")
             if hbHead and hbHead:IsA("BasePart") then
                 return hbHead
             end
-        elseif partName == "Torso" or partName == "HumanoidRootPart" or partName == "UpperTorso" or partName == "LowerTorso" then
+        elseif partName == "Torso" or partName == "HumanoidRootPart" or partName == "UpperTorso" or partName == "LowerTorso" or partName == "HitboxBody" then
             local hbTorso = hbFolder:FindFirstChild("Hitbox_Torso")
             if hbTorso and hbTorso:IsA("BasePart") then
                 return hbTorso
@@ -4465,7 +4500,7 @@ local function getTargetPartFromCharacter(char, partName)
         return found
     end
     if partName == "Torso" or partName == "UpperTorso" or partName == "LowerTorso" then
-        return char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
+        return char:FindFirstChild("HitboxBody") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
     elseif partName == "RightUpperArm" then
         return char:FindFirstChild("Right Arm") or char:FindFirstChild("HumanoidRootPart")
     elseif partName == "LeftUpperArm" then
@@ -4475,7 +4510,7 @@ local function getTargetPartFromCharacter(char, partName)
     elseif partName == "LeftUpperLeg" or partName == "LeftLowerLeg" then
         return char:FindFirstChild("LeftLowerLeg") or char:FindFirstChild("Left Leg") or char:FindFirstChild("HumanoidRootPart")
     end
-    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+    return char:FindFirstChild("HitboxHead") or char:FindFirstChild("HitboxBody") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
 end
 
 local function isPlayerWhitelisted(player)
@@ -4508,6 +4543,12 @@ end
 
 local function passesTeamCheck(player)
     if isPlayerWhitelisted(player) then
+        return false
+    end
+    -- RIVALS TeammateLabel check (2v2 / 3v3 / 5v5 Duels)
+    local char = player and player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if ConfigState.TeamCheck and hrp and hrp:FindFirstChild("TeammateLabel") then
         return false
     end
     if not ConfigState.TeamCheck then
@@ -5139,19 +5180,35 @@ local function updateESP(camera)
                     local maxHp = math.max(hum.MaxHealth or 100, 1)
                     local hpRatio = math.clamp(hum.Health / maxHp, 0, 1)
 
-                    -- Format string when distance, HP, priority, or NameType changes
-                    if tagData.LastDist ~= dist or tagData.LastHP ~= hpInt or tagData.LastPriority ~= isPriority or tagData.LastNameType ~= nameTypeMode then
+                    -- Format string when distance, HP, priority, or Rivals flags change
+                    local eqWep = (ConfigState.EspWeaponFlag and ((State.getRivalsEquippedWeaponName and State.getRivalsEquippedWeaponName(player, char)) or char:GetAttribute("EquippedWeapon"))) or nil
+                    local winStreak = (ConfigState.EspStreakFlag and player.GetAttribute and player:GetAttribute("StatisticDuelsWinStreak")) or nil
+                    local isDeflecting = (ConfigState.EspDeflectFlag and State.isCharacterDeflecting and State.isCharacterDeflecting(char)) or false
+                    if tagData.LastDist ~= dist or tagData.LastHP ~= hpInt or tagData.LastPriority ~= isPriority or tagData.LastNameType ~= nameTypeMode or tagData.LastWep ~= eqWep or tagData.LastWS ~= winStreak or tagData.LastDefl ~= isDeflecting then
                         tagData.LastDist = dist
                         tagData.LastHP = hpInt
                         tagData.LastPriority = isPriority
                         tagData.LastNameType = nameTypeMode
+                        tagData.LastWep = eqWep
+                        tagData.LastWS = winStreak
+                        tagData.LastDefl = isDeflecting
                         local prefix = isPriority and "[PRIORITY] " or ""
+                        if isDeflecting then
+                            prefix = "[DEFLECTING] " .. prefix
+                        end
                         local nameDisplay = tostring(player.Name)
                         local dName = player.DisplayName
                         if (nameTypeMode == "Display Name" or nameTypeMode == "Both") and dName and dName ~= "" and dName ~= player.Name then
                             nameDisplay = string.format("%s (@%s)", tostring(dName), tostring(player.Name))
                         end
-                        local formattedTag = string.format("%s%s [%dm] | HP: %d", prefix, nameDisplay, dist, hpInt)
+                        local suffix = ""
+                        if eqWep and tostring(eqWep) ~= "" then
+                            suffix = suffix .. " | " .. tostring(eqWep)
+                        end
+                        if winStreak and tonumber(winStreak) and tonumber(winStreak) > 0 then
+                            suffix = suffix .. string.format(" [WS:%d]", tonumber(winStreak))
+                        end
+                        local formattedTag = string.format("%s%s [%dm] | HP: %d%s", prefix, nameDisplay, dist, hpInt, suffix)
                         tagData.Text.Text = formattedTag
                         if tagData.ScreenTag then
                             tagData.ScreenTag.Text = formattedTag
@@ -5735,6 +5792,14 @@ local function updateHitboxExpander()
             end
             if head then
                 expandOrRestorePart(head, shouldExpand, sz, tr)
+            end
+            local hbHeadRivals = char:FindFirstChild("HitboxHead")
+            local hbBodyRivals = char:FindFirstChild("HitboxBody")
+            if hbHeadRivals then
+                expandOrRestorePart(hbHeadRivals, shouldExpand, sz, tr)
+            end
+            if hbBodyRivals then
+                expandOrRestorePart(hbBodyRivals, shouldExpand, sz, tr)
             end
             for _, folderName in ipairs({ "Hitbox", "Hitbox_Bots" }) do
                 local hbFolder = char:FindFirstChild(folderName)
@@ -9476,8 +9541,6 @@ do
     fetchDiscordInviteData(false)
 end
 
-
-
 -- ============================================================================
 -- CORE.XYZ v4.4 — RIVALS EDITION (PLACEID: 17625359962 / GAMEID: 6035872082)
 -- • Fallen AC / ReplicatedFirst.LocalScript3 Property Spoof & Error Connection Guard
@@ -9670,8 +9733,156 @@ do
     }
 
     -- ========================================================================
-    -- 1. FALLEN AC / LOCALSCRIPT3 BYPASS & SCRIPTCONTEXT ERROR SHIELD (KICIA)
+    -- 1. MULTI-LAYER UNDETECTED ANTICHEAT & TELEMETRY SHIELD (RIVALS 17625359962)
     -- ========================================================================
+    State.rivalsModules = {
+        Loaded = false,
+        FighterController = nil,
+        PlayerDataController = nil,
+        WrapController = nil,
+        ItemLibrary = nil,
+        CosmeticLibrary = nil,
+        ClientItem = nil,
+        ClientViewModel = nil,
+        Utility = nil,
+        OutOfBoundsMachine = nil,
+        PagesModule = nil,
+    }
+    State.rivalsOriginalWeaponStats = State.rivalsOriginalWeaponStats or {}
+    State.rivalsCosmeticEquips = State.rivalsCosmeticEquips or {}
+    State.rivalsCosmeticFavorites = State.rivalsCosmeticFavorites or {}
+    State.rivalsEnemyLastHP = State.rivalsEnemyLastHP or {}
+
+    local function loadRivalsCoreModules()
+        local mods = State.rivalsModules
+        if mods.Loaded then return mods end
+        pcall(function()
+            local ps = LocalPlayer and LocalPlayer:FindFirstChild("PlayerScripts")
+            local controllers = ps and ps:FindFirstChild("Controllers")
+            local psModules = ps and ps:FindFirstChild("Modules")
+            local repModules = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Modules")
+
+            if controllers then
+                local fc = controllers:FindFirstChild("FighterController")
+                if fc and fc:IsA("ModuleScript") then
+                    local ok, res = pcall(require, fc)
+                    if ok then mods.FighterController = res end
+                end
+                local pdc = controllers:FindFirstChild("PlayerDataController")
+                if pdc and pdc:IsA("ModuleScript") then
+                    local ok, res = pcall(require, pdc)
+                    if ok then mods.PlayerDataController = res end
+                end
+                local wc = (psModules and psModules:FindFirstChild("WrapController", true))
+                    or (repModules and repModules:FindFirstChild("WrapController", true))
+                    or controllers:FindFirstChild("WrapController", true)
+                if wc and wc:IsA("ModuleScript") then
+                    local ok, res = pcall(require, wc)
+                    if ok then mods.WrapController = res end
+                end
+            end
+
+            if psModules then
+                local uiFolder = psModules:FindFirstChild("UserInterface")
+                local pagesMod = uiFolder and uiFolder:FindFirstChild("Pages")
+                if pagesMod and pagesMod:IsA("ModuleScript") then
+                    local ok, res = pcall(require, pagesMod)
+                    if ok then mods.PagesModule = res end
+                end
+                local clientItemMod = psModules:FindFirstChild("ClientItem", true)
+                if clientItemMod and clientItemMod:IsA("ModuleScript") then
+                    local ok, res = pcall(require, clientItemMod)
+                    if ok then mods.ClientItem = res end
+                end
+                local clientVMMod = psModules:FindFirstChild("ClientViewModel", true)
+                if clientVMMod and clientVMMod:IsA("ModuleScript") then
+                    local ok, res = pcall(require, clientVMMod)
+                    if ok then mods.ClientViewModel = res end
+                end
+            end
+
+            if repModules then
+                local il = repModules:FindFirstChild("ItemLibrary")
+                if il and il:IsA("ModuleScript") then
+                    local ok, res = pcall(require, il)
+                    if ok then mods.ItemLibrary = res end
+                end
+                local cl = repModules:FindFirstChild("CosmeticLibrary")
+                if cl and cl:IsA("ModuleScript") then
+                    local ok, res = pcall(require, cl)
+                    if ok then mods.CosmeticLibrary = res end
+                end
+                local ut = repModules:FindFirstChild("Utility")
+                if ut and ut:IsA("ModuleScript") then
+                    local ok, res = pcall(require, ut)
+                    if ok then mods.Utility = res end
+                end
+                local oob = repModules:FindFirstChild("OutOfBoundsMachine")
+                if oob and oob:IsA("ModuleScript") then
+                    local ok, res = pcall(require, oob)
+                    if ok then mods.OutOfBoundsMachine = res end
+                end
+                if not mods.ClientItem then
+                    local ci = repModules:FindFirstChild("ClientItem", true)
+                    if ci and ci:IsA("ModuleScript") then
+                        local ok, res = pcall(require, ci)
+                        if ok then mods.ClientItem = res end
+                    end
+                end
+                if not mods.ClientViewModel then
+                    local cvm = repModules:FindFirstChild("ClientViewModel", true)
+                    if cvm and cvm:IsA("ModuleScript") then
+                        local ok, res = pcall(require, cvm)
+                        if ok then mods.ClientViewModel = res end
+                    end
+                end
+            end
+
+            if mods.FighterController or mods.ItemLibrary then
+                mods.Loaded = true
+            end
+        end)
+        return mods
+    end
+
+    local function getLocalRivalsFighter()
+        local mods = loadRivalsCoreModules()
+        local fc = mods.FighterController
+        if not fc then return nil end
+        local ok, fighter = pcall(function()
+            if type(fc.GetFighter) == "function" then
+                return fc:GetFighter(LocalPlayer)
+            elseif type(fc.LocalFighter) == "table" then
+                return fc.LocalFighter
+            end
+            return nil
+        end)
+        return ok and fighter or nil
+    end
+    State.getLocalRivalsFighter = getLocalRivalsFighter
+
+    local function getRivalsEquippedWeaponName(player, char)
+        local ok, name = pcall(function()
+            local mods = loadRivalsCoreModules()
+            local fc = mods.FighterController
+            if fc and type(fc.GetFighter) == "function" and player then
+                local f = fc:GetFighter(player)
+                if f and f.EquippedItem and f.EquippedItem.Name then
+                    return tostring(f.EquippedItem.Name)
+                end
+            end
+            if char then
+                local attr = char:GetAttribute("EquippedWeapon") or char:GetAttribute("CurrentWeapon")
+                if attr and tostring(attr) ~= "" then return tostring(attr) end
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then return tool.Name end
+            end
+            return nil
+        end)
+        return ok and name or nil
+    end
+    State.getRivalsEquippedWeaponName = getRivalsEquippedWeaponName
+
     task.spawn(function()
         pcall(function()
             local hookmetamethod = rawget(getfenv and getfenv() or _G, "hookmetamethod") or (getgenv and getgenv().hookmetamethod)
@@ -9680,6 +9891,7 @@ do
             local checkcaller = rawget(getfenv and getfenv() or _G, "checkcaller") or (getgenv and getgenv().checkcaller) or function() return false end
             local getconnections = rawget(getfenv and getfenv() or _G, "getconnections") or (getgenv and getgenv().getconnections)
 
+            -- 1A. Neutralize ScriptContext.Error stack-trace reporting
             if getconnections and ScriptContext and ScriptContext.Error then
                 for _, conn in ipairs(getconnections(ScriptContext.Error)) do
                     if conn.Function and hookfunction then
@@ -9692,6 +9904,7 @@ do
                 end
             end
 
+            -- 1B. Spoof ReplicatedFirst.LocalScript3 state inspection
             local acScript = ReplicatedFirst and ReplicatedFirst:FindFirstChild("LocalScript3")
             if acScript and hookmetamethod then
                 local props = { Enabled = true, Disabled = false }
@@ -9702,6 +9915,52 @@ do
                     end
                     return oldIdx(t, k)
                 end))
+            end
+
+            -- 1C. Direct FireServer hooks on ClientAlert, AnalyticsPipeline & OutOfBounds
+            if hookfunction then
+                local function blockRemoteDirect(rem)
+                    if rem and rem:IsA("RemoteEvent") and rem.FireServer then
+                        pcall(function()
+                            local oldFire
+                            oldFire = hookfunction(rem.FireServer, newcclosure(function(self, ...)
+                                if self == rem and not checkcaller() then
+                                    return nil
+                                end
+                                return oldFire(self, ...)
+                            end))
+                        end)
+                    end
+                end
+                if LocalPlayer then
+                    blockRemoteDirect(LocalPlayer:FindFirstChild("ClientAlert"))
+                end
+                local remotes = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Remotes")
+                if remotes then
+                    local ap = remotes:FindFirstChild("AnalyticsPipeline")
+                    if ap then blockRemoteDirect(ap:FindFirstChild("RemoteEvent")) end
+                    local rep = remotes:FindFirstChild("Replication")
+                    local fighterRem = rep and rep:FindFirstChild("Fighter")
+                    if fighterRem then
+                        blockRemoteDirect(fighterRem:FindFirstChild("OutOfBounds"))
+                    end
+                end
+            end
+
+            -- 1D. Neutralize OutOfBoundsMachine client checks when Fake Position / Underground V2 is active
+            local mods = loadRivalsCoreModules()
+            if mods.OutOfBoundsMachine and type(mods.OutOfBoundsMachine) == "table" then
+                for k, fn in pairs(mods.OutOfBoundsMachine) do
+                    if type(fn) == "function" then
+                        local origFn = fn
+                        mods.OutOfBoundsMachine[k] = function(...)
+                            if State.rivalsFakePos and State.rivalsFakePos.Enabled then
+                                return false
+                            end
+                            return origFn(...)
+                        end
+                    end
+                end
             end
         end)
     end)
@@ -9734,7 +9993,9 @@ do
         if not targetChar or not originPos then return false end
         local root = targetChar:FindFirstChild("HumanoidRootPart")
         if not root then return false end
-        local hasShield = targetChar:FindFirstChild("Riot Shield") or targetChar:FindFirstChild("RiotShield")
+        local hasShield = targetChar:FindFirstChild("Riot Shield")
+            or targetChar:FindFirstChild("RiotShield")
+            or (targetChar:GetAttribute("EquippedWeapon") == "Riot Shield")
         if not hasShield then return false end
         local toOrigin = (originPos - root.Position).Unit
         local lookDot = root.CFrame.LookVector:Dot(toOrigin)
@@ -9784,16 +10045,23 @@ do
 
         local candidates = {}
         for _, pl in ipairs(Players:GetPlayers()) do
-            if pl ~= LocalPlayer and pl.Character then
+            if pl ~= LocalPlayer and pl.Character and passesTeamCheck(pl) then
                 table.insert(candidates, { Player = pl, Character = pl.Character, Name = pl.Name })
             end
         end
-        if ConfigState.ShootingRangeDummyESP then
+        if ConfigState.ShootingRangeDummyESP ~= false then
             local rangeFolder = workspace:FindFirstChild("ShootingRangeEntities")
             if rangeFolder then
                 for _, dummy in ipairs(rangeFolder:GetChildren()) do
                     if dummy:IsA("Model") then
                         table.insert(candidates, { Player = nil, Character = dummy, Name = dummy.Name })
+                    end
+                end
+            end
+            for _, child in ipairs(workspace:GetChildren()) do
+                if child:IsA("Model") and child ~= myChar and not Players:GetPlayerFromCharacter(child) then
+                    if child:FindFirstChild("HitboxHead") or child:FindFirstChild("HitboxBody") then
+                        table.insert(candidates, { Player = nil, Character = child, Name = child.Name })
                     end
                 end
             end
@@ -9828,7 +10096,7 @@ do
                                 elseif method == "FOV - Lowest Health" then
                                     score = (hp * 2) + fovDist
                                 end
-                                if State.priorityPlayers[entry.Name] then
+                                if State.priorityPlayers[entry.Name] or State.prioritizedPlayers[entry.Name] then
                                     score = score - 10000
                                 end
                                 if score < bestScore then
@@ -9855,14 +10123,87 @@ do
     State.getBestRivalsTarget = getBestRivalsTarget
 
     -- ========================================================================
-    -- 3. SILENT AIM RAYCAST HOOK + 2-TICK FAKE POSITION HANDOFF (SLEEPY.GG)
+    -- 3. TRIPLE-HOOK SILENT AIM (NAMECALL + WORKSPACE.RAYCAST + UTILITY:RAYCAST)
     -- ========================================================================
+    local function computeSilentAimRay(origin, direction)
+        if not ConfigState.SilentAimEnabled then
+            return origin, direction, false
+        end
+        if typeof(origin) ~= "Vector3" then
+            return origin, direction, false
+        end
+        if State.rivalsFakePos.Enabled and State.rivalsFakePos.VirtualCF then
+            origin = State.rivalsFakePos.VirtualCF.Position
+        end
+        local target = State.currentRivalsTarget or getBestRivalsTarget(ConfigState.SilentAimFOV)
+        if target and target.HitPart then
+            if math.random(1, 100) <= (ConfigState.SilentAimHitChance or 100) then
+                local aimPos = target.HitPart.Position
+                if ConfigState.ProjectilePrediction and target.RootPart then
+                    local vel = target.RootPart.AssemblyLinearVelocity or Vector3.zero
+                    aimPos = aimPos + (vel * (ConfigState.PredictionLead or 0.135))
+                end
+                if ConfigState.TeleportV2Origin and target.RootPart then
+                    origin = aimPos - ((aimPos - origin).Unit * 2.5)
+                end
+                local newDir = (aimPos - origin).Unit * 1000
+                if State.rivalsFakePos.Enabled and ConfigState.AutoHandoffOnShoot then
+                    State.rivalsFakePos.HandoffTicks = 2
+                end
+                return origin, newDir, true
+            end
+        end
+        return origin, direction, false
+    end
+
     pcall(function()
         local hookmetamethod = rawget(getfenv and getfenv() or _G, "hookmetamethod") or (getgenv and getgenv().hookmetamethod)
+        local hookfunction = rawget(getfenv and getfenv() or _G, "hookfunction") or (getgenv and getgenv().hookfunction)
         local getnamecallmethod = rawget(getfenv and getfenv() or _G, "getnamecallmethod") or (getgenv and getgenv().getnamecallmethod)
         local checkcaller = rawget(getfenv and getfenv() or _G, "checkcaller") or (getgenv and getgenv().checkcaller) or function() return false end
         local newcclosure = rawget(getfenv and getfenv() or _G, "newcclosure") or (getgenv and getgenv().newcclosure) or function(f) return f end
 
+        -- 3A. Hook ReplicatedStorage.Modules.Utility:Raycast (Used by RIVALS ClientItem guns & projectiles!)
+        task.spawn(function()
+            local mods = loadRivalsCoreModules()
+            local util = mods.Utility
+            if util and type(util.Raycast) == "function" then
+                local oldUtilRaycast = util.Raycast
+                util.Raycast = function(self, origin, targetPosOrDir, distance, filterList, filterType, ...)
+                    if ConfigState.SilentAimEnabled and typeof(origin) == "Vector3" then
+                        local newOrigin, newDir, redirected = computeSilentAimRay(origin, targetPosOrDir)
+                        if redirected then
+                            local target = State.currentRivalsTarget
+                            local aimPos = (target and target.HitPart and target.HitPart.Position) or (newOrigin + newDir)
+                            if ConfigState.WallbangManip and target and target.Character then
+                                filterList = { target.Character }
+                                filterType = Enum.RaycastFilterType.Include
+                            end
+                            return oldUtilRaycast(self, newOrigin, aimPos, distance or 9999, filterList, filterType, ...)
+                        end
+                    end
+                    return oldUtilRaycast(self, origin, targetPosOrDir, distance, filterList, filterType, ...)
+                end
+            end
+        end)
+
+        -- 3B. Hook direct workspace.Raycast function reference
+        if hookfunction and workspace and workspace.Raycast then
+            pcall(function()
+                local oldWsRaycast
+                oldWsRaycast = hookfunction(workspace.Raycast, newcclosure(function(self, origin, direction, params, ...)
+                    if self == workspace and not checkcaller() and ConfigState.SilentAimEnabled then
+                        local newOrigin, newDir, redirected = computeSilentAimRay(origin, direction)
+                        if redirected then
+                            return oldWsRaycast(self, newOrigin, newDir, params, ...)
+                        end
+                    end
+                    return oldWsRaycast(self, origin, direction, params, ...)
+                end))
+            end)
+        end
+
+        -- 3C. Hook game.__namecall for Raycast, UpdateCameraRotation (Backstab/AntiAim), and AC Remotes
         if hookmetamethod and getnamecallmethod then
             local oldNamecall
             oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
@@ -9870,32 +10211,33 @@ do
                 if not checkcaller() then
                     if (method == "Raycast" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay") and self == workspace and ConfigState.SilentAimEnabled then
                         local args = { ... }
-                        local origin = args[1]
-                        if typeof(origin) == "Vector3" then
-                            if State.rivalsFakePos.Enabled and State.rivalsFakePos.VirtualCF then
-                                origin = State.rivalsFakePos.VirtualCF.Position
-                                args[1] = origin
-                            end
-                            local target = State.currentRivalsTarget or getBestRivalsTarget(ConfigState.SilentAimFOV)
-                            if target and target.HitPart then
-                                if math.random(1, 100) <= (ConfigState.SilentAimHitChance or 100) then
-                                    local aimPos = target.HitPart.Position
-                                    if ConfigState.ProjectilePrediction and target.RootPart then
-                                        local vel = target.RootPart.AssemblyLinearVelocity or Vector3.zero
-                                        aimPos = aimPos + (vel * (ConfigState.PredictionLead or 0.135))
-                                    end
-                                    args[2] = (aimPos - origin).Unit * 1000
-                                    if State.rivalsFakePos.Enabled and ConfigState.AutoHandoffOnShoot then
-                                        State.rivalsFakePos.HandoffTicks = 2
-                                    end
-                                    return oldNamecall(self, table.unpack(args))
-                                end
-                            end
+                        local newOrigin, newDir, redirected = computeSilentAimRay(args[1], args[2])
+                        if redirected then
+                            args[1] = newOrigin
+                            args[2] = newDir
+                            return oldNamecall(self, table.unpack(args))
                         end
                     elseif method == "FireServer" and typeof(self) == "Instance" then
                         local rName = self.Name
-                        if rName == "ClientAlert" or rName == "OutOfBounds" then
+                        if rName == "ClientAlert" or rName == "OutOfBounds" or rName == "VerifyClientEntity" then
                             return nil
+                        end
+                        if self.Parent and self.Parent.Name == "AnalyticsPipeline" then
+                            return nil
+                        end
+                        if rName == "UpdateCameraRotation" then
+                            -- Silent Backstab rotation spoof when holding Knife near enemy
+                            if (ConfigState.KnifeRage or ConfigState.MeleeAutoFaceBack) and State.currentRivalsTarget and State.currentRivalsTarget.RootPart then
+                                local tRoot = State.currentRivalsTarget.RootPart
+                                if (State.currentRivalsTarget.Distance or 999) <= (ConfigState.MeleeSafeReach or 16) then
+                                    local args = { ... }
+                                    args[1] = tRoot.CFrame.Rotation
+                                    return oldNamecall(self, table.unpack(args))
+                                end
+                            end
+                            if (State.rivalsFakePos.Enabled or ConfigState.AntiAimEnabled) and ConfigState.CameraRepDecouple then
+                                return nil
+                            end
                         end
                     end
                 end
@@ -9926,9 +10268,23 @@ do
             p.Material = Enum.Material.ForceField
             p.Transparency = 0.35
             p.Parent = workspace
+
+            local box = Instance.new("BoxHandleAdornment")
+            box.Name = "CoreXyzGhostBox"
+            box.Adornee = p
+            box.AlwaysOnTop = true
+            box.ZIndex = 8
+            box.Size = Vector3.new(2.05, 5.05, 1.05)
+            box.Transparency = 0.55
+            box.Color3 = ConfigState.FakePosGhostColor or Color3.fromRGB(120, 175, 255)
+            box.Parent = p
+
             fp.GhostPart = p
         end
-        fp.GhostPart.Color = ConfigState.FakePosGhostColor or Color3.fromRGB(120, 175, 255)
+        local col = ConfigState.FakePosGhostColor or Color3.fromRGB(120, 175, 255)
+        fp.GhostPart.Color = col
+        local box = fp.GhostPart:FindFirstChild("CoreXyzGhostBox")
+        if box then box.Color3 = col end
         fp.GhostPart.CFrame = fp.VirtualCF
     end
 
@@ -9938,10 +10294,25 @@ do
         ConfigState.FakePositionEnabled = fp.Enabled
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
 
         if fp.Enabled then
             if hrp then
                 fp.VirtualCF = hrp.CFrame
+            end
+            -- Apply Sleepy.gg freeze pose animation desync (rbxassetid://10714003221)
+            if hum then
+                pcall(function()
+                    local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
+                    local anim = Instance.new("Animation")
+                    anim.AnimationId = "rbxassetid://10714003221"
+                    local track = animator:LoadAnimation(anim)
+                    track.Priority = Enum.AnimationPriority.Action4
+                    track:Play(0, 1, 0)
+                    track.TimePosition = 0.5
+                    track:AdjustSpeed(0)
+                    fp.AnimTrack = track
+                end)
             end
             pcall(function() RunService:UnbindFromRenderStep("CoreXyzSurfaceCam") end)
             RunService:BindToRenderStep("CoreXyzSurfaceCam", 201, function()
@@ -9955,6 +10326,10 @@ do
             end)
         else
             pcall(function() RunService:UnbindFromRenderStep("CoreXyzSurfaceCam") end)
+            if fp.AnimTrack then
+                pcall(function() fp.AnimTrack:Stop() end)
+                fp.AnimTrack = nil
+            end
             if hrp and fp.VirtualCF then
                 pcall(function()
                     hrp.AssemblyLinearVelocity = Vector3.zero
@@ -10003,9 +10378,18 @@ do
                 wire:AddLine(Vector3.new(s.X, -s.Y, s.Z), Vector3.new(s.X, s.Y, s.Z))
                 wire:AddLine(Vector3.new(s.X, s.Y, s.Z), Vector3.new(-s.X, s.Y, s.Z))
                 wire:AddLine(Vector3.new(-s.X, s.Y, s.Z), Vector3.new(-s.X, -s.Y, s.Z))
+                wire:AddLine(Vector3.new(-s.X, -s.Y, -s.Z), Vector3.new(-s.X, -s.Y, s.Z))
+                wire:AddLine(Vector3.new(s.X, -s.Y, -s.Z), Vector3.new(s.X, -s.Y, s.Z))
+                wire:AddLine(Vector3.new(s.X, s.Y, -s.Z), Vector3.new(s.X, s.Y, s.Z))
+                wire:AddLine(Vector3.new(-s.X, s.Y, -s.Z), Vector3.new(-s.X, s.Y, s.Z))
                 wire.Parent = CoreGui
                 self.ActiveWires[part] = { Wire = wire, OrigTransparency = part.Transparency }
                 part.Transparency = 0.85
+            elseif self.ActiveWires[part] and self.ActiveWires[part].Wire then
+                local t = (math.sin(os.clock() * 2.8) + 1) * 0.5
+                local c1 = col1 or Color3.fromRGB(255, 255, 255)
+                local c2 = col2 or Color3.fromRGB(120, 175, 255)
+                self.ActiveWires[part].Wire.Color3 = c1:Lerp(c2, t)
             end
         end
     end
@@ -10015,10 +10399,11 @@ do
         local cam = workspace.CurrentCamera
         local vms = (cam and cam:FindFirstChild("ViewModels")) or workspace:FindFirstChild("ViewModels")
         if not vms then return end
+        local fpContainer = vms:FindFirstChild("FirstPerson") or vms
 
         if ConfigState.GunWireframe or ConfigState.ArmWireframe then
             WireframeEngine:ApplyToContainer(
-                vms,
+                fpContainer,
                 ConfigState.WireframeColor1 or Color3.fromRGB(255, 255, 255),
                 ConfigState.WireframeColor2 or Color3.fromRGB(120, 175, 255),
                 ConfigState.WireframeThickness or 1.2
@@ -10030,7 +10415,7 @@ do
         if ConfigState.WeaponChams or ConfigState.SelfChams then
             local mat = Enum.Material[ConfigState.WeaponChamsMaterial or "ForceField"] or Enum.Material.ForceField
             local col = ConfigState.WeaponChamsRainbow and Color3.fromHSV((os.clock() * 0.35) % 1, 0.75, 1) or (ConfigState.WeaponChamsColor or Color3.fromRGB(255, 255, 255))
-            for _, part in ipairs(vms:GetDescendants()) do
+            for _, part in ipairs(fpContainer:GetDescendants()) do
                 if part:IsA("BasePart") and part.Transparency < 1 then
                     pcall(function()
                         part.Material = mat
@@ -10044,36 +10429,85 @@ do
     State.applySelfChams = stepRivalsViewModels
 
     -- ========================================================================
-    -- 6. RIVALS ANTI-FLASH / ANTI-SMOKE / WEAPON MODS & DUEL AUTOMATION
+    -- 6. REAL RIVALS WEAPON MODIFIERS (ITEMLIBRARY + LIVE FIGHTER ITEMS)
     -- ========================================================================
+    local function patchWeaponTable(keyName, wData)
+        if type(wData) ~= "table" then return end
+        if not State.rivalsOriginalWeaponStats[keyName] then
+            State.rivalsOriginalWeaponStats[keyName] = {
+                ShootSpread = wData.ShootSpread,
+                Spread = wData.Spread,
+                MinSpread = wData.MinSpread,
+                MaxSpread = wData.MaxSpread,
+                HipfireSpread = wData.HipfireSpread,
+                ShootRecoil = wData.ShootRecoil,
+                Recoil = wData.Recoil,
+                CameraRecoil = wData.CameraRecoil,
+                Kickback = wData.Kickback,
+                ReloadTime = wData.ReloadTime,
+                EquipTime = wData.EquipTime,
+                AimSpeed = wData.AimSpeed,
+                Automatic = wData.Automatic,
+                ShootCooldown = wData.ShootCooldown,
+            }
+        end
+        local orig = State.rivalsOriginalWeaponStats[keyName]
+        if ConfigState.NoSpread then
+            wData.ShootSpread = 0
+            wData.Spread = 0
+            wData.MinSpread = 0
+            wData.MaxSpread = 0
+            wData.HipfireSpread = 0
+        elseif orig then
+            wData.ShootSpread = orig.ShootSpread
+            wData.Spread = orig.Spread
+            wData.MinSpread = orig.MinSpread
+            wData.MaxSpread = orig.MaxSpread
+            wData.HipfireSpread = orig.HipfireSpread
+        end
+
+        if ConfigState.NoRecoil then
+            wData.ShootRecoil = 0
+            wData.Recoil = 0
+            wData.CameraRecoil = 0
+            wData.Kickback = 0
+        elseif orig then
+            wData.ShootRecoil = orig.ShootRecoil
+            wData.Recoil = orig.Recoil
+            wData.CameraRecoil = orig.CameraRecoil
+            wData.Kickback = orig.Kickback
+        end
+
+        if ConfigState.InstantReload then
+            wData.ReloadTime = 0.03
+            wData.EquipTime = 0.03
+            wData.AimSpeed = 0.03
+        elseif orig then
+            wData.ReloadTime = orig.ReloadTime
+            wData.EquipTime = orig.EquipTime
+            wData.AimSpeed = orig.AimSpeed
+        end
+
+        if ConfigState.AutomaticFire then
+            wData.Automatic = true
+        elseif orig and orig.Automatic ~= nil then
+            wData.Automatic = orig.Automatic
+        end
+    end
+
     local function applyRivalsWeaponModifiers()
         pcall(function()
-            local modules = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Modules")
-            local itemLibMod = modules and modules:FindFirstChild("ItemLibrary")
-            if itemLibMod and itemLibMod:IsA("ModuleScript") then
-                local ok, itemLib = pcall(require, itemLibMod)
-                if ok and type(itemLib) == "table" and type(itemLib.Items) == "table" then
-                    for _, wData in pairs(itemLib.Items) do
-                        if type(wData) == "table" then
-                            if ConfigState.NoSpread then
-                                wData.Spread = 0
-                                wData.MinSpread = 0
-                                wData.MaxSpread = 0
-                                wData.HipfireSpread = 0
-                            end
-                            if ConfigState.NoRecoil then
-                                wData.Recoil = 0
-                                wData.CameraRecoil = 0
-                                wData.Kickback = 0
-                            end
-                            if ConfigState.InstantReload then
-                                wData.ReloadTime = 0.05
-                                wData.EquipTime = 0.05
-                            end
-                            if ConfigState.AutomaticFire then
-                                wData.Automatic = true
-                            end
-                        end
+            local mods = loadRivalsCoreModules()
+            if mods.ItemLibrary and type(mods.ItemLibrary.Items) == "table" then
+                for wName, wData in pairs(mods.ItemLibrary.Items) do
+                    patchWeaponTable("Lib_" .. tostring(wName), wData)
+                end
+            end
+            local fighter = getLocalRivalsFighter()
+            if fighter and type(fighter.Items) == "table" then
+                for idx, item in pairs(fighter.Items) do
+                    if type(item) == "table" and type(item.Info) == "table" then
+                        patchWeaponTable("Live_" .. tostring(item.Name or idx), item.Info)
                     end
                 end
             end
@@ -10081,6 +10515,154 @@ do
     end
     State.applyRivalsWeaponModifiers = applyRivalsWeaponModifiers
 
+    -- ========================================================================
+    -- 7. FULL RIVALS SKIN, WRAP, CHARM & FINISHER CHANGER + UNLOCK ALL (SLEEPY.GG)
+    -- ========================================================================
+    local cosmeticChangerInitialized = false
+    local function applyCosmeticOverrideToEquippedWeapons()
+        pcall(function()
+            local mods = loadRivalsCoreModules()
+            if not cosmeticChangerInitialized and mods.PlayerDataController and mods.CosmeticLibrary and mods.ItemLibrary then
+                cosmeticChangerInitialized = true
+                local pdc = mods.PlayerDataController
+                local cl = mods.CosmeticLibrary
+                local il = mods.ItemLibrary
+
+                -- Hook PlayerDataController:Get so all Skins, Wraps, Charms & Finishers appear owned in Armory
+                if type(pdc.Get) == "function" then
+                    local origGet = pdc.Get
+                    pdc.Get = function(self, key, ...)
+                        local realVal = origGet(self, key, ...)
+                        if not ConfigState.UnlockAllCosmetics then
+                            return realVal
+                        end
+                        if key == "CosmeticInventory" and type(cl.Cosmetics) == "table" then
+                            local spoof = {}
+                            if type(realVal) == "table" then
+                                for k, v in pairs(realVal) do spoof[k] = v end
+                            end
+                            for name, _ in pairs(cl.Cosmetics) do
+                                spoof[name] = true
+                            end
+                            return spoof
+                        elseif key == "WeaponInventory" and type(il.Items) == "table" then
+                            local spoof = {}
+                            for wName, _ in pairs(il.Items) do
+                                local eq = State.rivalsCosmeticEquips[wName] or {}
+                                spoof[wName] = {
+                                    Skin = eq.Skin or ConfigState.ActiveSkinOverride,
+                                    Wrap = eq.Wrap or (ConfigState.ActiveWrapOverride and { Name = ConfigState.ActiveWrapOverride, Inverted = false }) or nil,
+                                    Charm = eq.Charm or (ConfigState.ActiveCharmOverride ~= "None" and ConfigState.ActiveCharmOverride) or nil,
+                                    Finisher = eq.Finisher or ConfigState.KillEffect,
+                                }
+                            end
+                            return spoof
+                        elseif key == "FavoritedCosmetics" then
+                            local spoof = {}
+                            if type(realVal) == "table" then
+                                for k, v in pairs(realVal) do spoof[k] = v end
+                            end
+                            for wName, favs in pairs(State.rivalsCosmeticFavorites) do
+                                spoof[wName] = favs
+                            end
+                            return spoof
+                        end
+                        return realVal
+                    end
+                end
+
+                if type(pdc.GetWeaponData) == "function" then
+                    local origGetWeaponData = pdc.GetWeaponData
+                    pdc.GetWeaponData = function(self, weaponName, ...)
+                        local base = origGetWeaponData(self, weaponName, ...)
+                        local res = {}
+                        if type(base) == "table" then
+                            for k, v in pairs(base) do res[k] = v end
+                        end
+                        res.Unlocked = true
+                        local eq = State.rivalsCosmeticEquips[weaponName] or {}
+                        if eq.Skin or ConfigState.ActiveSkinOverride then
+                            res.Skin = eq.Skin or ConfigState.ActiveSkinOverride
+                        end
+                        if eq.Wrap then
+                            res.Wrap = eq.Wrap
+                        elseif ConfigState.ActiveWrapOverride then
+                            res.Wrap = { Name = ConfigState.ActiveWrapOverride, Inverted = false }
+                        end
+                        if eq.Charm then
+                            res.Charm = eq.Charm
+                        elseif ConfigState.ActiveCharmOverride and ConfigState.ActiveCharmOverride ~= "None" then
+                            res.Charm = ConfigState.ActiveCharmOverride
+                        end
+                        if eq.Finisher or ConfigState.KillEffect then
+                            res.Finisher = eq.Finisher or ConfigState.KillEffect
+                        end
+                        return res
+                    end
+                end
+
+                -- Hook ClientViewModel.GetWrap so Completionist/Custom Wraps render on ViewModels
+                if mods.ClientViewModel and type(mods.ClientViewModel.GetWrap) == "function" then
+                    local origGetWrap = mods.ClientViewModel.GetWrap
+                    mods.ClientViewModel.GetWrap = function(self, ...)
+                        local wName = self.Item and self.Item.Name
+                        local eq = wName and State.rivalsCosmeticEquips[wName]
+                        if eq and eq.Wrap then return eq.Wrap end
+                        if ConfigState.ActiveWrapOverride and ConfigState.ActiveWrapOverride ~= "" then
+                            return { Name = ConfigState.ActiveWrapOverride, Inverted = false }
+                        end
+                        return origGetWrap(self, ...)
+                    end
+                end
+            end
+
+            -- Apply Wrap & Charm live to currently equipped Fighter items and ViewModels
+            local fighter = getLocalRivalsFighter()
+            local mods2 = State.rivalsModules
+            local wrapTbl = ConfigState.ActiveWrapOverride and { Name = ConfigState.ActiveWrapOverride, Inverted = false } or nil
+
+            if fighter and type(fighter.Items) == "table" then
+                for _, item in pairs(fighter.Items) do
+                    if type(item) == "table" and item.Name then
+                        State.rivalsCosmeticEquips[item.Name] = State.rivalsCosmeticEquips[item.Name] or {}
+                        if ConfigState.ActiveSkinOverride then
+                            State.rivalsCosmeticEquips[item.Name].Skin = ConfigState.ActiveSkinOverride
+                        end
+                        if wrapTbl then
+                            State.rivalsCosmeticEquips[item.Name].Wrap = wrapTbl
+                        end
+                        if ConfigState.ActiveCharmOverride and ConfigState.ActiveCharmOverride ~= "None" then
+                            State.rivalsCosmeticEquips[item.Name].Charm = ConfigState.ActiveCharmOverride
+                        end
+                        if ConfigState.KillEffect then
+                            State.rivalsCosmeticEquips[item.Name].Finisher = ConfigState.KillEffect
+                        end
+                        if wrapTbl and type(item.ApplyWrap) == "function" then
+                            pcall(function() item:ApplyWrap(wrapTbl) end)
+                        end
+                        if item.ViewModel and wrapTbl and mods2.WrapController and type(mods2.WrapController.ApplyWrap) == "function" then
+                            pcall(function()
+                                mods2.WrapController:ApplyWrap(item.ViewModel.Model or item.ViewModel, wrapTbl, true)
+                            end)
+                        end
+                    end
+                end
+            end
+
+            local pdc = mods2.PlayerDataController
+            if pdc and pdc.CurrentData and type(pdc.CurrentData.Replicate) == "function" then
+                pcall(function()
+                    pdc.CurrentData:Replicate("WeaponInventory")
+                    pdc.CurrentData:Replicate("CosmeticInventory")
+                end)
+            end
+        end)
+    end
+    State.applyCosmeticOverrideToEquippedWeapons = applyCosmeticOverrideToEquippedWeapons
+
+    -- ========================================================================
+    -- 8. DUELS AUTOMATION (PAGES UI HOOK + REMOTES) & 3D HITMARKERS/SOUNDS
+    -- ========================================================================
     local function fireRivalsDuelRemote(remoteName, ...)
         local args = { ... }
         pcall(function()
@@ -10088,7 +10670,10 @@ do
             local duels = remotes and remotes:FindFirstChild("Duels")
             local rep = remotes and remotes:FindFirstChild("Replication")
             local fighter = rep and rep:FindFirstChild("Fighter")
-            local targetRemote = (duels and duels:FindFirstChild(remoteName)) or (fighter and fighter:FindFirstChild(remoteName))
+            local misc = remotes and remotes:FindFirstChild("Misc")
+            local targetRemote = (duels and duels:FindFirstChild(remoteName))
+                or (fighter and fighter:FindFirstChild(remoteName))
+                or (misc and misc:FindFirstChild(remoteName))
             if targetRemote and targetRemote:IsA("RemoteEvent") then
                 targetRemote:FireServer(table.unpack(args))
             end
@@ -10096,13 +10681,196 @@ do
     end
     State.fireRivalsDuelRemote = fireRivalsDuelRemote
 
-    -- Per-Frame Rivals Combat, Desync & Anti-Effect Loop
+    local HIT_SOUND_ASSETS = {
+        ["Skeet / Gamesense"] = "rbxassetid://5447626464",
+        ["Neverlose"] = "rbxassetid://8726881116",
+        ["Rust Headshot"] = "rbxassetid://4764109000",
+        ["Bell"] = "rbxassetid://6534947240",
+        ["Bubble"] = "rbxassetid://6534947588",
+    }
+
+    local function spawnRivalsHitEffect(hitPos, dmgAmount)
+        if ConfigState.HitSoundEnabled then
+            pcall(function()
+                local s = Instance.new("Sound")
+                s.Name = "CoreXyz_HitSound"
+                s.SoundId = HIT_SOUND_ASSETS[ConfigState.HitSoundType or "Skeet / Gamesense"] or "rbxassetid://5447626464"
+                s.Volume = 1.2
+                s.Parent = SoundService
+                s:Play()
+                task.delay(1.5, function()
+                    if s and s.Parent then s:Destroy() end
+                end)
+            end)
+        end
+        if ConfigState.HitEffectEnabled and typeof(hitPos) == "Vector3" then
+            pcall(function()
+                local marker = Instance.new("Part")
+                marker.Name = "CoreXyz_HitMarker3D"
+                marker.Size = Vector3.new(0.6, 0.6, 0.6)
+                marker.Position = hitPos
+                marker.Anchored = true
+                marker.CanCollide = false
+                marker.CanQuery = false
+                marker.Material = Enum.Material.Neon
+                marker.Color = Theme.Accent
+                marker.Transparency = 0.15
+                marker.Parent = workspace
+
+                local bb = Instance.new("BillboardGui")
+                bb.Size = UDim2.fromOffset(90, 28)
+                bb.AlwaysOnTop = true
+                bb.StudsOffset = Vector3.new(0, 1.5, 0)
+                bb.Parent = marker
+
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.fromScale(1, 1)
+                lbl.BackgroundTransparency = 1
+                lbl.Font = Enum.Font.GothamBlack
+                lbl.Text = "-" .. tostring(math.floor(dmgAmount or 25))
+                lbl.TextColor3 = Color3.fromRGB(255, 95, 95)
+                lbl.TextStrokeTransparency = 0.1
+                lbl.TextSize = 15
+                lbl.Parent = bb
+
+                tween(marker, TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = Vector3.new(2.2, 2.2, 2.2),
+                    Transparency = 1,
+                })
+                task.delay(0.7, function()
+                    if marker and marker.Parent then marker:Destroy() end
+                end)
+            end)
+        end
+    end
+
+    -- Triggerbot implementation wired to RIVALS FighterController & mouse1click
+    local lastTriggerShotClock = 0
+    State.stepOneShotTriggerbot = function(cam)
+        if not ConfigState.Triggerbot or not cam then return end
+        local now = os.clock()
+        local delaySec = tonumber(ConfigState.TriggerbotDelay) or 0.04
+        if (now - lastTriggerShotClock) < math.max(delaySec, 0.03) then
+            return
+        end
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myChar or not myRoot then return end
+
+        getSafeRaycastExcludeList()
+        local origin = cam.CFrame.Position
+        local dir = cam.CFrame.LookVector * 900
+        local hit = workspace:Raycast(origin, dir, rayParams)
+        local targetChar = nil
+
+        if hit and hit.Instance then
+            for _, pl in ipairs(Players:GetPlayers()) do
+                if pl ~= LocalPlayer and pl.Character and hit.Instance:IsDescendantOf(pl.Character) and passesTeamCheck(pl) then
+                    targetChar = pl.Character
+                    break
+                end
+            end
+            if not targetChar and ConfigState.ShootingRangeDummyESP ~= false then
+                local model = hit.Instance:FindFirstAncestorOfClass("Model")
+                if model and (model:FindFirstChild("HitboxHead") or model:FindFirstChild("HitboxBody")) then
+                    targetChar = model
+                end
+            end
+        end
+
+        if targetChar then
+            if ConfigState.AvoidKatanaDeflect and isCharacterDeflecting(targetChar) then return end
+            if ConfigState.RiotShieldCheck and doesRiotShieldBlock(targetChar, myRoot.Position) then return end
+            lastTriggerShotClock = now
+            pcall(function()
+                local fighter = getLocalRivalsFighter()
+                if fighter and fighter.EquippedItem and type(fighter.EquippedItem.Input) == "function" then
+                    fighter.EquippedItem:Input("StartShooting")
+                    task.delay(0.04, function()
+                        pcall(function()
+                            if fighter.EquippedItem then
+                                fighter.EquippedItem:Input("StopShooting")
+                            end
+                        end)
+                    end)
+                elseif Env.mouse1click then
+                    Env.mouse1click()
+                end
+            end)
+        end
+    end
+
+    -- Per-Frame Rivals Combat, Desync, Pages Auto-Loadout & Anti-Effect Loop
     local aaSpinAngle = 0
     local aaJitterToggle = false
+    local lastAutoLoadoutClock = 0
+    local lastModifierSyncClock = 0
+
     State.stepOneShotMiscFeatures = function(cam)
         local myChar = LocalPlayer.Character
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        local now = os.clock()
+
+        -- Periodically sync weapon modifiers onto newly spawned Fighter items
+        if (ConfigState.NoRecoil or ConfigState.NoSpread or ConfigState.InstantReload or ConfigState.AutomaticFire) and (now - lastModifierSyncClock) > 0.75 then
+            lastModifierSyncClock = now
+            applyRivalsWeaponModifiers()
+        end
+
+        -- Track enemy health drops for 3D Hitmarkers & Hit Sounds
+        if ConfigState.HitEffectEnabled or ConfigState.HitSoundEnabled then
+            for _, pl in ipairs(Players:GetPlayers()) do
+                if pl ~= LocalPlayer and pl.Character then
+                    local hum = pl.Character:FindFirstChildOfClass("Humanoid")
+                    local hrp = pl.Character:FindFirstChild("HumanoidRootPart")
+                    if hum and hrp then
+                        local prevHP = State.rivalsEnemyLastHP[pl.Name]
+                        local curHP = hum.Health
+                        if prevHP and curHP < prevHP and curHP >= 0 and (prevHP - curHP) >= 1 then
+                            spawnRivalsHitEffect(hrp.Position + Vector3.new(0, 1.5, 0), prevHP - curHP)
+                        end
+                        State.rivalsEnemyLastHP[pl.Name] = curHP
+                    end
+                end
+            end
+        end
+
+        -- Auto Weapon Swap when ammo is empty
+        if ConfigState.AutoSwapEmpty then
+            pcall(function()
+                local fighter = getLocalRivalsFighter()
+                if fighter and fighter.EquippedItem and fighter.EquippedItem.Ammo ~= nil and tonumber(fighter.EquippedItem.Ammo) == 0 then
+                    if type(fighter.Items) == "table" and type(fighter.EquipItem) == "function" then
+                        for _, item in pairs(fighter.Items) do
+                            if item ~= fighter.EquippedItem and (tonumber(item.Ammo) or 1) > 0 then
+                                fighter:EquipItem(item)
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- Pre-Round Auto-Loadout via PagesModule.PageSystem.CurrentPage (Sleepy.gg verified)
+        if ConfigState.AutoLoadoutEnabled and (now - lastAutoLoadoutClock) > 0.45 then
+            lastAutoLoadoutClock = now
+            pcall(function()
+                local mods = loadRivalsCoreModules()
+                local pages = mods.PagesModule
+                local curPage = pages and pages.PageSystem and pages.PageSystem.CurrentPage
+                if curPage and curPage.Name == "PickWeapons" and type(curPage.PickWeapon) == "function" then
+                    if ConfigState.LoadoutPrimary then pcall(function() curPage:PickWeapon(1, ConfigState.LoadoutPrimary) end) end
+                    if ConfigState.LoadoutSecondary then pcall(function() curPage:PickWeapon(2, ConfigState.LoadoutSecondary) end) end
+                    if ConfigState.LoadoutMelee then pcall(function() curPage:PickWeapon(3, ConfigState.LoadoutMelee) end) end
+                    if ConfigState.LoadoutUtility then pcall(function() curPage:PickWeapon(4, ConfigState.LoadoutUtility) end) end
+                    if type(curPage.Finish) == "function" then
+                        pcall(function() curPage:Finish() end)
+                    end
+                end
+            end)
+        end
 
         -- Update best target
         if ConfigState.SilentAimEnabled or ConfigState.Aimbot or ConfigState.KnifeRage or ConfigState.AutoParryKatana then
@@ -10112,21 +10880,53 @@ do
         -- Auto-Parry / Katana Deflect when enemy aims at local player
         if ConfigState.AutoParryKatana and myChar and myRoot then
             local target = State.currentRivalsTarget
-            if target and target.RootPart and target.Distance <= 45 then
+            if target and target.RootPart and target.Distance <= 55 then
                 local enemyToMe = (myRoot.Position - target.RootPart.Position).Unit
-                if target.RootPart.CFrame.LookVector:Dot(enemyToMe) > 0.85 then
-                    fireRivalsDuelRemote("UseItem", "SecondaryAction")
+                if target.RootPart.CFrame.LookVector:Dot(enemyToMe) > 0.82 then
+                    pcall(function()
+                        local fighter = getLocalRivalsFighter()
+                        if fighter and type(fighter.Items) == "table" then
+                            for _, item in pairs(fighter.Items) do
+                                if item.Name == "Katana" then
+                                    if fighter.EquippedItem ~= item and type(fighter.EquipItem) == "function" then
+                                        fighter:EquipItem(item)
+                                    end
+                                    if type(item.Input) == "function" then
+                                        item:Input("SecondaryAction")
+                                        item:Input("StartShooting")
+                                    end
+                                    local objId = type(item.Get) == "function" and item:Get("ObjectID") or item.ObjectID
+                                    if objId then
+                                        fireRivalsDuelRemote("UseItem", objId)
+                                    end
+                                    break
+                                end
+                            end
+                        end
+                        fireRivalsDuelRemote("UseItem", "SecondaryAction")
+                    end)
                 end
             end
         end
 
-        -- Knife Rage / Melee Aura + Silent Backstab
+        -- Knife Rage / Melee Aura + Silent Backstab (Uses FighterController + ObjectID)
         if ConfigState.KnifeRage and myChar and myRoot then
             local target = State.currentRivalsTarget
             if target and target.RootPart and target.Distance <= (ConfigState.MeleeSafeReach or 14) then
                 pcall(function()
                     if ConfigState.MeleeAutoFaceBack then
                         myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position - target.RootPart.CFrame.LookVector)
+                    end
+                    local fighter = getLocalRivalsFighter()
+                    local eqItem = fighter and fighter.EquippedItem
+                    if eqItem then
+                        if type(eqItem.Input) == "function" then
+                            eqItem:Input("StartShooting")
+                        end
+                        local objId = type(eqItem.Get) == "function" and eqItem:Get("ObjectID") or eqItem.ObjectID
+                        if objId then
+                            fireRivalsDuelRemote("UseItem", objId)
+                        end
                     end
                     fireRivalsDuelRemote("RegisterQuickAttack")
                     local tool = myChar:FindFirstChildOfClass("Tool")
@@ -10160,7 +10960,7 @@ do
                     local jz = ConfigState.PanicZAxis and ((math.random() - 0.5) * 2 * (ConfigState.PanicMaxX or 6)) or 0
                     underPos = underPos + Vector3.new(jx, 0, jz)
                 end
-                if ConfigState.ZeroAssemblyVelocity then
+                if ConfigState.ZeroAssemblyVelocity ~= false then
                     myRoot.AssemblyLinearVelocity = Vector3.zero
                 end
                 myRoot.CFrame = CFrame.new(underPos) * rot
@@ -10199,12 +10999,17 @@ do
             pcall(function()
                 local fb = Lighting:FindFirstChild("Flashbang") or (cam and cam:FindFirstChild("Flashbang"))
                 if fb then fb:Destroy() end
+                for _, eff in ipairs(Lighting:GetChildren()) do
+                    if string.find(string.lower(eff.Name), "flash") or string.find(string.lower(eff.Name), "blind") then
+                        eff:Destroy()
+                    end
+                end
             end)
         end
         if ConfigState.AntiSmoke then
             pcall(function()
                 for _, obj in ipairs(workspace:GetChildren()) do
-                    if obj.Name == "SmokeCloud" or obj.Name == "SmokeClouds" then
+                    if obj.Name == "SmokeCloud" or obj.Name == "SmokeClouds" or string.find(obj.Name, "Smoke") then
                         obj:Destroy()
                     end
                 end
@@ -10231,6 +11036,7 @@ do
     end, { ShowKeybindBadge = true })
     createSlider(CombatTab, "Silent Aim FOV", 15, 500, 140, 5, "px", function(val)
         ConfigState.SilentAimFOV = val
+        ConfigState.FOVRadius = val
         ConfigState.FovRadius = val
         if UI.FovCircle then
             UI.FovCircle.Size = UDim2.fromOffset(val * 2, val * 2)
@@ -10252,10 +11058,11 @@ do
     end)
     createDropdown(CombatTab, "Target Hitbox", { "HitboxHead", "Head", "HitboxBody", "UpperTorso", "HumanoidRootPart", "Closest to Crosshair" }, "HitboxHead", function(opt)
         ConfigState.SilentAimHitbox = opt
-        ConfigState.TargetPart = (opt == "HitboxHead" and "Head") or (opt == "HitboxBody" and "UpperTorso") or opt
+        ConfigState.TargetPart = (opt == "HitboxHead" and "HitboxHead") or (opt == "HitboxBody" and "HitboxBody") or opt
     end)
     createDropdown(CombatTab, "Priority Method", { "Closest to Crosshair", "Closest Distance", "Lowest Health", "FOV - Lowest Health" }, "Closest to Crosshair", function(opt)
         ConfigState.SilentAimPriority = opt
+        ConfigState.FovTargetMode = opt
     end)
 
     createLabel(CombatTab, "Rivals Defensive Counters (Katana & Shield)", "Left")
@@ -10285,6 +11092,7 @@ do
     end)
     createToggle(CombatTab, "Wall Check (Ray Probe)", false, function(val)
         ConfigState.WallCheck = val
+        ConfigState.AimbotWallCheck = val
     end)
     createToggle(CombatTab, "Enable Triggerbot", false, function(val)
         ConfigState.Triggerbot = val
@@ -10293,7 +11101,7 @@ do
         ConfigState.TriggerbotDelay = val
     end)
 
-    createLabel(CombatTab, "Weapon Handling Modifiers (ItemLibrary)", "Right")
+    createLabel(CombatTab, "Weapon Handling Modifiers (ItemLibrary + Live)", "Right")
     createToggle(CombatTab, "No Recoil (Spring Lock)", false, function(val)
         ConfigState.NoRecoil = val
         if State.applyRivalsWeaponModifiers then State.applyRivalsWeaponModifiers() end
@@ -10357,12 +11165,20 @@ do
         ConfigState.PanicMinX = -val
     end)
 
-    createLabel(RageTab, "Wallbang & Knife Rage Aura", "Left")
+    createLabel(RageTab, "Wallbang, Hitbox Expander & Knife Rage Aura", "Left")
     createToggle(RageTab, "Wallbang / Manipulation Probe", false, function(val)
         ConfigState.WallbangManip = val
     end)
     createToggle(RageTab, "Teleport V2 Shot Origin", false, function(val)
         ConfigState.TeleportV2Origin = val
+    end)
+    createToggle(RageTab, "Expand Enemy Hitboxes (HitboxHead/Body)", false, function(val)
+        ConfigState.HitboxExpander = val
+        if not val then restoreAllHitboxes() else updateHitboxExpander() end
+    end, { ShowKeybindBadge = true })
+    createSlider(RageTab, "Hitbox Expansion Size", 4, 24, 10, 1, "st", function(val)
+        ConfigState.HitboxSize = val
+        if ConfigState.HitboxExpander then updateHitboxExpander() end
     end)
     createToggle(RageTab, "Knife / Melee Rage Aura", false, function(val)
         ConfigState.KnifeRage = val
@@ -10401,7 +11217,8 @@ do
     end)
 
     createLabel(RageTab, "Movement, Pre-Round Auto Loadout & Duels", "Right")
-    createToggle(RageTab, "WalkSpeed Multiplier", false, function(val)
+    createToggle(RageTab, "WalkSpeed Multiplier (Stealth CFrame)", false, function(val)
+        ConfigState.WalkSpeedEnabled = val
         ConfigState.SpeedEnabled = val
         updateMovement()
     end, { ShowKeybindBadge = true })
@@ -10415,7 +11232,7 @@ do
     createToggle(RageTab, "Infinite Double Jumps", false, function(val)
         ConfigState.InfJump = val
     end)
-    createToggle(RageTab, "Pre-Round Auto Loadout", false, function(val)
+    createToggle(RageTab, "Pre-Round Auto Loadout (Pages + Remote)", false, function(val)
         ConfigState.AutoLoadoutEnabled = val
         if val and State.fireRivalsDuelRemote then
             State.fireRivalsDuelRemote("PickWeaponsAheadOfTime", {
@@ -10444,7 +11261,14 @@ do
     end)
     createButton(RageTab, "Instant Rematch Duel", function()
         if State.fireRivalsDuelRemote then State.fireRivalsDuelRemote("Rematch") end
-        notify("Rivals Duels", "Sent Rematch request.", 2)
+        pcall(function()
+            local mods = loadRivalsCoreModules()
+            local curPage = mods.PagesModule and mods.PagesModule.PageSystem and mods.PagesModule.PageSystem.CurrentPage
+            if curPage and curPage.Name == "GameOver" and type(curPage.PlayAgain) == "function" then
+                curPage:PlayAgain()
+            end
+        end)
+        notify("Rivals Duels", "Sent Rematch / PlayAgain request.", 2)
     end)
 end
 
@@ -10456,33 +11280,54 @@ do
     createToggle(VisualsTab, "ESP (Chams, Name & HP)", false, function(val)
         State.espEnabled = val
         ConfigState.ESP = val
-        if not val then
-            for _, data in pairs(State.espMap) do
-                if data.Highlight then data.Highlight.Enabled = false end
-                if data.Billboard then data.Billboard.Enabled = false end
-            end
+        if not val and not ConfigState.Box3DESP and not ConfigState.SkeletonESP and not ConfigState.HealthBarESP and not ConfigState.Tracers then
+            clearESP()
         end
     end, { ShowKeybindBadge = true })
     createToggle(VisualsTab, "3D Bounding Box (12-Edge)", false, function(val)
         State.box3DEnabled = val
+        ConfigState.Box3DESP = val
         ConfigState.Box3D = val
         if not val then
-            for _, data in pairs(State.espMap) do hidePlayer3DBox(data) end
+            for _, data in pairs(State.espObjects) do
+                if data.Box3DLines then
+                    for i = 1, #data.Box3DLines do data.Box3DLines[i].Visible = false end
+                end
+                data.Box3DVisible = false
+            end
         end
     end, { ShowKeybindBadge = true })
     createToggle(VisualsTab, "10-Bone Skeleton ESP", false, function(val)
         State.skeletonEnabled = val
         ConfigState.SkeletonESP = val
         if not val then
-            for _, data in pairs(State.espMap) do hidePlayerSkeleton(data) end
+            for _, data in pairs(State.espObjects) do
+                if data.SkeletonLines then
+                    for i = 1, #data.SkeletonLines do
+                        data.SkeletonLines[i].Visible = false
+                        if data.JointDots and data.JointDots[i] then data.JointDots[i].Visible = false end
+                    end
+                end
+                if data.HeadCircle then data.HeadCircle.Visible = false end
+                data.SkeletonVisible = false
+            end
         end
     end, { ShowKeybindBadge = true })
+    createToggle(VisualsTab, "Dynamic Health Bar ESP", false, function(val)
+        ConfigState.HealthBarESP = val
+        if not val then
+            for _, data in pairs(State.espObjects) do
+                if data.HealthBarBg then data.HealthBarBg.Visible = false end
+                if data.HealthNumberLabel then data.HealthNumberLabel.Visible = false end
+            end
+        end
+    end)
     createToggle(VisualsTab, "2D Snapline Tracers", false, function(val)
         State.tracersEnabled = val
         ConfigState.Tracers = val
         if not val then
-            for _, data in pairs(State.espMap) do
-                if data.TracerLine then data.TracerLine.Visible = false end
+            for _, data in pairs(State.espObjects) do
+                if data.Tracer then data.Tracer.Visible = false end
             end
         end
     end)
@@ -10504,26 +11349,49 @@ do
     end)
     createToggle(VisualsTab, "Include Shooting Range Dummies", true, function(val)
         ConfigState.ShootingRangeDummyESP = val
+        refreshOneShotBotProxies(true)
     end)
 
     createLabel(VisualsTab, "Rivals Skin, Wrap, Charm & Finisher Changer", "Left")
     createToggle(VisualsTab, "Unlock All Rivals Cosmetics", false, function(val)
         ConfigState.UnlockAllCosmetics = val
+        if State.applyCosmeticOverrideToEquippedWeapons then
+            State.applyCosmeticOverrideToEquippedWeapons()
+        end
         if val then
-            notify("Rivals Cosmetics", "Unlocked Skins, Wraps, Charms & Finishers in local inventory.", 3)
+            notify("Rivals Cosmetics", "Unlocked all Skins, Wraps, Charms & Finishers in PlayerDataController!", 3)
         end
     end)
     createDropdown(VisualsTab, "Weapon Skin Override", State.rivalsCatalogs.Skins, "AKEY-47", function(opt)
         ConfigState.ActiveSkinOverride = opt
+        if State.applyCosmeticOverrideToEquippedWeapons then
+            State.applyCosmeticOverrideToEquippedWeapons()
+        end
     end)
     createDropdown(VisualsTab, "Completionist Wrap Override", State.rivalsCatalogs.Wraps, "Dark Matter", function(opt)
         ConfigState.ActiveWrapOverride = opt
+        if State.applyCosmeticOverrideToEquippedWeapons then
+            State.applyCosmeticOverrideToEquippedWeapons()
+        end
     end)
     createDropdown(VisualsTab, "Weapon Charm Override", State.rivalsCatalogs.Charms, "Police Siren", function(opt)
         ConfigState.ActiveCharmOverride = opt
+        if State.applyCosmeticOverrideToEquippedWeapons then
+            State.applyCosmeticOverrideToEquippedWeapons()
+        end
     end)
     createDropdown(VisualsTab, "Kill Finisher Effect", State.rivalsCatalogs.KillEffects, "Multimoon", function(opt)
         ConfigState.KillEffect = opt
+        if State.applyCosmeticOverrideToEquippedWeapons then
+            State.applyCosmeticOverrideToEquippedWeapons()
+        end
+    end)
+    createButton(VisualsTab, "Apply Cosmetics To Equipped Weapons", function()
+        ConfigState.UnlockAllCosmetics = true
+        if State.applyCosmeticOverrideToEquippedWeapons then
+            State.applyCosmeticOverrideToEquippedWeapons()
+        end
+        notify("Rivals Cosmetics", "Applied Skin, Wrap, Charm & Finisher overrides to live weapons!", 3)
     end)
 
     createLabel(VisualsTab, "3D Wireframe ViewModels & Self Chams", "Right")
@@ -10582,6 +11450,22 @@ do
     end)
     createDropdown(VisualsTab, "Map Lighting Profile", State.rivalsCatalogs.LightingProfiles, "Default", function(opt)
         ConfigState.RivalsLightingProfile = opt
+        pcall(function()
+            if opt == "Default" then
+                updateLightingEnvironment()
+            elseif opt == "Museum - Night" or opt == "Graveyard" or opt == "Dimension" then
+                Lighting.ClockTime = 20.5
+                Lighting.Brightness = 1.4
+                Lighting.Ambient = Color3.fromRGB(58, 68, 105)
+            elseif opt == "Graveyard - SuddenDeath" then
+                Lighting.ClockTime = 0
+                Lighting.Brightness = 1.6
+                Lighting.Ambient = Color3.fromRGB(130, 45, 55)
+            else
+                Lighting.ClockTime = 14.0
+                Lighting.Brightness = 2.1
+            end
+        end)
     end)
 end
 
@@ -12212,8 +13096,6 @@ do
         if State.updateVisualSuitesFrame then
             State.updateVisualSuitesFrame(safeDt, animClock)
         end
-
-
 
         if not boundCameraStep then
             runPostCameraRenderPass(safeDt)
