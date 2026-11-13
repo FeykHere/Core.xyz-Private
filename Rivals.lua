@@ -1,7 +1,7 @@
 --[=[
-    CORE.XYZ · RIVALS EDITION (KICIA ENGINE FUSION · PLACEID 17625359962)
-    • UI Shell, Brand, Home Tab & Settings Tab: Core.xyz (Pure Black & White Theme)
-    • Combat, Visuals, Player, Automation, World & Cosmetics Engine: Kicia v3
+    CORE.XYZ · RIVALS EDITION (PLACEID 17625359962)
+    • Unified 6-Tab Pure Monochrome UI: Home, Combat, Visuals, Player, World, Settings
+    • Automation integrated into Combat · Cosmetics integrated into Visuals · Zero Subtabs
 ]=]
 
 if getgenv then
@@ -1454,7 +1454,7 @@ do
     LoaderFooterHint.Size = UDim2.new(1, -48, 0, 14)
     LoaderFooterHint.BackgroundTransparency = 1
     LoaderFooterHint.Font = Enum.Font.Code
-    LoaderFooterHint.Text = "RIVALS KICIA ENGINE  ·  V6.0"
+    LoaderFooterHint.Text = "CORE.XYZ RIVALS ENGINE  ·  V6.0"
     LoaderFooterHint.TextColor3 = Theme.Muted
     LoaderFooterHint.TextTransparency = 1
     LoaderFooterHint.TextSize = 9
@@ -1685,21 +1685,21 @@ do
         end
     end
 
-    createChangelogGroup(1, "[-] Replaced / Cleaned", Color3.fromRGB(255, 92, 108), {
-        "[-] Replaced broken universal stubs with full Kicia v3 RIVALS engine",
-        "[-] Removed duplicate menu chrome & forced silent-aim startup overrides",
+    createChangelogGroup(1, "[-] Unified Interface Architecture", Color3.fromRGB(255, 92, 108), {
+        "[-] Removed all secondary rails, subtabs, and duplicate watermark overlays",
+        "[-] Merged Automation -> Combat and Cosmetics -> Visuals cleanly",
     })
 
-    createChangelogGroup(2, "[+] Core.xyz · Kicia v3 Integration", Color3.fromRGB(72, 245, 148), {
-        "[+] Integrated all 6 Kicia RIVALS tabs: Combat, Visuals, Player, Automation, World, Cosmetics",
-        "[+] Kept Core.xyz Pure Monochrome UI, Top Telemetry Pill, Home Showcase & Settings",
-        "[+] Unified Config Save/Load + JSON Export/Import & KeybindList HUD toggles",
-        "[+] Added live Full-UI Theme token synchronization across all Kicia panels",
+    createChangelogGroup(2, "[+] Core.xyz · 6-Tab Pure Monochrome UI", Color3.fromRGB(72, 245, 148), {
+        "[+] Unified tabs: Home, Combat, Visuals, Player, World, Settings (0 Subtabs)",
+        "[+] 2-Column Cut-In Section Boxes w/ inline Pinning, Keybinds & HSVA Color Pickers",
+        "[+] Live Search Filtering across all sections, Keybind List HUD & Modal Dialogs",
+        "[+] Unified Config Save/Load, JSON Export/Import & Full Theme Token Sync",
     })
 
-    createChangelogGroup(3, "[*] Engine Architecture", Color3.fromRGB(105, 205, 255), {
-        "[*] Stealth AC shield (LocalScript3, ScriptContext.Error, Kick, __namecall)",
-        "[*] Full subtab search, color pickers, keybinds, profiles & Unlock All ready",
+    createChangelogGroup(3, "[*] Engine & Mobile Hardening", Color3.fromRGB(105, 205, 255), {
+        "[*] Hardened executor hooks & metatable calls for PC and Delta Android",
+        "[*] Full Unlock All, 3D Skin/Wrap/Charm catalogs, ESP & Movement Recorder ready",
     })
 
     local function closeChangelogModal()
@@ -2503,7 +2503,7 @@ local function createTab(name, order, opts)
     local btn = Instance.new("TextButton")
     btn.Name = name .. "_TabBtn"
     btn.LayoutOrder = order
-    btn.Size = UDim2.new(0.125, -4, 1, 0)
+    btn.Size = UDim2.new(1 / 6, -4, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
     btn.BackgroundTransparency = 1
     btn.AutoButtonColor = false
@@ -3277,7 +3277,7 @@ do
         end)
     end
 
-    local function openColorPickerForSwatch(btn, currentColor, applyColorFn)
+    local function openColorPickerForSwatch(btn, currentColor, applyColorFn, initAlpha)
         if pickerPopup.Visible and pickerState.ActiveBtn == btn then
             pickerPopup.Visible = false
             pickerState.ActiveBtn = nil
@@ -3291,7 +3291,7 @@ do
         pickerState.H = h
         pickerState.S = s
         pickerState.V = v
-        pickerState.A = 1
+        pickerState.A = type(initAlpha) == "number" and math.clamp(initAlpha, 0, 1) or 1
         syncPickerVisuals(false)
         -- Position right next to the clicked swatch button if AbsolutePosition is available
         pcall(function()
@@ -3604,7 +3604,7 @@ do
         local titleBg = Instance.new("Frame")
         titleBg.Name = "SectionHeaderBadge"
         titleBg.Position = UDim2.fromOffset(10, -7)
-        titleBg.Size = UDim2.fromOffset(math.clamp(#tostring(sectionTitle) * 7 + 22, 54, 240), 14)
+        titleBg.Size = UDim2.fromOffset(math.clamp(#tostring(sectionTitle) * 7 + 22, 54, 310), 14)
         titleBg.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
         titleBg.BorderSizePixel = 0
         titleBg.ZIndex = 16
@@ -5205,11 +5205,42 @@ do
 end
 
 
-    -- Expose CoreBridge methods for Kicia Engine Integration
+    -- Expose CoreBridge methods & UI helpers for CoreAdapter Integration
     CoreBridge.MainWindow = UI.MainWindow
     CoreBridge.PagesHolder = UI.PagesHolder
     CoreBridge.ScreenGui = UI.ScreenGui
     CoreBridge.Notify = notify
+    CoreBridge._UI = {
+        Theme = Theme,
+        UI = UI,
+        State = State,
+        ConfigState = ConfigState,
+        tween = tween,
+        addStroke = addStroke,
+        addCorner = addCorner,
+        registerAccentObject = registerAccentObject,
+        makeDraggable = makeDraggable,
+        notify = notify,
+        createTab = createTab,
+        isPCDevice = isPCDevice,
+        bindConnection = bindConnection,
+        safeJsonEncode = safeJsonEncode,
+        safeJsonDecode = safeJsonDecode,
+        FastTween = FastTween,
+        SmoothTween = SmoothTween,
+        SpringTween = SpringTween,
+        LocalPlayer = LocalPlayer,
+    }
+    CoreBridge.InitFeatureTabs = function()
+        if CoreBridge._featureTabsBuilt then return end
+        CoreBridge._featureTabsBuilt = true
+        CoreBridge.FeaturePages = {
+            Combat = createTab("Combat", 2),
+            Visuals = createTab("Visuals", 3),
+            Player = createTab("Player", 4),
+            World = createTab("World", 5),
+        }
+    end
     CoreBridge.IsVisible = function()
         return State.uiVisible == true
     end
@@ -5220,7 +5251,7 @@ end
         end
     end
     CoreBridge.CreateHostTab = function(label, order)
-        return createTab(label, order, { isKiciaHost = true })
+        return createTab(label, order)
     end
     CoreBridge.SelectCoreTab = function(label)
         for _, t in ipairs(State.Tabs) do
@@ -5231,7 +5262,7 @@ end
         end
     end
     CoreBridge.BuildSettingsTab = function()
-        local SettingsTab = createTab("Settings", 8)
+        local SettingsTab = createTab("Settings", 6)
 do
     createLabel(SettingsTab, "Customizable Floating Pill & Telemetry (Max 3)")
 
@@ -6155,17 +6186,17 @@ do
     end)
 
 
+    createButton(SettingsTab, "View Changelog (" .. CHANGELOG_VERSION .. ")", function()
+        if UI.showChangelogModal then
+            UI.showChangelogModal(true)
+        end
+    end)
+
     local engineSec = UI.createSectionBox(SettingsTab, "Rivals Engine & HUD")
 
     createToggle(engineSec, "Show Keybind List HUD", true, function(val)
         if CoreBridge and CoreBridge.SetKeybindListEnabled then
             pcall(CoreBridge.SetKeybindListEnabled, val)
-        end
-    end)
-
-    createToggle(engineSec, "Show Engine Watermark", false, function(val)
-        if CoreBridge and CoreBridge.SetWatermarkEnabled then
-            pcall(CoreBridge.SetWatermarkEnabled, val)
         end
     end)
 
@@ -6198,15 +6229,10 @@ do
     end)
 
     createButton(engineSec, "Unload Core.xyz", function()
-        if getgenv and getgenv().CoreXYZ_PrevCleanup then
+        if CoreBridge and CoreBridge.UnloadEngine then
+            pcall(CoreBridge.UnloadEngine)
+        elseif getgenv and getgenv().CoreXYZ_PrevCleanup then
             pcall(getgenv().CoreXYZ_PrevCleanup)
-        end
-    end)
-
-
-    createButton(SettingsTab, "View Changelog (" .. CHANGELOG_VERSION .. ")", function()
-        if UI.showChangelogModal then
-            UI.showChangelogModal(true)
         end
     end)
 end
@@ -6246,7 +6272,7 @@ end
                 pcall(UI.showChangelogModal, false)
             end
         end)
-        notify("Core.xyz", "Core.xyz RIVALS loaded! Press RightShift or click the top pill to toggle.", 4)
+        notify("Core.xyz", "Core XYZ | Rivals Loaded Successfully!", 4)
     end
 
     CoreBridge.LaunchHub = launchMainHub
@@ -6432,6 +6458,3004 @@ do
     end)
 end
 
+end
+
+--------------------------------------------------------------------------------
+-- COREBRIDGE · UNIFIED 6-TAB ADAPTER (NO SUBTABS · FULL KICIA ENGINE BRIDGE)
+--------------------------------------------------------------------------------
+do -- CoreBridge._KeybindHUD
+    local U = CoreBridge._UI
+    local Theme = U.Theme
+    local UI = U.UI
+    local UIS = UserInputService
+
+    local KeyNames = {
+        [Enum.UserInputType.MouseButton1] = "MB1",
+        [Enum.UserInputType.MouseButton2] = "MB2",
+        [Enum.UserInputType.MouseButton3] = "MB3",
+        [Enum.KeyCode.LeftShift] = "LShift",
+        [Enum.KeyCode.RightShift] = "RShift",
+        [Enum.KeyCode.LeftControl] = "LCtrl",
+        [Enum.KeyCode.RightControl] = "RCtrl",
+        [Enum.KeyCode.LeftAlt] = "LAlt",
+        [Enum.KeyCode.RightAlt] = "RAlt",
+    }
+
+    local function formatKey(k)
+        if k == nil then return "None" end
+        if KeyNames[k] then return KeyNames[k] end
+        if typeof(k) == "EnumItem" then return tostring(k.Name) end
+        return tostring(k)
+    end
+
+    local hudFrame = Instance.new("Frame")
+    hudFrame.Name = "CoreKeybindHUD"
+    hudFrame.Position = UDim2.fromOffset(18, 128)
+    hudFrame.Size = UDim2.fromOffset(206, 26)
+    hudFrame.AutomaticSize = Enum.AutomaticSize.Y
+    hudFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+    hudFrame.BackgroundTransparency = 0.04
+    hudFrame.BorderSizePixel = 0
+    hudFrame.Visible = false
+    hudFrame.Active = true
+    hudFrame.ZIndex = 85
+    hudFrame.Parent = UI.ScreenGui
+    U.addCorner(hudFrame, 6)
+    local hudStroke = U.addStroke(hudFrame, Color3.fromRGB(68, 68, 68), 1, 0)
+
+    local hudHdr = Instance.new("TextLabel")
+    hudHdr.Name = "HUDHeader"
+    hudHdr.Size = UDim2.new(1, 0, 0, 22)
+    hudHdr.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
+    hudHdr.BackgroundTransparency = 0.1
+    hudHdr.BorderSizePixel = 0
+    hudHdr.Font = Enum.Font.Code
+    hudHdr.Text = "  KEYBINDS"
+    hudHdr.TextColor3 = Theme.White
+    hudHdr.TextSize = 10
+    hudHdr.TextXAlignment = Enum.TextXAlignment.Left
+    hudHdr.ZIndex = 86
+    hudHdr.Parent = hudFrame
+    U.addCorner(hudHdr, 6)
+
+    local hudLine = Instance.new("Frame")
+    hudLine.Position = UDim2.new(0, 0, 0, 22)
+    hudLine.Size = UDim2.new(1, 0, 0, 1)
+    hudLine.BackgroundColor3 = Theme.Accent
+    hudLine.BackgroundTransparency = 0.55
+    hudLine.BorderSizePixel = 0
+    hudLine.ZIndex = 87
+    hudLine.Parent = hudFrame
+    U.registerAccentObject(hudLine, "BackgroundColor3")
+
+    local hudBody = Instance.new("Frame")
+    hudBody.Name = "HUDBody"
+    hudBody.Position = UDim2.fromOffset(0, 23)
+    hudBody.Size = UDim2.new(1, 0, 0, 4)
+    hudBody.AutomaticSize = Enum.AutomaticSize.Y
+    hudBody.BackgroundTransparency = 1
+    hudBody.ZIndex = 86
+    hudBody.Parent = hudFrame
+
+    local hudPad = Instance.new("UIPadding")
+    hudPad.PaddingTop = UDim.new(0, 4)
+    hudPad.PaddingBottom = UDim.new(0, 5)
+    hudPad.PaddingLeft = UDim.new(0, 8)
+    hudPad.PaddingRight = UDim.new(0, 8)
+    hudPad.Parent = hudBody
+
+    local hudLayout = Instance.new("UIListLayout")
+    hudLayout.Padding = UDim.new(0, 3)
+    hudLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    hudLayout.Parent = hudBody
+
+    U.makeDraggable(hudHdr, hudFrame)
+
+    CoreBridge._keybindHudEnabled = true
+    CoreBridge._keybinds = {}
+    CoreBridge._capturingKeybind = nil
+    CoreBridge._captureArmTime = 0
+
+    local function updateHUD()
+        local activeCount = 0
+        for _, kb in ipairs(CoreBridge._keybinds) do
+            local show = kb.FeatureEnabled and kb.ShowInList and kb.Active and not kb.Invisible
+            if kb._hudRow then
+                kb._hudRow.Visible = show
+                if show then
+                    activeCount = activeCount + 1
+                    kb._hudValueLbl.Text = string.format("[%s] %s", formatKey(kb.Value.Key), tostring(kb.Value.Mode or "Toggle"))
+                end
+            end
+        end
+        hudFrame.Visible = (CoreBridge._keybindHudEnabled ~= false) and (activeCount > 0) and (U.State.isAuthorized == true)
+        hudStroke.Color = Color3.fromRGB(68, 68, 68)
+    end
+
+    local function registerKeybind(kb)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 15)
+        row.BackgroundTransparency = 1
+        row.Visible = false
+        row.ZIndex = 87
+        row.Parent = hudBody
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size = UDim2.new(1, -84, 1, 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Font = Enum.Font.Code
+        nameLbl.Text = tostring(kb.ListLabel or "Keybind")
+        nameLbl.TextColor3 = Theme.Silver
+        nameLbl.TextSize = 10
+        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.ZIndex = 88
+        nameLbl.Parent = row
+
+        local valLbl = Instance.new("TextLabel")
+        valLbl.AnchorPoint = Vector2.new(1, 0)
+        valLbl.Position = UDim2.fromScale(1, 0)
+        valLbl.Size = UDim2.new(0, 82, 1, 0)
+        valLbl.BackgroundTransparency = 1
+        valLbl.Font = Enum.Font.Code
+        valLbl.Text = "[None]"
+        valLbl.TextColor3 = Theme.Accent
+        valLbl.TextSize = 10
+        valLbl.TextXAlignment = Enum.TextXAlignment.Right
+        valLbl.ZIndex = 88
+        valLbl.Parent = row
+        U.registerAccentObject(valLbl, "TextColor3")
+
+        kb._hudRow = row
+        kb._hudValueLbl = valLbl
+        table.insert(CoreBridge._keybinds, kb)
+        updateHUD()
+    end
+
+    U.bindConnection("CoreAdapterKeybindBegan", UIS.InputBegan, function(input, gpe)
+        if not input then return end
+        local cap = CoreBridge._capturingKeybind
+        if cap then
+            if os.clock() - (CoreBridge._captureArmTime or 0) < 0.08 then return end
+            local kt = input.UserInputType
+            local kc = input.KeyCode
+            if kt == Enum.UserInputType.Keyboard then
+                if kc == Enum.KeyCode.Escape or kc == Enum.KeyCode.Backspace or kc == Enum.KeyCode.Delete then
+                    CoreBridge._capturingKeybind = nil
+                    cap:SetKey(nil)
+                    cap:_FinishCapture()
+                    return
+                elseif kc ~= Enum.KeyCode.Unknown then
+                    CoreBridge._capturingKeybind = nil
+                    cap:SetKey(kc)
+                    cap:_FinishCapture()
+                    return
+                end
+            elseif kt == Enum.UserInputType.MouseButton2 or kt == Enum.UserInputType.MouseButton3 or kt == Enum.UserInputType.MouseButton1 then
+                CoreBridge._capturingKeybind = nil
+                cap:SetKey(kt)
+                cap:_FinishCapture()
+                return
+            end
+            return
+        end
+
+        if gpe or UIS:GetFocusedTextBox() ~= nil or not U.State.isAuthorized then return end
+        for _, kb in ipairs(CoreBridge._keybinds) do
+            local key = kb.Value and kb.Value.Key
+            if key ~= nil and (input.KeyCode == key or input.UserInputType == key) then
+                kb:_OnKeyInput(true)
+            end
+        end
+    end)
+
+    U.bindConnection("CoreAdapterKeybindEnded", UIS.InputEnded, function(input)
+        if not input or CoreBridge._capturingKeybind then return end
+        for _, kb in ipairs(CoreBridge._keybinds) do
+            local key = kb.Value and kb.Value.Key
+            if key ~= nil and (input.KeyCode == key or input.UserInputType == key) then
+                kb:_OnKeyInput(false)
+            end
+        end
+    end)
+
+    CoreBridge._KeybindHUD = {
+        FormatKey = formatKey,
+        Update = updateHUD,
+        Register = registerKeybind,
+        DestroyHudFrame = function()
+            if hudFrame and hudFrame.Parent then hudFrame:Destroy() end
+        end,
+    }
+end
+
+do -- CoreBridge._Dialog
+    local U = CoreBridge._UI
+    local Theme = U.Theme
+    local UI = U.UI
+
+    local function showDialog(opts, builder)
+        opts = opts or {}
+        if CoreBridge._activeDialog then
+            pcall(function() CoreBridge._activeDialog:Close() end)
+        end
+
+        local backdrop = Instance.new("TextButton")
+        backdrop.Name = "CoreAdapterDialogBackdrop"
+        backdrop.Size = UDim2.fromScale(1, 1)
+        backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
+        backdrop.BackgroundTransparency = 0.42
+        backdrop.BorderSizePixel = 0
+        backdrop.Text = ""
+        backdrop.AutoButtonColor = false
+        backdrop.ZIndex = 128
+        backdrop.Parent = UI.ScreenGui
+
+        local modal = Instance.new("Frame")
+        modal.Name = "CoreAdapterDialog"
+        modal.AnchorPoint = Vector2.new(0.5, 0.5)
+        modal.Position = UDim2.fromScale(0.5, 0.5)
+        modal.Size = UDim2.fromOffset(440, 396)
+        modal.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        modal.BorderSizePixel = 0
+        modal.Active = true
+        modal.ClipsDescendants = true
+        modal.ZIndex = 130
+        modal.Parent = backdrop
+        U.addCorner(modal, 8)
+        U.addStroke(modal, Color3.fromRGB(85, 85, 85), 1, 0)
+
+        local hdr = Instance.new("Frame")
+        hdr.Size = UDim2.new(1, 0, 0, 44)
+        hdr.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        hdr.BorderSizePixel = 0
+        hdr.ZIndex = 131
+        hdr.Parent = modal
+
+        local hdrLine = Instance.new("Frame")
+        hdrLine.Position = UDim2.new(0, 0, 1, -1)
+        hdrLine.Size = UDim2.new(1, 0, 0, 1)
+        hdrLine.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
+        hdrLine.BorderSizePixel = 0
+        hdrLine.ZIndex = 132
+        hdrLine.Parent = hdr
+
+        local titleLbl = Instance.new("TextLabel")
+        titleLbl.Position = UDim2.fromOffset(14, 6)
+        titleLbl.Size = UDim2.new(1, -48, 0, 16)
+        titleLbl.BackgroundTransparency = 1
+        titleLbl.Font = Enum.Font.Code
+        titleLbl.Text = tostring(opts.Title or "Dialog")
+        titleLbl.TextColor3 = Theme.White
+        titleLbl.TextSize = 13
+        titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+        titleLbl.ZIndex = 132
+        titleLbl.Parent = hdr
+
+        local descLbl = Instance.new("TextLabel")
+        descLbl.Position = UDim2.fromOffset(14, 23)
+        descLbl.Size = UDim2.new(1, -48, 0, 14)
+        descLbl.BackgroundTransparency = 1
+        descLbl.Font = Enum.Font.Code
+        descLbl.Text = tostring(opts.Description or "")
+        descLbl.TextColor3 = Theme.Muted
+        descLbl.TextSize = 10
+        descLbl.TextXAlignment = Enum.TextXAlignment.Left
+        descLbl.ZIndex = 132
+        descLbl.Parent = hdr
+
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.AnchorPoint = Vector2.new(1, 0.5)
+        closeBtn.Position = UDim2.new(1, -10, 0.5, 0)
+        closeBtn.Size = UDim2.fromOffset(22, 22)
+        closeBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+        closeBtn.AutoButtonColor = false
+        closeBtn.Font = Enum.Font.Code
+        closeBtn.Text = "×"
+        closeBtn.TextColor3 = Theme.Silver
+        closeBtn.TextSize = 13
+        closeBtn.ZIndex = 133
+        closeBtn.Parent = hdr
+        U.addCorner(closeBtn, 4)
+        U.addStroke(closeBtn, Color3.fromRGB(58, 58, 58), 1, 0)
+
+        U.makeDraggable(hdr, modal)
+
+        local pageTabsBar = Instance.new("Frame")
+        pageTabsBar.Position = UDim2.fromOffset(12, 50)
+        pageTabsBar.Size = UDim2.new(1, -24, 0, 24)
+        pageTabsBar.BackgroundTransparency = 1
+        pageTabsBar.ZIndex = 131
+        pageTabsBar.Parent = modal
+
+        local tabLayout = Instance.new("UIListLayout")
+        tabLayout.FillDirection = Enum.FillDirection.Horizontal
+        tabLayout.Padding = UDim.new(0, 6)
+        tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        tabLayout.Parent = pageTabsBar
+
+        local bodyHolder = Instance.new("Frame")
+        bodyHolder.Position = UDim2.fromOffset(12, 80)
+        bodyHolder.Size = UDim2.new(1, -24, 1, -128)
+        bodyHolder.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+        bodyHolder.BorderSizePixel = 0
+        bodyHolder.ClipsDescendants = true
+        bodyHolder.ZIndex = 131
+        bodyHolder.Parent = modal
+        U.addCorner(bodyHolder, 6)
+        U.addStroke(bodyHolder, Color3.fromRGB(44, 44, 44), 1, 0)
+
+        local footer = Instance.new("Frame")
+        footer.AnchorPoint = Vector2.new(0, 1)
+        footer.Position = UDim2.new(0, 12, 1, -10)
+        footer.Size = UDim2.new(1, -24, 0, 28)
+        footer.BackgroundTransparency = 1
+        footer.ZIndex = 131
+        footer.Parent = modal
+
+        local actionBtn = Instance.new("TextButton")
+        actionBtn.AnchorPoint = Vector2.new(1, 0.5)
+        actionBtn.Position = UDim2.new(1, 0, 0.5, 0)
+        actionBtn.Size = UDim2.fromOffset(146, 26)
+        actionBtn.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+        actionBtn.AutoButtonColor = false
+        actionBtn.Font = Enum.Font.Code
+        actionBtn.Text = "Confirm"
+        actionBtn.TextColor3 = Theme.White
+        actionBtn.TextSize = 11
+        actionBtn.ZIndex = 132
+        actionBtn.Parent = footer
+        U.addCorner(actionBtn, 5)
+        local actionStroke = U.addStroke(actionBtn, Theme.Accent, 1, 0.2)
+
+        local cancelConfirmBtn = Instance.new("TextButton")
+        cancelConfirmBtn.AnchorPoint = Vector2.new(1, 0.5)
+        cancelConfirmBtn.Position = UDim2.new(1, -154, 0.5, 0)
+        cancelConfirmBtn.Size = UDim2.fromOffset(82, 26)
+        cancelConfirmBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+        cancelConfirmBtn.AutoButtonColor = false
+        cancelConfirmBtn.Font = Enum.Font.Code
+        cancelConfirmBtn.Text = "Back"
+        cancelConfirmBtn.TextColor3 = Theme.Silver
+        cancelConfirmBtn.TextSize = 11
+        cancelConfirmBtn.Visible = false
+        cancelConfirmBtn.ZIndex = 132
+        cancelConfirmBtn.Parent = footer
+        U.addCorner(cancelConfirmBtn, 5)
+        U.addStroke(cancelConfirmBtn, Color3.fromRGB(58, 58, 58), 1, 0)
+
+        local confirmLbl = Instance.new("TextLabel")
+        confirmLbl.Position = UDim2.fromOffset(0, 0)
+        confirmLbl.Size = UDim2.new(1, -242, 1, 0)
+        confirmLbl.BackgroundTransparency = 1
+        confirmLbl.Font = Enum.Font.Code
+        confirmLbl.Text = ""
+        confirmLbl.TextColor3 = Color3.fromRGB(255, 190, 90)
+        confirmLbl.TextSize = 10
+        confirmLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        confirmLbl.TextXAlignment = Enum.TextXAlignment.Left
+        confirmLbl.Visible = false
+        confirmLbl.ZIndex = 132
+        confirmLbl.Parent = footer
+
+        local trove = Trove.new("CoreDialog")
+        local pages = {}
+        local activePage = nil
+        local confirming = false
+
+        local dialogObj = {}
+        function dialogObj:Close()
+            if CoreBridge._activeDialog == dialogObj then
+                CoreBridge._activeDialog = nil
+            end
+            trove:Destroy()
+            if backdrop and backdrop.Parent then backdrop:Destroy() end
+        end
+
+        local function syncFooter(pg)
+            if not pg then return end
+            local enabled = pg._actionEnabled ~= false
+            local isDanger = pg._variant == "danger"
+            actionBtn.AutoButtonColor = false
+            cancelConfirmBtn.Visible = confirming
+            confirmLbl.Visible = confirming
+            if confirming and pg._confirmation then
+                local c = pg._confirmation
+                local d = type(c.Description) == "function" and c.Description() or (c.Description or c.Title or "Confirm?")
+                confirmLbl.Text = tostring(d)
+                actionBtn.Text = tostring(c.ActionText or "Confirm")
+                actionBtn.BackgroundColor3 = isDanger and Color3.fromRGB(115, 28, 36) or Color3.fromRGB(36, 36, 36)
+                actionBtn.TextColor3 = Theme.White
+                actionStroke.Color = isDanger and Theme.Error or Theme.Accent
+            else
+                actionBtn.Text = tostring(pg._actionText or "Done")
+                actionBtn.BackgroundColor3 = enabled and (isDanger and Color3.fromRGB(65, 20, 24) or Color3.fromRGB(28, 28, 28)) or Color3.fromRGB(16, 16, 16)
+                actionBtn.TextColor3 = enabled and Theme.White or Theme.Muted
+                actionStroke.Color = enabled and (isDanger and Theme.Error or Theme.Accent) or Color3.fromRGB(48, 48, 48)
+            end
+        end
+
+        local function selectPage(pg)
+            activePage = pg
+            confirming = false
+            for _, p in ipairs(pages) do
+                p._scroll.Visible = (p == pg)
+                if p._tabBtn then
+                    p._tabBtn.BackgroundColor3 = (p == pg) and Color3.fromRGB(32, 32, 32) or Color3.fromRGB(16, 16, 16)
+                    p._tabBtn.TextColor3 = (p == pg) and Theme.White or Theme.Muted
+                    p._tabStroke.Color = (p == pg) and Theme.Accent or Color3.fromRGB(48, 48, 48)
+                end
+            end
+            if pg._description and pg._description ~= "" then
+                descLbl.Text = tostring(pg._description)
+            end
+            if pg._onOpen then pcall(pg._onOpen) end
+            syncFooter(pg)
+        end
+
+        function dialogObj:AddPage(pOpts, buildFn)
+            pOpts = pOpts or {}
+            local scroll = Instance.new("ScrollingFrame")
+            scroll.Size = UDim2.fromScale(1, 1)
+            scroll.BackgroundTransparency = 1
+            scroll.BorderSizePixel = 0
+            scroll.ScrollBarThickness = 2
+            scroll.ScrollBarImageColor3 = Theme.Silver
+            scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+            scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+            scroll.Visible = false
+            scroll.ZIndex = 132
+            scroll.Parent = bodyHolder
+
+            local pad = Instance.new("UIPadding")
+            pad.PaddingTop = UDim.new(0, 8)
+            pad.PaddingBottom = UDim.new(0, 8)
+            pad.PaddingLeft = UDim.new(0, 10)
+            pad.PaddingRight = UDim.new(0, 10)
+            pad.Parent = scroll
+
+            local list = Instance.new("UIListLayout")
+            list.Padding = UDim.new(0, 6)
+            list.SortOrder = Enum.SortOrder.LayoutOrder
+            list.Parent = scroll
+
+            local tabBtn = Instance.new("TextButton")
+            tabBtn.LayoutOrder = #pages + 1
+            tabBtn.Size = UDim2.fromOffset(172, 24)
+            tabBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+            tabBtn.AutoButtonColor = false
+            tabBtn.Font = Enum.Font.Code
+            tabBtn.Text = (pOpts.Glyph and (tostring(pOpts.Glyph) .. " ") or "") .. tostring(pOpts.Title or ("Page " .. tostring(#pages + 1)))
+            tabBtn.TextColor3 = Theme.Muted
+            tabBtn.TextSize = 11
+            tabBtn.ZIndex = 132
+            tabBtn.Parent = pageTabsBar
+            U.addCorner(tabBtn, 4)
+            local tabStroke = U.addStroke(tabBtn, Color3.fromRGB(48, 48, 48), 1, 0)
+
+            local secAdapter = CoreBridge._MakeSectionAdapter({
+                _menu = CoreBridge.Menu,
+                _trove = trove:Extend(),
+                _container = scroll,
+                _zBase = 133,
+            })
+
+            local pageObj = {
+                _scroll = scroll,
+                _tabBtn = tabBtn,
+                _tabStroke = tabStroke,
+                _title = pOpts.Title,
+                _description = pOpts.Description,
+                _actionText = pOpts.ActionText or "Confirm",
+                _variant = pOpts.Variant,
+                _confirmation = pOpts.Confirmation,
+                _actionEnabled = pOpts.ActionEnabled ~= false,
+                _onOpen = pOpts.OnOpen,
+                _onAction = pOpts.OnAction,
+            }
+            function pageObj:SetActionEnabled(v)
+                self._actionEnabled = (v == true)
+                if activePage == self then syncFooter(self) end
+            end
+
+            table.insert(pages, pageObj)
+            tabBtn.MouseButton1Click:Connect(function()
+                selectPage(pageObj)
+            end)
+            if buildFn then
+                buildFn(secAdapter, pageObj)
+            end
+            if #pages == 1 then
+                selectPage(pageObj)
+            end
+            return pageObj
+        end
+
+        actionBtn.MouseButton1Click:Connect(function()
+            if not activePage or activePage._actionEnabled == false then return end
+            if activePage._confirmation and not confirming then
+                confirming = true
+                syncFooter(activePage)
+                return
+            end
+            if activePage._onAction then
+                local ok, res = pcall(activePage._onAction)
+                if ok and res == true then
+                    confirming = false
+                    if activePage._onOpen then pcall(activePage._onOpen) end
+                    syncFooter(activePage)
+                else
+                    confirming = false
+                    syncFooter(activePage)
+                end
+            else
+                dialogObj:Close()
+            end
+        end)
+
+        cancelConfirmBtn.MouseButton1Click:Connect(function()
+            confirming = false
+            syncFooter(activePage)
+        end)
+
+        closeBtn.MouseButton1Click:Connect(function()
+            dialogObj:Close()
+        end)
+
+        CoreBridge._activeDialog = dialogObj
+        if builder then builder(dialogObj) end
+        return dialogObj
+    end
+
+    CoreBridge._Dialog = { Show = showDialog }
+end
+
+do -- CoreBridge._WidgetsCore
+    local U = CoreBridge._UI
+    local Theme = U.Theme
+    local UI = U.UI
+    local tween = U.tween
+    local FastTween = U.FastTween
+
+    local function formatStep(val, step)
+        val = tonumber(val) or 0
+        step = tonumber(step) or 1
+        if step >= 1 and math.floor(step) == step then
+            return tostring(math.round(val))
+        end
+        local dec = 2
+        if step > 0 then
+            dec = math.clamp(math.ceil(-math.log10(step) - 1e-6), 1, 5)
+        end
+        return string.format("%." .. dec .. "f", val)
+    end
+
+    local function snapStep(val, minV, maxV, step)
+        step = (type(step) == "number" and step > 0) and step or 1
+        local snapped = minV + math.round((val - minV) / step) * step
+        return math.clamp(snapped, minV, maxV)
+    end
+
+    local function getOrMakeAccessoryBar(rowFrame, zBase)
+        if not rowFrame then return nil end
+        local bar = rowFrame:FindFirstChild("AccessoryBar")
+        if not bar then
+            bar = Instance.new("Frame")
+            bar.Name = "AccessoryBar"
+            bar.AnchorPoint = Vector2.new(1, 0.5)
+            bar.Position = UDim2.new(1, -2, 0.5, 0)
+            bar.Size = UDim2.fromOffset(0, 18)
+            bar.AutomaticSize = Enum.AutomaticSize.X
+            bar.BackgroundTransparency = 1
+            bar.ZIndex = (zBase or 15) + 2
+            bar.Parent = rowFrame
+
+            local lay = Instance.new("UIListLayout")
+            lay.FillDirection = Enum.FillDirection.Horizontal
+            lay.HorizontalAlignment = Enum.HorizontalAlignment.Right
+            lay.VerticalAlignment = Enum.VerticalAlignment.Center
+            lay.Padding = UDim.new(0, 4)
+            lay.SortOrder = Enum.SortOrder.LayoutOrder
+            lay.Parent = bar
+        end
+        return bar
+    end
+
+    local function attachPinBadge(trove, rowFrame, config, path, zBase)
+        if not (config and path and config.Pins and config.Pins.CanPin) then return end
+        local okCan, canPin = pcall(config.Pins.CanPin, path)
+        if not okCan or not canPin then return end
+        local bar = getOrMakeAccessoryBar(rowFrame, zBase)
+        if not bar then return end
+
+        local btn = Instance.new("TextButton")
+        btn.Name = "PinBadge"
+        btn.LayoutOrder = 1
+        btn.Size = UDim2.fromOffset(18, 14)
+        btn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        btn.AutoButtonColor = false
+        btn.Font = Enum.Font.Code
+        btn.Text = "P"
+        btn.TextSize = 9
+        btn.ZIndex = (zBase or 15) + 3
+        btn.Parent = bar
+        U.addCorner(btn, 3)
+        local st = U.addStroke(btn, Color3.fromRGB(52, 52, 52), 1, 0)
+
+        local function syncPin()
+            local ok, pinned = pcall(config.Pins.IsPinned, path)
+            local active = ok and pinned == true
+            btn.BackgroundColor3 = active and Color3.fromRGB(32, 32, 32) or Color3.fromRGB(16, 16, 16)
+            btn.TextColor3 = active and Theme.Accent or Color3.fromRGB(130, 130, 130)
+            st.Color = active and Theme.Accent or Color3.fromRGB(52, 52, 52)
+        end
+
+        btn.MouseButton1Click:Connect(function()
+            pcall(config.Pins.Toggle, path)
+        end)
+        if config.Pins.Changed then
+            trove:Connect(config.Pins.Changed, syncPin)
+        end
+        syncPin()
+    end
+
+    local function bindControl(sec, trove, ctrl, opts, debounce)
+        local config = sec._menu and sec._menu:GetConfig()
+        if config ~= nil and opts and opts.Config ~= nil then
+            local pMod = tbl17.P()
+            if pMod and pMod.bind then
+                pMod.bind(trove, config, ctrl, opts.Config, debounce and { Debounce = true } or opts)
+            end
+            attachPinBadge(trove, ctrl.Row, config, opts.Config, sec._zBase)
+        end
+    end
+
+    local function wrapRowObject(rowFrame, titleLbl)
+        if not rowFrame then return nil end
+        return setmetatable({
+            _frame = rowFrame,
+            _titleLbl = titleLbl,
+            SetVisible = function(s, v) rowFrame.Visible = (v == true) end,
+            SetLabel = function(s, txt)
+                if s._titleLbl then s._titleLbl.Text = tostring(txt or "") end
+            end,
+            SetTooltip = function() end,
+        }, { __index = rowFrame })
+    end
+
+    local function addCommonMethods(obj, rowFrame, titleLbl)
+        function obj:OnChanged(fn)
+            self._trove:Connect(self.Changed, fn)
+            return self
+        end
+        function obj:Connect(sig, fn)
+            if sig and fn then self._trove:Connect(sig, fn) end
+            return self
+        end
+        function obj:SetVisible(v)
+            if rowFrame then rowFrame.Visible = (v == true) end
+            return self
+        end
+        function obj:SetLabel(txt)
+            if titleLbl then titleLbl.Text = tostring(txt or "") end
+            return self
+        end
+        function obj:SetTooltip() return self end
+        function obj:Destroy()
+            if self._trove then self._trove:Destroy() end
+            if rowFrame and rowFrame.Parent then rowFrame:Destroy() end
+        end
+        return obj
+    end
+
+    local function createToggle(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local initVal = opts.Default == true
+
+        local row = Instance.new("TextButton")
+        row.Name = "Toggle_" .. tostring(opts.Label or "Item")
+        row.Size = UDim2.new(1, 0, 0, 20)
+        row.BackgroundTransparency = 1
+        row.AutoButtonColor = false
+        row.Text = ""
+        row.ZIndex = z
+        row.Parent = sec._container
+
+        local box = Instance.new("Frame")
+        box.AnchorPoint = Vector2.new(0, 0.5)
+        box.Position = UDim2.new(0, 2, 0.5, 0)
+        box.Size = UDim2.fromOffset(11, 11)
+        box.BackgroundColor3 = Color3.fromRGB(4, 4, 4)
+        box.BorderSizePixel = 0
+        box.ZIndex = z + 1
+        box.Parent = row
+
+        local fill = Instance.new("Frame")
+        fill.Position = UDim2.fromOffset(1, 1)
+        fill.Size = UDim2.new(1, -2, 1, -2)
+        fill.BackgroundColor3 = initVal and Theme.Accent or Color3.fromRGB(18, 18, 18)
+        fill.BorderColor3 = Color3.fromRGB(52, 52, 52)
+        fill.BorderSizePixel = 1
+        fill.ZIndex = z + 2
+        fill.Parent = box
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(18, 0)
+        lbl.Size = UDim2.new(1, -90, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "Toggle")
+        lbl.TextColor3 = initVal and Color3.fromRGB(240, 240, 240) or Color3.fromRGB(185, 185, 185)
+        lbl.TextStrokeTransparency = 0.5
+        lbl.TextSize = 12
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = row
+
+        local obj = {
+            _trove = trove,
+            Kind = "Toggle",
+            Value = initVal,
+            Row = wrapRowObject(row, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        function obj:Set(val, silent)
+            local b = (val == true)
+            self.Value = b
+            tween(fill, FastTween, { BackgroundColor3 = b and Theme.Accent or Color3.fromRGB(18, 18, 18) })
+            tween(lbl, FastTween, { TextColor3 = b and Color3.fromRGB(240, 240, 240) or Color3.fromRGB(185, 185, 185) })
+            self.ValueChanged:Fire(b)
+            if not silent then
+                if self._onChanged then self._onChanged(b) end
+                self.Changed:Fire(b)
+            end
+        end
+
+        row.MouseButton1Click:Connect(function()
+            obj:Set(not obj.Value, false)
+        end)
+
+        addCommonMethods(obj, row, lbl)
+        bindControl(sec, trove, obj, opts, false)
+        return obj
+    end
+
+    local function createLabel(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+
+        local row = Instance.new("Frame")
+        row.Name = "LabelRow"
+        row.Size = UDim2.new(1, 0, 0, 18)
+        row.AutomaticSize = Enum.AutomaticSize.Y
+        row.BackgroundTransparency = 1
+        row.ZIndex = z
+        row.Parent = sec._container
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(2, 0)
+        lbl.Size = UDim2.new(1, -68, 0, 16)
+        lbl.AutomaticSize = Enum.AutomaticSize.Y
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "")
+        lbl.TextColor3 = opts.TextColor or Theme.Silver
+        lbl.TextStrokeTransparency = 0.5
+        lbl.TextSize = 11
+        lbl.TextWrapped = true
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = row
+
+        local obj = {
+            _trove = trove,
+            Kind = "Label",
+            Row = wrapRowObject(row, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+        }
+        addCommonMethods(obj, row, lbl)
+        return obj
+    end
+
+    local function createDivider(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+
+        local row = Instance.new("Frame")
+        row.Name = "DividerRow"
+        row.Size = UDim2.new(1, 0, 0, 14)
+        row.BackgroundTransparency = 1
+        row.ZIndex = z
+        row.Parent = sec._container
+
+        local line = Instance.new("Frame")
+        line.AnchorPoint = Vector2.new(0, 0.5)
+        line.Position = UDim2.new(0, 0, 0.5, 0)
+        line.Size = UDim2.new(1, 0, 0, 1)
+        line.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
+        line.BorderSizePixel = 0
+        line.ZIndex = z
+        line.Parent = row
+
+        local lbl
+        if opts.Label and opts.Label ~= "" then
+            lbl = Instance.new("TextLabel")
+            lbl.Position = UDim2.fromOffset(8, 0)
+            lbl.Size = UDim2.fromOffset(0, 14)
+            lbl.AutomaticSize = Enum.AutomaticSize.X
+            lbl.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+            lbl.BorderSizePixel = 0
+            lbl.Font = Enum.Font.Code
+            lbl.Text = " " .. tostring(opts.Label) .. " "
+            lbl.TextColor3 = Theme.Muted
+            lbl.TextSize = 10
+            lbl.ZIndex = z + 1
+            lbl.Parent = row
+        end
+
+        local obj = { _trove = trove, Kind = "Divider", Row = wrapRowObject(row, lbl) }
+        addCommonMethods(obj, row, lbl)
+        return obj
+    end
+
+    local function createButton(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local isPrimary = opts.Variant == "primary"
+
+        local btn = Instance.new("TextButton")
+        btn.Name = "Btn_" .. tostring(opts.Label or "Button")
+        btn.Size = UDim2.new(1, 0, 0, 22)
+        btn.BackgroundColor3 = isPrimary and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(16, 16, 16)
+        btn.BorderColor3 = isPrimary and Color3.fromRGB(110, 110, 110) or Color3.fromRGB(52, 52, 52)
+        btn.BorderSizePixel = 1
+        btn.AutoButtonColor = false
+        btn.Font = Enum.Font.Code
+        btn.Text = tostring(opts.Label or "Action")
+        btn.TextColor3 = Theme.White
+        btn.TextSize = 11
+        btn.ZIndex = z
+        btn.Parent = sec._container
+        local st = U.addStroke(btn, Color3.fromRGB(4, 4, 4), 1, 0)
+
+        local obj = {
+            _trove = trove,
+            Kind = "Button",
+            Row = wrapRowObject(btn, btn),
+            Clicked = trove:Add(Signal.new()),
+            _confirmArmed = false,
+            _label = tostring(opts.Label or "Action"),
+        }
+        if opts.OnClick then trove:Connect(obj.Clicked, opts.OnClick) end
+
+        function obj:OnClick(fn)
+            self._trove:Connect(self.Clicked, fn)
+            return self
+        end
+        function obj:SetLabel(txt)
+            self._label = tostring(txt or "")
+            btn.Text = self._label
+            return self
+        end
+
+        btn.MouseEnter:Connect(function()
+            tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(28, 28, 28) })
+            st.Color = Theme.Accent
+        end)
+        btn.MouseLeave:Connect(function()
+            tween(btn, FastTween, { BackgroundColor3 = isPrimary and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(16, 16, 16) })
+            st.Color = Color3.fromRGB(4, 4, 4)
+        end)
+        btn.MouseButton1Click:Connect(function()
+            if opts.Confirm then
+                if not obj._confirmArmed then
+                    obj._confirmArmed = true
+                    btn.Text = "Click again to confirm"
+                    btn.TextColor3 = Color3.fromRGB(255, 190, 90)
+                    task.delay(3, function()
+                        if obj._confirmArmed and btn and btn.Parent then
+                            obj._confirmArmed = false
+                            btn.Text = obj._label
+                            btn.TextColor3 = Theme.White
+                        end
+                    end)
+                    return
+                end
+                obj._confirmArmed = false
+                btn.Text = obj._label
+                btn.TextColor3 = Theme.White
+            end
+            obj.Clicked:Fire()
+        end)
+
+        addCommonMethods(obj, btn, btn)
+        return obj
+    end
+
+    local function createSlider(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local minV = tonumber(opts.Min) or 0
+        local maxV = tonumber(opts.Max) or 100
+        local step = tonumber(opts.Step) or 1
+        local suffix = tostring(opts.Suffix or "")
+        local initVal = snapStep(tonumber(opts.Default) or minV, minV, maxV, step)
+
+        local container = Instance.new("Frame")
+        container.Name = "Slider_" .. tostring(opts.Label or "Slider")
+        container.Size = UDim2.new(1, 0, 0, 29)
+        container.BackgroundTransparency = 1
+        container.ZIndex = z
+        container.Parent = sec._container
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(2, 0)
+        lbl.Size = UDim2.new(1, -68, 0, 14)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "Slider")
+        lbl.TextColor3 = Color3.fromRGB(205, 205, 205)
+        lbl.TextStrokeTransparency = 0.5
+        lbl.TextSize = 11
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = container
+
+        local valBox = Instance.new("TextBox")
+        valBox.AnchorPoint = Vector2.new(1, 0)
+        valBox.Position = UDim2.new(1, -2, 0, 0)
+        valBox.Size = UDim2.fromOffset(64, 14)
+        valBox.BackgroundTransparency = 1
+        valBox.ClearTextOnFocus = false
+        valBox.Font = Enum.Font.Code
+        valBox.Text = formatStep(initVal, step) .. suffix
+        valBox.TextColor3 = Theme.Silver
+        valBox.TextSize = 11
+        valBox.TextXAlignment = Enum.TextXAlignment.Right
+        valBox.ZIndex = z + 2
+        valBox.Parent = container
+
+        local track = Instance.new("TextButton")
+        track.Position = UDim2.fromOffset(2, 16)
+        track.Size = UDim2.new(1, -4, 0, 9)
+        track.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        track.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        track.BorderSizePixel = 1
+        track.AutoButtonColor = false
+        track.Text = ""
+        track.ZIndex = z + 1
+        track.Parent = container
+        U.addStroke(track, Color3.fromRGB(4, 4, 4), 1, 0)
+
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.fromScale(math.clamp((initVal - minV) / math.max(maxV - minV, 1e-6), 0, 1), 1)
+        fill.BackgroundColor3 = Theme.Accent
+        fill.BorderSizePixel = 0
+        fill.ZIndex = z + 2
+        fill.Parent = track
+        U.registerAccentObject(fill, "BackgroundColor3")
+
+        local obj = {
+            _trove = trove,
+            Kind = "Slider",
+            Value = initVal,
+            Row = wrapRowObject(container, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        function obj:Set(val, silent)
+            local n = snapStep(tonumber(val) or self.Value, minV, maxV, step)
+            self.Value = n
+            local pct = math.clamp((n - minV) / math.max(maxV - minV, 1e-6), 0, 1)
+            fill.Size = UDim2.fromScale(pct, 1)
+            if not valBox:IsFocused() then
+                valBox.Text = formatStep(n, step) .. suffix
+            end
+            self.ValueChanged:Fire(n)
+            if not silent then
+                if self._onChanged then self._onChanged(n) end
+                self.Changed:Fire(n)
+            end
+        end
+
+        local dragging = false
+        local function updateAt(xPos)
+            local width = (track.AbsoluteSize and track.AbsoluteSize.X > 0) and track.AbsoluteSize.X or 160
+            local pct = math.clamp((xPos - (track.AbsolutePosition and track.AbsolutePosition.X or 0)) / width, 0, 1)
+            obj:Set(minV + (maxV - minV) * pct, false)
+        end
+
+        track.InputBegan:Connect(function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                updateAt(inp.Position.X)
+            end
+        end)
+        trove:Connect(UserInputService.InputChanged, function(inp)
+            if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+                updateAt(inp.Position.X)
+            end
+        end)
+        trove:Connect(UserInputService.InputEnded, function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+
+        valBox.FocusLost:Connect(function()
+            local n = tonumber((valBox.Text or ""):match("[%-%d%.]+"))
+            if n then obj:Set(n, false) else valBox.Text = formatStep(obj.Value, step) .. suffix end
+        end)
+
+        addCommonMethods(obj, container, lbl)
+        bindControl(sec, trove, obj, opts, true)
+        return obj
+    end
+
+    local function createRangeSlider(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local minV = tonumber(opts.Min) or 0
+        local maxV = tonumber(opts.Max) or 100
+        local step = tonumber(opts.Step) or 1
+        local def = type(opts.Default) == "table" and opts.Default or { Min = minV, Max = maxV }
+        local lo = snapStep(tonumber(def.Min) or minV, minV, maxV, step)
+        local hi = math.max(lo, snapStep(tonumber(def.Max) or maxV, minV, maxV, step))
+
+        local container = Instance.new("Frame")
+        container.Name = "RangeSlider_" .. tostring(opts.Label or "Range")
+        container.Size = UDim2.new(1, 0, 0, 29)
+        container.BackgroundTransparency = 1
+        container.ZIndex = z
+        container.Parent = sec._container
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(2, 0)
+        lbl.Size = UDim2.new(1, -88, 0, 14)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "Range")
+        lbl.TextColor3 = Color3.fromRGB(205, 205, 205)
+        lbl.TextSize = 11
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = container
+
+        local valLbl = Instance.new("TextLabel")
+        valLbl.AnchorPoint = Vector2.new(1, 0)
+        valLbl.Position = UDim2.new(1, -2, 0, 0)
+        valLbl.Size = UDim2.fromOffset(86, 14)
+        valLbl.BackgroundTransparency = 1
+        valLbl.Font = Enum.Font.Code
+        valLbl.Text = formatStep(lo, step) .. "–" .. formatStep(hi, step)
+        valLbl.TextColor3 = Theme.Silver
+        valLbl.TextSize = 10
+        valLbl.TextXAlignment = Enum.TextXAlignment.Right
+        valLbl.ZIndex = z + 1
+        valLbl.Parent = container
+
+        local track = Instance.new("TextButton")
+        track.Position = UDim2.fromOffset(2, 16)
+        track.Size = UDim2.new(1, -4, 0, 9)
+        track.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        track.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        track.BorderSizePixel = 1
+        track.AutoButtonColor = false
+        track.Text = ""
+        track.ZIndex = z + 1
+        track.Parent = container
+        U.addStroke(track, Color3.fromRGB(4, 4, 4), 1, 0)
+
+        local fill = Instance.new("Frame")
+        fill.BackgroundColor3 = Theme.Accent
+        fill.BorderSizePixel = 0
+        fill.ZIndex = z + 2
+        fill.Parent = track
+        U.registerAccentObject(fill, "BackgroundColor3")
+
+        local function syncVisuals(a, b)
+            local span = math.max(maxV - minV, 1e-6)
+            local p1 = math.clamp((a - minV) / span, 0, 1)
+            local p2 = math.clamp((b - minV) / span, 0, 1)
+            fill.Position = UDim2.fromScale(p1, 0)
+            fill.Size = UDim2.fromScale(math.max(0.02, p2 - p1), 1)
+            valLbl.Text = formatStep(a, step) .. "–" .. formatStep(b, step)
+        end
+        syncVisuals(lo, hi)
+
+        local obj = {
+            _trove = trove,
+            Kind = "RangeSlider",
+            Value = { Min = lo, Max = hi },
+            Row = wrapRowObject(container, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        function obj:Set(val, silent)
+            if type(val) ~= "table" then return end
+            local a = snapStep(tonumber(val.Min) or self.Value.Min, minV, maxV, step)
+            local b = snapStep(tonumber(val.Max) or self.Value.Max, minV, maxV, step)
+            if a > b then a, b = b, a end
+            self.Value = { Min = a, Max = b }
+            syncVisuals(a, b)
+            self.ValueChanged:Fire(self.Value)
+            if not silent then
+                if self._onChanged then self._onChanged(self.Value) end
+                self.Changed:Fire(self.Value)
+            end
+        end
+
+        local activeHandle = nil
+        local function updateAt(xPos)
+            local width = (track.AbsoluteSize and track.AbsoluteSize.X > 0) and track.AbsoluteSize.X or 160
+            local pct = math.clamp((xPos - (track.AbsolutePosition and track.AbsolutePosition.X or 0)) / width, 0, 1)
+            local v = snapStep(minV + (maxV - minV) * pct, minV, maxV, step)
+            if activeHandle == "min" then
+                obj:Set({ Min = math.min(v, obj.Value.Max), Max = obj.Value.Max }, false)
+            else
+                obj:Set({ Min = obj.Value.Min, Max = math.max(v, obj.Value.Min) }, false)
+            end
+        end
+
+        track.InputBegan:Connect(function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+                local width = (track.AbsoluteSize and track.AbsoluteSize.X > 0) and track.AbsoluteSize.X or 160
+                local pct = math.clamp((inp.Position.X - (track.AbsolutePosition and track.AbsolutePosition.X or 0)) / width, 0, 1)
+                local v = minV + (maxV - minV) * pct
+                activeHandle = (math.abs(v - obj.Value.Min) <= math.abs(v - obj.Value.Max)) and "min" or "max"
+                updateAt(inp.Position.X)
+            end
+        end)
+        trove:Connect(UserInputService.InputChanged, function(inp)
+            if activeHandle and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+                updateAt(inp.Position.X)
+            end
+        end)
+        trove:Connect(UserInputService.InputEnded, function(inp)
+            if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+                activeHandle = nil
+            end
+        end)
+
+        addCommonMethods(obj, container, lbl)
+        bindControl(sec, trove, obj, opts, true)
+        return obj
+    end
+
+    local function createTextBox(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local initText = tostring(opts.Default or "")
+
+        local row = Instance.new("Frame")
+        row.Name = "TextBox_" .. tostring(opts.Label or "Input")
+        row.Size = UDim2.new(1, 0, 0, 38)
+        row.BackgroundTransparency = 1
+        row.ZIndex = z
+        row.Parent = sec._container
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(2, 0)
+        lbl.Size = UDim2.new(1, -4, 0, 14)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "Text")
+        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
+        lbl.TextSize = 11
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = row
+
+        local box = Instance.new("TextBox")
+        box.Position = UDim2.fromOffset(0, 16)
+        box.Size = UDim2.new(1, 0, 0, 20)
+        box.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        box.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        box.BorderSizePixel = 1
+        box.ClearTextOnFocus = false
+        box.Font = Enum.Font.Code
+        box.PlaceholderText = tostring(opts.Placeholder or "...")
+        box.PlaceholderColor3 = Theme.Muted
+        box.Text = initText
+        box.TextColor3 = Theme.White
+        box.TextSize = 11
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        box.ZIndex = z + 1
+        box.Parent = row
+        U.addStroke(box, Color3.fromRGB(4, 4, 4), 1, 0)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.PaddingRight = UDim.new(0, 6)
+        pad.Parent = box
+
+        local silentGuard = false
+        local obj = {
+            _trove = trove,
+            Kind = "TextBox",
+            Value = initText,
+            Row = wrapRowObject(row, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        function obj:Set(val, silent)
+            local str = tostring(val or "")
+            self.Value = str
+            if box.Text ~= str then
+                silentGuard = true
+                box.Text = str
+                silentGuard = false
+            end
+            self.ValueChanged:Fire(str)
+            if not silent then
+                if self._onChanged then self._onChanged(str) end
+                self.Changed:Fire(str)
+            end
+        end
+
+        if not opts.FocusLostOnly and box.GetPropertyChangedSignal then
+            pcall(function()
+                box:GetPropertyChangedSignal("Text"):Connect(function()
+                    if not silentGuard then obj:Set(box.Text, false) end
+                end)
+            end)
+        end
+        box.FocusLost:Connect(function()
+            if not silentGuard then obj:Set(box.Text, false) end
+        end)
+
+        addCommonMethods(obj, row, lbl)
+        bindControl(sec, trove, obj, opts, false)
+        return obj
+    end
+
+    local function createOrderedList(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local items = table.clone(opts.Default or opts.Items or {})
+
+        local row = Instance.new("Frame")
+        row.Name = "OrderedList_" .. tostring(opts.Label or "Order")
+        row.Size = UDim2.new(1, 0, 0, 24)
+        row.AutomaticSize = Enum.AutomaticSize.Y
+        row.BackgroundTransparency = 1
+        row.ZIndex = z
+        row.Parent = sec._container
+
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 3)
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Parent = row
+
+        local lbl = Instance.new("TextLabel")
+        lbl.LayoutOrder = 0
+        lbl.Size = UDim2.new(1, 0, 0, 14)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "Priority")
+        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
+        lbl.TextSize = 11
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = row
+
+        local itemHolder = Instance.new("Frame")
+        itemHolder.LayoutOrder = 1
+        itemHolder.Size = UDim2.new(1, 0, 0, 20)
+        itemHolder.AutomaticSize = Enum.AutomaticSize.Y
+        itemHolder.BackgroundTransparency = 1
+        itemHolder.ZIndex = z
+        itemHolder.Parent = row
+        local iLay = Instance.new("UIListLayout")
+        iLay.Padding = UDim.new(0, 2)
+        iLay.SortOrder = Enum.SortOrder.LayoutOrder
+        iLay.Parent = itemHolder
+
+        local obj = {
+            _trove = trove,
+            Kind = "OrderedList",
+            Value = table.clone(items),
+            Row = wrapRowObject(row, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        local function rebuild(silent)
+            for _, ch in ipairs(itemHolder:GetChildren()) do
+                if ch:IsA("GuiObject") then ch:Destroy() end
+            end
+            for idx, name in ipairs(obj.Value) do
+                local ir = Instance.new("Frame")
+                ir.LayoutOrder = idx
+                ir.Size = UDim2.new(1, 0, 0, 18)
+                ir.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+                ir.BorderColor3 = Color3.fromRGB(48, 48, 48)
+                ir.BorderSizePixel = 1
+                ir.ZIndex = z + 1
+                ir.Parent = itemHolder
+
+                local t = Instance.new("TextLabel")
+                t.Position = UDim2.fromOffset(6, 0)
+                t.Size = UDim2.new(1, -44, 1, 0)
+                t.BackgroundTransparency = 1
+                t.Font = Enum.Font.Code
+                t.Text = string.format("%d. %s", idx, tostring(name))
+                t.TextColor3 = Theme.Silver
+                t.TextSize = 10
+                t.TextXAlignment = Enum.TextXAlignment.Left
+                t.ZIndex = z + 2
+                t.Parent = ir
+
+                local up = Instance.new("TextButton")
+                up.AnchorPoint = Vector2.new(1, 0.5)
+                up.Position = UDim2.new(1, -20, 0.5, 0)
+                up.Size = UDim2.fromOffset(16, 14)
+                up.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+                up.AutoButtonColor = false
+                up.Font = Enum.Font.Code
+                up.Text = "▲"
+                up.TextColor3 = (idx > 1) and Theme.White or Theme.Muted
+                up.TextSize = 9
+                up.ZIndex = z + 2
+                up.Parent = ir
+                up.MouseButton1Click:Connect(function()
+                    if idx > 1 then
+                        obj.Value[idx], obj.Value[idx - 1] = obj.Value[idx - 1], obj.Value[idx]
+                        rebuild(false)
+                    end
+                end)
+
+                local dn = Instance.new("TextButton")
+                dn.AnchorPoint = Vector2.new(1, 0.5)
+                dn.Position = UDim2.new(1, -2, 0.5, 0)
+                dn.Size = UDim2.fromOffset(16, 14)
+                dn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+                dn.AutoButtonColor = false
+                dn.Font = Enum.Font.Code
+                dn.Text = "▼"
+                dn.TextColor3 = (idx < #obj.Value) and Theme.White or Theme.Muted
+                dn.TextSize = 9
+                dn.ZIndex = z + 2
+                dn.Parent = ir
+                dn.MouseButton1Click:Connect(function()
+                    if idx < #obj.Value then
+                        obj.Value[idx], obj.Value[idx + 1] = obj.Value[idx + 1], obj.Value[idx]
+                        rebuild(false)
+                    end
+                end)
+            end
+            obj.ValueChanged:Fire(obj.Value)
+            if not silent then
+                if obj._onChanged then obj._onChanged(obj.Value) end
+                obj.Changed:Fire(obj.Value)
+            end
+        end
+
+        function obj:Set(arr, silent)
+            if type(arr) ~= "table" then return end
+            self.Value = table.clone(arr)
+            rebuild(silent)
+        end
+        function obj:SetItems(arr) self:Set(arr, true) end
+
+        rebuild(true)
+        addCommonMethods(obj, row, lbl)
+        bindControl(sec, trove, obj, opts, false)
+        return obj
+    end
+
+    local function createGroup(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local source = opts.Source
+        local option = opts.Option
+
+        local function matches(val)
+            if option ~= nil then
+                if type(val) == "string" then return val == option end
+                if type(val) == "table" then
+                    return val[option] == true or table.find(val, option) ~= nil
+                end
+                return false
+            end
+            return val == true
+        end
+
+        local groupFrame = Instance.new("Frame")
+        groupFrame.Name = "Group"
+        groupFrame.Size = UDim2.new(1, 0, 0, 4)
+        groupFrame.AutomaticSize = Enum.AutomaticSize.Y
+        groupFrame.BackgroundTransparency = 1
+        groupFrame.ZIndex = z
+        groupFrame.Parent = sec._container
+
+        local bar = Instance.new("Frame")
+        bar.Position = UDim2.fromOffset(2, 2)
+        bar.Size = UDim2.new(0, 2, 1, -4)
+        bar.BackgroundColor3 = Color3.fromRGB(64, 64, 64)
+        bar.BorderSizePixel = 0
+        bar.ZIndex = z + 1
+        bar.Parent = groupFrame
+
+        local inner = Instance.new("Frame")
+        inner.Name = "GroupContent"
+        inner.Position = UDim2.fromOffset(8, 0)
+        inner.Size = UDim2.new(1, -8, 0, 4)
+        inner.AutomaticSize = Enum.AutomaticSize.Y
+        inner.BackgroundTransparency = 1
+        inner.ZIndex = z
+        inner.Parent = groupFrame
+
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 4)
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Parent = inner
+
+        local explicitVis = opts.Visible ~= false
+        local sourceMatch = source and matches(source.Value) or true
+        groupFrame.Visible = explicitVis and sourceMatch
+
+        local childAdapter = CoreBridge._MakeSectionAdapter({
+            _menu = sec._menu,
+            _trove = trove,
+            _container = inner,
+            _zBase = z,
+        })
+
+        function childAdapter:SetVisible(v)
+            explicitVis = (v == true)
+            groupFrame.Visible = explicitVis and sourceMatch
+        end
+
+        if source and source.ValueChanged then
+            trove:Connect(source.ValueChanged, function(val)
+                sourceMatch = matches(val)
+                groupFrame.Visible = explicitVis and sourceMatch
+            end)
+        end
+
+        return childAdapter
+    end
+
+    CoreBridge._WidgetsCore = {
+        formatStep = formatStep,
+        snapStep = snapStep,
+        getOrMakeAccessoryBar = getOrMakeAccessoryBar,
+        bindControl = bindControl,
+        wrapRowObject = wrapRowObject,
+        addCommonMethods = addCommonMethods,
+        createToggle = createToggle,
+        createLabel = createLabel,
+        createDivider = createDivider,
+        createButton = createButton,
+        createSlider = createSlider,
+        createRangeSlider = createRangeSlider,
+        createTextBox = createTextBox,
+        createOrderedList = createOrderedList,
+        createGroup = createGroup,
+    }
+end
+
+do -- CoreBridge._WidgetsPickers
+    local U = CoreBridge._UI
+    local Theme = U.Theme
+    local UI = U.UI
+    local tween = U.tween
+    local FastTween = U.FastTween
+    local WC = CoreBridge._WidgetsCore
+
+    local function toSet(val)
+        local out = {}
+        if type(val) ~= "table" then return out end
+        for k, v in pairs(val) do
+            if type(k) == "number" and type(v) == "string" then
+                out[v] = true
+            elseif type(k) == "string" and v == true then
+                out[k] = true
+            end
+        end
+        return out
+    end
+
+    local function setsEqual(a, b)
+        if type(a) ~= "table" or type(b) ~= "table" then return false end
+        for k, v in pairs(a) do if v == true and not b[k] then return false end end
+        for k, v in pairs(b) do if v == true and not a[k] then return false end end
+        return true
+    end
+
+    local function createDropdown(sec, opts, isMulti)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local labels = opts.Labels or {}
+        local rawOptions = table.clone(opts.Options or {})
+        local getOpts = opts.GetOptions
+        local closeOnSel = (opts.CloseOnSelect ~= false) and not isMulti
+
+        local initVal
+        if isMulti then
+            initVal = toSet(opts.Default)
+        else
+            initVal = opts.Default
+            if initVal == nil or (opts.Options ~= nil and table.find(rawOptions, initVal) == nil) then
+                initVal = rawOptions[1]
+            end
+        end
+
+        local container = Instance.new("Frame")
+        container.Name = (isMulti and "MultiDropdown_" or "Dropdown_") .. tostring(opts.Label or "Select")
+        container.Size = UDim2.new(1, 0, 0, 38)
+        container.BackgroundTransparency = 1
+        container.ClipsDescendants = true
+        container.ZIndex = z
+        container.Parent = sec._container
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(2, 0)
+        lbl.Size = UDim2.new(1, -4, 0, 14)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "Select")
+        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
+        lbl.TextSize = 11
+        lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = container
+
+        local hdrBtn = Instance.new("TextButton")
+        hdrBtn.Position = UDim2.fromOffset(0, 16)
+        hdrBtn.Size = UDim2.new(1, 0, 0, 20)
+        hdrBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        hdrBtn.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        hdrBtn.BorderSizePixel = 1
+        hdrBtn.AutoButtonColor = false
+        hdrBtn.Text = ""
+        hdrBtn.ZIndex = z + 1
+        hdrBtn.Parent = container
+        local hStroke = U.addStroke(hdrBtn, Color3.fromRGB(4, 4, 4), 1, 0)
+
+        local valText = Instance.new("TextLabel")
+        valText.Position = UDim2.fromOffset(6, 0)
+        valText.Size = UDim2.new(1, -24, 1, 0)
+        valText.BackgroundTransparency = 1
+        valText.Font = Enum.Font.Code
+        valText.TextColor3 = Theme.White
+        valText.TextSize = 11
+        valText.TextTruncate = Enum.TextTruncate.AtEnd
+        valText.TextXAlignment = Enum.TextXAlignment.Left
+        valText.ZIndex = z + 2
+        valText.Parent = hdrBtn
+
+        local arrow = Instance.new("TextLabel")
+        arrow.AnchorPoint = Vector2.new(1, 0.5)
+        arrow.Position = UDim2.new(1, -6, 0.5, 0)
+        arrow.Size = UDim2.fromOffset(12, 12)
+        arrow.BackgroundTransparency = 1
+        arrow.Font = Enum.Font.Code
+        arrow.Text = "+"
+        arrow.TextColor3 = Theme.Muted
+        arrow.TextSize = 12
+        arrow.ZIndex = z + 2
+        arrow.Parent = hdrBtn
+
+        local drawer = Instance.new("Frame")
+        drawer.Position = UDim2.fromOffset(0, 38)
+        drawer.Size = UDim2.new(1, 0, 0, 0)
+        drawer.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+        drawer.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        drawer.BorderSizePixel = 1
+        drawer.ZIndex = z + 2
+        drawer.Parent = container
+
+        local searchBox
+        if opts.Search == true then
+            searchBox = Instance.new("TextBox")
+            searchBox.Position = UDim2.fromOffset(4, 3)
+            searchBox.Size = UDim2.new(1, -8, 0, 18)
+            searchBox.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+            searchBox.BorderColor3 = Color3.fromRGB(52, 52, 52)
+            searchBox.BorderSizePixel = 1
+            searchBox.ClearTextOnFocus = false
+            searchBox.Font = Enum.Font.Code
+            searchBox.PlaceholderText = "filter..."
+            searchBox.PlaceholderColor3 = Theme.Muted
+            searchBox.Text = ""
+            searchBox.TextColor3 = Theme.White
+            searchBox.TextSize = 10
+            searchBox.TextXAlignment = Enum.TextXAlignment.Left
+            searchBox.ZIndex = z + 3
+            searchBox.Parent = drawer
+        end
+
+        local listY = searchBox and 24 or 2
+        local optScroll = Instance.new("ScrollingFrame")
+        optScroll.Position = UDim2.fromOffset(2, listY)
+        optScroll.Size = UDim2.new(1, -4, 1, -listY - 2)
+        optScroll.BackgroundTransparency = 1
+        optScroll.BorderSizePixel = 0
+        optScroll.ScrollBarThickness = 2
+        optScroll.ScrollBarImageColor3 = Theme.Silver
+        optScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        optScroll.ZIndex = z + 3
+        optScroll.Parent = drawer
+
+        local optLayout = Instance.new("UIListLayout")
+        optLayout.Padding = UDim.new(0, 1)
+        optLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        optLayout.Parent = optScroll
+
+        local isOpen = false
+        local optButtons = {}
+
+        local obj = {
+            _trove = trove,
+            Kind = "Dropdown",
+            Multi = isMulti,
+            Options = rawOptions,
+            Value = initVal,
+            Row = WC.wrapRowObject(container, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        local function dispLabel(k)
+            return tostring(labels[k] or k)
+        end
+
+        local function refreshSummary()
+            if isMulti then
+                local chosen = {}
+                for _, o in ipairs(obj.Options) do
+                    if obj.Value[o] == true then table.insert(chosen, dispLabel(o)) end
+                end
+                for k, v in pairs(obj.Value) do
+                    if v == true and table.find(obj.Options, k) == nil then
+                        table.insert(chosen, dispLabel(k))
+                    end
+                end
+                valText.Text = #chosen > 0 and table.concat(chosen, ", ") or "None"
+                valText.TextColor3 = #chosen > 0 and Theme.White or Theme.Muted
+            else
+                if obj.Value == nil then
+                    valText.Text = "None"
+                    valText.TextColor3 = Theme.Muted
+                else
+                    valText.Text = dispLabel(obj.Value)
+                    valText.TextColor3 = Theme.White
+                end
+            end
+        end
+
+        local function syncButtonHighlights()
+            for _, item in ipairs(optButtons) do
+                local active = isMulti and (obj.Value[item.Key] == true) or (obj.Value == item.Key)
+                item.Btn.BackgroundColor3 = active and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(16, 16, 16)
+                item.Btn.TextColor3 = active and Theme.Accent or Color3.fromRGB(185, 185, 185)
+            end
+        end
+
+        local function getDrawerHeight()
+            local q = searchBox and string.lower(searchBox.Text or "") or ""
+            local visCount = 0
+            for _, item in ipairs(optButtons) do
+                local show = (q == "") or (string.find(string.lower(item.Display), q, 1, true) ~= nil) or (string.find(string.lower(item.Key), q, 1, true) ~= nil)
+                item.Btn.Visible = show
+                if show then visCount = visCount + 1 end
+            end
+            local rowsH = math.min(math.max(visCount, 1), 6) * 20
+            return rowsH + (searchBox and 28 or 6)
+        end
+
+        local function syncSize()
+            if isOpen then
+                local dh = getDrawerHeight()
+                drawer.Size = UDim2.new(1, 0, 0, dh)
+                container.Size = UDim2.new(1, 0, 0, 40 + dh)
+            else
+                container.Size = UDim2.new(1, 0, 0, 38)
+            end
+            arrow.Text = isOpen and "-" or "+"
+            hStroke.Color = isOpen and Theme.Accent or Color3.fromRGB(4, 4, 4)
+        end
+
+        local function rebuildList()
+            for _, it in ipairs(optButtons) do
+                if it.Btn and it.Btn.Parent then it.Btn:Destroy() end
+            end
+            table.clear(optButtons)
+
+            for i, key in ipairs(obj.Options) do
+                local dStr = dispLabel(key)
+                local b = Instance.new("TextButton")
+                b.LayoutOrder = i
+                b.Size = UDim2.new(1, 0, 0, 19)
+                b.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+                b.BorderSizePixel = 0
+                b.AutoButtonColor = false
+                b.Font = Enum.Font.Code
+                b.Text = dStr
+                b.TextColor3 = Color3.fromRGB(185, 185, 185)
+                b.TextSize = 11
+                b.TextTruncate = Enum.TextTruncate.AtEnd
+                b.TextXAlignment = Enum.TextXAlignment.Left
+                b.ZIndex = z + 4
+                b.Parent = optScroll
+                local p = Instance.new("UIPadding")
+                p.PaddingLeft = UDim.new(0, 6)
+                p.Parent = b
+
+                table.insert(optButtons, { Btn = b, Key = tostring(key), Display = dStr })
+                b.MouseButton1Click:Connect(function()
+                    if isMulti then
+                        local copy = table.clone(obj.Value)
+                        copy[key] = not copy[key] and true or nil
+                        obj:Set(copy, false)
+                    else
+                        obj:Set(key, false)
+                        if closeOnSel then
+                            isOpen = false
+                            syncSize()
+                        end
+                    end
+                end)
+            end
+            syncButtonHighlights()
+            refreshSummary()
+            if isOpen then syncSize() end
+        end
+
+        function obj:Set(val, silent)
+            if isMulti then
+                local s = toSet(val)
+                if setsEqual(s, self.Value) then return end
+                self.Value = s
+            else
+                if val == self.Value then return end
+                self.Value = val
+            end
+            syncButtonHighlights()
+            refreshSummary()
+            self.ValueChanged:Fire(self.Value)
+            if not silent then
+                if self._onChanged then self._onChanged(self.Value) end
+                self.Changed:Fire(self.Value)
+            end
+        end
+
+        function obj:SetOptions(newOpts)
+            local list = table.clone(newOpts or {})
+            self.Options = list
+            if not isMulti and self.Value ~= nil and table.find(list, self.Value) == nil then
+                self.Value = nil
+            end
+            rebuildList()
+            self.ValueChanged:Fire(self.Value)
+        end
+        function obj:Add(opt)
+            if type(opt) == "string" and table.find(self.Options, opt) == nil then
+                local n = table.clone(self.Options)
+                table.insert(n, opt)
+                self:SetOptions(n)
+            end
+        end
+        function obj:Remove(opt)
+            local i = table.find(self.Options, opt)
+            if i then
+                local n = table.clone(self.Options)
+                table.remove(n, i)
+                self:SetOptions(n)
+            end
+        end
+        function obj:SetOpen(v)
+            isOpen = (v == true)
+            if isOpen and getOpts then
+                local ok, latest = pcall(getOpts)
+                if ok and type(latest) == "table" then self:SetOptions(latest) end
+            end
+            syncSize()
+        end
+
+        hdrBtn.MouseButton1Click:Connect(function()
+            obj:SetOpen(not isOpen)
+        end)
+        if searchBox and searchBox.GetPropertyChangedSignal then
+            pcall(function()
+                searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                    if isOpen then syncSize() end
+                end)
+            end)
+        end
+
+        rebuildList()
+        WC.addCommonMethods(obj, container, lbl)
+        WC.bindControl(sec, trove, obj, opts, false)
+        return obj
+    end
+
+    local function createList(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local rawOpts = table.clone(opts.Options or {})
+        local h = tonumber(opts.Height) or 140
+        local initVal = opts.Default
+        if initVal == nil and opts.SelectFirst ~= false then
+            initVal = rawOpts[1]
+        end
+
+        local container = Instance.new("Frame")
+        container.Name = "List_" .. tostring(opts.Label or "List")
+        container.Size = UDim2.new(1, 0, 0, h + 20)
+        container.BackgroundTransparency = 1
+        container.ZIndex = z
+        container.Parent = sec._container
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(2, 0)
+        lbl.Size = UDim2.new(1, -4, 0, 14)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.Code
+        lbl.Text = tostring(opts.Label or "List")
+        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
+        lbl.TextSize = 11
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = z + 1
+        lbl.Parent = container
+
+        local box = Instance.new("Frame")
+        box.Position = UDim2.fromOffset(0, 16)
+        box.Size = UDim2.new(1, 0, 0, h)
+        box.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+        box.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        box.BorderSizePixel = 1
+        box.ZIndex = z + 1
+        box.Parent = container
+
+        local searchBox
+        if opts.Search == true then
+            searchBox = Instance.new("TextBox")
+            searchBox.Position = UDim2.fromOffset(4, 3)
+            searchBox.Size = UDim2.new(1, -8, 0, 18)
+            searchBox.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+            searchBox.BorderColor3 = Color3.fromRGB(52, 52, 52)
+            searchBox.BorderSizePixel = 1
+            searchBox.ClearTextOnFocus = false
+            searchBox.Font = Enum.Font.Code
+            searchBox.PlaceholderText = "search..."
+            searchBox.PlaceholderColor3 = Theme.Muted
+            searchBox.Text = ""
+            searchBox.TextColor3 = Theme.White
+            searchBox.TextSize = 10
+            searchBox.TextXAlignment = Enum.TextXAlignment.Left
+            searchBox.ZIndex = z + 2
+            searchBox.Parent = box
+        end
+
+        local listY = searchBox and 24 or 2
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Position = UDim2.fromOffset(2, listY)
+        scroll.Size = UDim2.new(1, -4, 1, -listY - 2)
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.ScrollBarThickness = 2
+        scroll.ScrollBarImageColor3 = Theme.Silver
+        scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        scroll.ZIndex = z + 2
+        scroll.Parent = box
+
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 1)
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Parent = scroll
+
+        local rows = {}
+        local obj = {
+            _trove = trove,
+            Kind = "List",
+            Options = rawOpts,
+            Value = initVal,
+            Row = WC.wrapRowObject(container, lbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        local function syncFilter()
+            local q = searchBox and string.lower(searchBox.Text or "") or ""
+            for _, r in ipairs(rows) do
+                r.Btn.Visible = (q == "") or (string.find(string.lower(r.Key), q, 1, true) ~= nil)
+            end
+        end
+
+        local function syncSelection()
+            for _, r in ipairs(rows) do
+                local act = (obj.Value == r.Key)
+                r.Btn.BackgroundColor3 = act and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(16, 16, 16)
+                r.Btn.TextColor3 = act and Theme.Accent or Color3.fromRGB(185, 185, 185)
+            end
+        end
+
+        local function rebuild()
+            for _, r in ipairs(rows) do
+                if r.Btn and r.Btn.Parent then r.Btn:Destroy() end
+            end
+            table.clear(rows)
+            for i, name in ipairs(obj.Options) do
+                local b = Instance.new("TextButton")
+                b.LayoutOrder = i
+                b.Size = UDim2.new(1, 0, 0, 19)
+                b.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+                b.BorderSizePixel = 0
+                b.AutoButtonColor = false
+                b.Font = Enum.Font.Code
+                b.Text = tostring(name)
+                b.TextColor3 = Color3.fromRGB(185, 185, 185)
+                b.TextSize = 11
+                b.TextTruncate = Enum.TextTruncate.AtEnd
+                b.TextXAlignment = Enum.TextXAlignment.Left
+                b.ZIndex = z + 3
+                b.Parent = scroll
+                local p = Instance.new("UIPadding")
+                p.PaddingLeft = UDim.new(0, 6)
+                p.Parent = b
+                table.insert(rows, { Btn = b, Key = name })
+                b.MouseButton1Click:Connect(function()
+                    obj:Set(name, false)
+                end)
+            end
+            syncFilter()
+            syncSelection()
+        end
+
+        function obj:Set(val, silent)
+            if val ~= nil and table.find(self.Options, val) == nil then
+                val = nil
+            end
+            if val == self.Value then return end
+            self.Value = val
+            syncSelection()
+            self.ValueChanged:Fire(val)
+            if not silent then
+                if self._onChanged then self._onChanged(val) end
+                self.Changed:Fire(val)
+            end
+        end
+        function obj:SetOptions(newOpts)
+            self.Options = table.clone(newOpts or {})
+            if self.Value ~= nil and table.find(self.Options, self.Value) == nil then
+                self.Value = (opts.SelectFirst ~= false) and self.Options[1] or nil
+            end
+            rebuild()
+            self.ValueChanged:Fire(self.Value)
+        end
+
+        if searchBox and searchBox.GetPropertyChangedSignal then
+            pcall(function() searchBox:GetPropertyChangedSignal("Text"):Connect(syncFilter) end)
+        end
+        rebuild()
+        WC.addCommonMethods(obj, container, lbl)
+        WC.bindControl(sec, trove, obj, opts, false)
+        return obj
+    end
+
+    local function createColor(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+
+        local hostFrame = opts.Row and (opts.Row._frame or opts.Row)
+        local ownLbl
+        if not hostFrame then
+            hostFrame = Instance.new("Frame")
+            hostFrame.Name = "ColorRow_" .. tostring(opts.Label or "Color")
+            hostFrame.Size = UDim2.new(1, 0, 0, 20)
+            hostFrame.BackgroundTransparency = 1
+            hostFrame.ZIndex = z
+            hostFrame.Parent = sec._container
+
+            ownLbl = Instance.new("TextLabel")
+            ownLbl.Position = UDim2.fromOffset(2, 0)
+            ownLbl.Size = UDim2.new(1, -60, 1, 0)
+            ownLbl.BackgroundTransparency = 1
+            ownLbl.Font = Enum.Font.Code
+            ownLbl.Text = tostring(opts.Label or "Color")
+            ownLbl.TextColor3 = Color3.fromRGB(205, 205, 205)
+            ownLbl.TextSize = 11
+            ownLbl.TextXAlignment = Enum.TextXAlignment.Left
+            ownLbl.ZIndex = z + 1
+            ownLbl.Parent = hostFrame
+        end
+
+        local bar = WC.getOrMakeAccessoryBar(hostFrame, z)
+        local swatch = Instance.new("TextButton")
+        swatch.Name = "ColorSwatch"
+        swatch.LayoutOrder = 10
+        swatch.Size = UDim2.fromOffset(20, 12)
+        swatch.BackgroundColor3 = Color3.new(1, 1, 1)
+        swatch.BorderColor3 = Color3.fromRGB(58, 58, 58)
+        swatch.BorderSizePixel = 1
+        swatch.AutoButtonColor = false
+        swatch.Text = ""
+        swatch.ZIndex = z + 3
+        swatch.Parent = bar
+        U.addCorner(swatch, 2)
+
+        local obj = {
+            _trove = trove,
+            Kind = "Color",
+            Color = Color3.new(1, 1, 1),
+            Alpha = 1,
+            Gradient = opts.Gradient,
+            Mode = (opts.Gradient == "editable" or opts.Gradient == "only") and "Gradient" or "Solid",
+            Stops = {},
+            Value = { Rgb = Color3.new(1, 1, 1), Alpha = 1, Stops = {} },
+            Dragging = false,
+            Animatable = opts.Animatable == true,
+            AnimationMode = "Off",
+            AnimationSpeed = 1,
+            AnimationBreathingRange = { Min = 0, Max = 100 },
+            Row = opts.Row or WC.wrapRowObject(hostFrame, ownLbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            AnimationChanged = trove:Add(Signal.new()),
+            AnimationSpeedChanged = trove:Add(Signal.new()),
+            AnimationBreathingRangeChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+        }
+
+        function obj:Set(val, silent)
+            if type(val) ~= "table" then return end
+            local rgb = val.Rgb or self.Color
+            local a = (val.Alpha ~= nil) and math.clamp(tonumber(val.Alpha) or 1, 0, 1) or self.Alpha
+            local stops = val.Stops or self.Stops or {}
+            if self.Gradient == "only" or (self.Gradient == "editable" and #stops >= 2) then
+                if #stops >= 2 then
+                    local ns = table.clone(stops)
+                    ns[1] = { Time = 0, Value = rgb }
+                    stops = ns
+                end
+            else
+                stops = {}
+            end
+            self.Color = rgb
+            self.Alpha = a
+            self.Stops = stops
+            self.Value = { Rgb = rgb, Alpha = a, Stops = stops }
+            swatch.BackgroundColor3 = rgb
+            self.ValueChanged:Fire(self.Value)
+            if not silent then
+                if self._onChanged then self._onChanged(self.Value) end
+                self.Changed:Fire(self.Value)
+            end
+        end
+
+        function obj:EnableAnimation(allowBreathing)
+            self.Animatable = true
+            self._allowBreathing = allowBreathing
+            return self
+        end
+        function obj:SetAnimationMode(m, silent)
+            if self.AnimationMode ~= m then
+                self.AnimationMode = m
+                if not silent then self.AnimationChanged:Fire(m) end
+            end
+            return self
+        end
+        function obj:SetAnimationSpeed(sp, silent)
+            if self.AnimationSpeed ~= sp then
+                self.AnimationSpeed = sp
+                if not silent then self.AnimationSpeedChanged:Fire(sp) end
+            end
+            return self
+        end
+        function obj:SetAnimationBreathingRange(r, silent)
+            self.AnimationBreathingRange = r
+            if not silent then self.AnimationBreathingRangeChanged:Fire(r) end
+            return self
+        end
+
+        swatch.MouseButton1Click:Connect(function()
+            if UI.openColorPickerForSwatch then
+                UI.openColorPickerForSwatch(swatch, obj.Color, function(pickedCol, pickedAlpha)
+                    obj:Set({ Rgb = pickedCol, Alpha = (opts.Alpha or opts.Transparency) and pickedAlpha or 1 }, false)
+                end, obj.Alpha)
+            end
+        end)
+
+        swatch.MouseButton2Click:Connect(function()
+            if not obj.Animatable then return end
+            local modes = obj._allowBreathing and { "Off", "Rainbow", "Breathing" } or { "Off", "Rainbow" }
+            local curIdx = table.find(modes, obj.AnimationMode) or 1
+            local nextMode = modes[(curIdx % #modes) + 1]
+            obj:SetAnimationMode(nextMode, false)
+            U.notify("Color Animation", tostring(opts.Label or "Color") .. ": " .. tostring(nextMode), 2)
+        end)
+
+        local config = sec._menu and sec._menu:GetConfig()
+        if config ~= nil and opts.Config ~= nil then
+            local nMod = tbl17.N()
+            if nMod and nMod.bindConfig then
+                nMod.bindConfig(obj, config, opts)
+            end
+            if opts.Animatable and sec._menu.GetColorAnimation then
+                local ca = sec._menu:GetColorAnimation()
+                if ca then
+                    local cfgPath, transPath = opts.Config, opts.Transparency
+                    obj:EnableAnimation(transPath ~= nil)
+                    local function syncAnim()
+                        local st = ca:Get(cfgPath)
+                        obj:SetAnimationMode(st.Mode, true)
+                        obj:SetAnimationSpeed(st.Speed, true)
+                        if st.BreathingMin ~= nil or st.BreathingMax ~= nil then
+                            obj:SetAnimationBreathingRange({
+                                Min = math.floor((1 - (st.BreathingMax or 1)) * 100 + 0.5),
+                                Max = math.floor((1 - (st.BreathingMin or 0)) * 100 + 0.5),
+                            }, true)
+                        end
+                        ca:Apply(cfgPath, transPath, st)
+                    end
+                    obj:Connect(obj.AnimationChanged, function(m) ca:SetMode(cfgPath, m) end)
+                    obj:Connect(obj.AnimationSpeedChanged, function(s) ca:SetSpeed(cfgPath, s) end)
+                    obj:Connect(obj.AnimationBreathingRangeChanged, function(r) ca:SetBreathing(cfgPath, 1 - r.Max / 100, 1 - r.Min / 100) end)
+                    obj:Connect(ca:Changed(), syncAnim)
+                    syncAnim()
+                end
+            end
+        end
+
+        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
+        return obj
+    end
+
+    local function createKeybind(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local modes = opts.Modes or { "Always", "Toggle", "Hold" }
+        local def = type(opts.Default) == "table" and opts.Default or {}
+        local initMode = def.Mode or modes[1] or "Toggle"
+        local initKey = def.Key
+        if initKey == "None" then initKey = nil end
+
+        local hostFrame = opts.Row and (opts.Row._frame or opts.Row)
+        local ownLbl
+        if not hostFrame then
+            hostFrame = Instance.new("Frame")
+            hostFrame.Name = "KeybindRow_" .. tostring(opts.Label or "Key")
+            hostFrame.Size = UDim2.new(1, 0, 0, 20)
+            hostFrame.BackgroundTransparency = 1
+            hostFrame.ZIndex = z
+            hostFrame.Parent = sec._container
+
+            ownLbl = Instance.new("TextLabel")
+            ownLbl.Position = UDim2.fromOffset(2, 0)
+            ownLbl.Size = UDim2.new(1, -110, 1, 0)
+            ownLbl.BackgroundTransparency = 1
+            ownLbl.Font = Enum.Font.Code
+            ownLbl.Text = tostring(opts.Label or "Keybind")
+            ownLbl.TextColor3 = Color3.fromRGB(205, 205, 205)
+            ownLbl.TextSize = 11
+            ownLbl.TextXAlignment = Enum.TextXAlignment.Left
+            ownLbl.ZIndex = z + 1
+            ownLbl.Parent = hostFrame
+        end
+
+        local bar = WC.getOrMakeAccessoryBar(hostFrame, z)
+
+        local modeBtn = Instance.new("TextButton")
+        modeBtn.Name = "KeyModeBadge"
+        modeBtn.LayoutOrder = 21
+        modeBtn.Size = UDim2.fromOffset(18, 14)
+        modeBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        modeBtn.AutoButtonColor = false
+        modeBtn.Font = Enum.Font.Code
+        modeBtn.Text = string.sub(tostring(initMode), 1, 1)
+        modeBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+        modeBtn.TextSize = 9
+        modeBtn.ZIndex = z + 3
+        modeBtn.Parent = bar
+        U.addCorner(modeBtn, 3)
+        U.addStroke(modeBtn, Color3.fromRGB(48, 48, 48), 1, 0)
+
+        local keyBtn = Instance.new("TextButton")
+        keyBtn.Name = "KeyBadge"
+        keyBtn.LayoutOrder = 22
+        keyBtn.Size = UDim2.fromOffset(44, 14)
+        keyBtn.AutomaticSize = Enum.AutomaticSize.X
+        keyBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        keyBtn.AutoButtonColor = false
+        keyBtn.Font = Enum.Font.Code
+        keyBtn.Text = "[" .. CoreBridge._KeybindHUD.FormatKey(initKey) .. "]"
+        keyBtn.TextColor3 = initKey and Theme.Accent or Color3.fromRGB(130, 130, 130)
+        keyBtn.TextSize = 9
+        keyBtn.ZIndex = z + 3
+        keyBtn.Parent = bar
+        U.addCorner(keyBtn, 3)
+        U.addStroke(keyBtn, Color3.fromRGB(48, 48, 48), 1, 0)
+
+        local obj = {
+            _trove = trove,
+            Kind = "Keybind",
+            Modes = modes,
+            Value = { Key = initKey, Mode = initMode },
+            Active = false,
+            FeatureEnabled = false,
+            ShowInList = opts.InKeybindList == true,
+            Invisible = false,
+            ListLabel = opts.ListLabel or opts.Label or "Keybind",
+            Row = opts.Row or WC.wrapRowObject(hostFrame, ownLbl),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            ActiveChanged = trove:Add(Signal.new()),
+            ShowInListChanged = trove:Add(Signal.new()),
+            InvisibleChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+            _toggleState = false,
+            _heldState = false,
+        }
+
+        local function syncBadgeText()
+            modeBtn.Text = string.sub(tostring(obj.Value.Mode or "T"), 1, 1)
+            modeBtn.Visible = (#modes > 1)
+            if CoreBridge._capturingKeybind == obj then
+                keyBtn.Text = "[...]"
+                keyBtn.TextColor3 = Theme.White
+            else
+                keyBtn.Text = "[" .. CoreBridge._KeybindHUD.FormatKey(obj.Value.Key) .. "]"
+                keyBtn.TextColor3 = obj.Value.Key and Theme.Accent or Color3.fromRGB(130, 130, 130)
+            end
+        end
+
+        function obj:_FinishCapture()
+            syncBadgeText()
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        function obj:_RecomputeActive()
+            local m = self.Value.Mode
+            local want = false
+            if self.FeatureEnabled then
+                if m == "Always" then
+                    want = true
+                elseif m == "Toggle" then
+                    want = self._toggleState == true
+                elseif m == "Hold" then
+                    want = self._heldState == true
+                end
+            end
+            self:SetActive(want)
+        end
+
+        function obj:_OnKeyInput(isDown)
+            local m = self.Value.Mode
+            if m == "Hold" then
+                self._heldState = isDown
+                self:_RecomputeActive()
+            elseif m == "Toggle" and isDown then
+                self._toggleState = not self._toggleState
+                self:_RecomputeActive()
+            elseif m == "Tap" and isDown and self.FeatureEnabled then
+                self.ActiveChanged:Fire(true)
+            end
+        end
+
+        function obj:SetActive(v)
+            local b = (v == true)
+            if b == self.Active then return end
+            self.Active = b
+            if self.Value.Mode == "Toggle" then self._toggleState = b end
+            self.ActiveChanged:Fire(b)
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        function obj:SetFeatureEnabled(v)
+            self.FeatureEnabled = (v == true)
+            self:_RecomputeActive()
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        function obj:SetKey(k)
+            if k == "None" then k = nil end
+            if k == self.Value.Key then return end
+            self.Value = { Key = k, Mode = self.Value.Mode }
+            syncBadgeText()
+            self.ValueChanged:Fire(self.Value)
+            self.Changed:Fire(self.Value)
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        function obj:SetMode(m)
+            if type(m) ~= "string" or m == self.Value.Mode then return end
+            self.Value = { Key = self.Value.Key, Mode = m }
+            syncBadgeText()
+            self:_RecomputeActive()
+            self.ValueChanged:Fire(self.Value)
+            self.Changed:Fire(self.Value)
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        function obj:Set(val, silent)
+            if type(val) ~= "table" then return end
+            local k = (val.Key ~= "None") and val.Key or nil
+            local m = val.Mode or self.Value.Mode
+            self.Value = { Key = k, Mode = m }
+            syncBadgeText()
+            self:_RecomputeActive()
+            self.ValueChanged:Fire(self.Value)
+            if not silent then
+                if self._onChanged then self._onChanged(self.Value) end
+                self.Changed:Fire(self.Value)
+            end
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        function obj:SetShowInList(v)
+            local b = (v == true)
+            if b == self.ShowInList then return end
+            self.ShowInList = b
+            self.ShowInListChanged:Fire(b)
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        function obj:SetInvisible(v)
+            local b = (v == true)
+            if b == self.Invisible then return end
+            self.Invisible = b
+            self.InvisibleChanged:Fire(b)
+            CoreBridge._KeybindHUD.Update()
+        end
+
+        keyBtn.MouseButton1Click:Connect(function()
+            if CoreBridge._capturingKeybind == obj then
+                CoreBridge._capturingKeybind = nil
+                syncBadgeText()
+            else
+                local prev = CoreBridge._capturingKeybind
+                CoreBridge._capturingKeybind = obj
+                CoreBridge._captureArmTime = os.clock()
+                if prev and prev ~= obj then prev:_FinishCapture() end
+                syncBadgeText()
+            end
+        end)
+
+        modeBtn.MouseButton1Click:Connect(function()
+            local idx = table.find(modes, obj.Value.Mode) or 1
+            local nxt = modes[(idx % #modes) + 1]
+            obj:SetMode(nxt)
+            if nxt == "Toggle" and obj.ShowInList then
+                obj:SetActive(obj.FeatureEnabled)
+            end
+        end)
+
+        if opts.ConfigMap ~= nil then
+            local config = sec._menu and sec._menu:GetConfig()
+            local cm = opts.ConfigMap
+            local deser = tbl17.w and tbl17.w().deserializeKey
+            if config ~= nil then
+                local function bindField(path, sig, getter, setter)
+                    if path == nil then return end
+                    local lock = false
+                    local function apply(v)
+                        if v == nil then return end
+                        lock = true
+                        setter(v)
+                        lock = false
+                    end
+                    apply(config:Get(path))
+                    trove:Connect(sig, function()
+                        if not lock then config:Set(path, getter()) end
+                    end)
+                    trove:Connect(config:Changed(path, true), function(v)
+                        if not lock and v ~= getter() then apply(v) end
+                    end)
+                end
+
+                bindField(cm.Key, obj.Changed, function()
+                    return obj.Value.Key ~= nil and obj.Value.Key or "None"
+                end, function(v)
+                    if typeof(v) == "EnumItem" then obj:SetKey(v)
+                    elseif type(v) == "string" and deser then obj:SetKey(deser(v)) end
+                end)
+                bindField(cm.Mode, obj.Changed, function() return obj.Value.Mode end, function(v)
+                    if type(v) == "string" then obj:SetMode(v) end
+                end)
+                bindField(cm.Active, obj.ActiveChanged, function() return obj.Active end, function(v)
+                    obj:SetActive(v == true)
+                end)
+                bindField(cm.ShowInList, obj.ShowInListChanged, function() return obj.ShowInList end, function(v)
+                    obj:SetShowInList(v == true)
+                end)
+                bindField(cm.Invisible, obj.InvisibleChanged, function() return obj.Invisible end, function(v)
+                    obj:SetInvisible(v == true)
+                end)
+            end
+        end
+
+        CoreBridge._KeybindHUD.Register(obj)
+        syncBadgeText()
+        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
+        return obj
+    end
+
+    local function createSkinChanger(sec, opts)
+        opts = opts or {}
+        local z = sec._zBase or 15
+        local trove = sec._trove:Extend()
+        local h = 232
+
+        local root = Instance.new("Frame")
+        root.Name = "SkinChangerGrid"
+        root.Size = UDim2.new(1, 0, 0, h)
+        root.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+        root.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        root.BorderSizePixel = 1
+        root.ClipsDescendants = true
+        root.ZIndex = z
+        root.Parent = sec._container
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Size = UDim2.fromScale(1, 1)
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.ScrollBarThickness = 2
+        scroll.ScrollBarImageColor3 = Theme.Silver
+        scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        scroll.ZIndex = z + 1
+        scroll.Parent = root
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingTop = UDim.new(0, 6)
+        pad.PaddingBottom = UDim.new(0, 6)
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.PaddingRight = UDim.new(0, 6)
+        pad.Parent = scroll
+
+        local grid = Instance.new("UIGridLayout")
+        grid.CellSize = UDim2.fromOffset(78, 90)
+        grid.CellPadding = UDim2.fromOffset(6, 6)
+        grid.SortOrder = Enum.SortOrder.LayoutOrder
+        grid.Parent = scroll
+
+        local stateFrame = Instance.new("Frame")
+        stateFrame.Size = UDim2.fromScale(1, 1)
+        stateFrame.BackgroundTransparency = 1
+        stateFrame.Visible = (opts.State ~= nil and opts.State ~= "Ready")
+        stateFrame.ZIndex = z + 3
+        stateFrame.Parent = root
+
+        local stateLbl = Instance.new("TextLabel")
+        stateLbl.AnchorPoint = Vector2.new(0.5, 0.5)
+        stateLbl.Position = UDim2.fromScale(0.5, 0.44)
+        stateLbl.Size = UDim2.new(1, -24, 0, 44)
+        stateLbl.BackgroundTransparency = 1
+        stateLbl.Font = Enum.Font.Code
+        stateLbl.Text = tostring(opts.State or "Loading...")
+        stateLbl.TextColor3 = Theme.Muted
+        stateLbl.TextSize = 11
+        stateLbl.TextWrapped = true
+        stateLbl.ZIndex = z + 4
+        stateLbl.Parent = stateFrame
+
+        local clearBtn = Instance.new("TextButton")
+        clearBtn.AnchorPoint = Vector2.new(0.5, 0.5)
+        clearBtn.Position = UDim2.fromScale(0.5, 0.68)
+        clearBtn.Size = UDim2.fromOffset(96, 22)
+        clearBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+        clearBtn.AutoButtonColor = false
+        clearBtn.Font = Enum.Font.Code
+        clearBtn.Text = "Clear Search"
+        clearBtn.TextColor3 = Theme.White
+        clearBtn.TextSize = 10
+        clearBtn.Visible = false
+        clearBtn.ZIndex = z + 4
+        clearBtn.Parent = stateFrame
+        U.addStroke(clearBtn, Color3.fromRGB(64, 64, 64), 1, 0)
+
+        local obj = {
+            _trove = trove,
+            Kind = "SkinChanger",
+            State = opts.State or "Ready",
+            Items = {},
+            Value = nil,
+            Row = WC.wrapRowObject(root, nil),
+            Changed = trove:Add(Signal.new()),
+            ValueChanged = trove:Add(Signal.new()),
+            _onChanged = opts.OnChanged,
+            _tiles = {},
+            _filter = nil,
+            _clearAction = nil,
+            _token = 0,
+        }
+
+        local stateMessages = {
+            Loading = "Loading catalog...",
+            Empty = "No items available for selection.",
+            Unavailable = "Catalog preview unavailable.",
+            NoMatches = "No items match your search.",
+        }
+
+        function obj:SetState(st, msg)
+            self.State = st
+            local ready = (st == "Ready")
+            scroll.Visible = ready
+            stateFrame.Visible = not ready
+            stateLbl.Text = tostring(msg or stateMessages[st] or st)
+            clearBtn.Visible = (st == "NoMatches") and (self._clearAction ~= nil)
+        end
+
+        function obj:SetClearFilterAction(fn)
+            self._clearAction = fn
+            clearBtn.Visible = (self.State == "NoMatches") and (fn ~= nil)
+        end
+        clearBtn.MouseButton1Click:Connect(function()
+            if obj._clearAction then obj._clearAction() end
+        end)
+
+        function obj:_ApplyFilter()
+            for _, t in ipairs(self._tiles) do
+                local vis = true
+                if self._filter then
+                    local ok, res = pcall(self._filter, t.Item, t.SearchKey)
+                    vis = ok and (res == true)
+                end
+                t.Frame.Visible = vis
+            end
+        end
+
+        function obj:SetFilter(fn)
+            self._filter = fn
+            self:_ApplyFilter()
+        end
+
+        function obj:_SyncSelection()
+            for _, t in ipairs(self._tiles) do
+                local sel = (self.Value == t.Item.Name)
+                t.Stroke.Color = sel and Theme.Accent or Color3.fromRGB(48, 48, 48)
+                t.Stroke.Thickness = sel and 1.5 or 1
+                t.Frame.BackgroundColor3 = sel and Color3.fromRGB(24, 24, 24) or Color3.fromRGB(16, 16, 16)
+                t.Title.TextColor3 = sel and Theme.White or Theme.Silver
+            end
+        end
+
+        function obj:Set(name, silent)
+            if name == self.Value then return end
+            self.Value = name
+            self:_SyncSelection()
+            self.ValueChanged:Fire(name)
+            if not silent then
+                if self._onChanged then self._onChanged(name) end
+                self.Changed:Fire(name)
+            end
+        end
+
+        function obj:SetItems(items, keepValue)
+            self._token = self._token + 1
+            local tok = self._token
+            self.Items = items or {}
+            for _, t in ipairs(self._tiles) do
+                if t.Frame and t.Frame.Parent then t.Frame:Destroy() end
+            end
+            table.clear(self._tiles)
+            if not keepValue then self.Value = nil end
+
+            local function buildBatch()
+                for idx, item in ipairs(self.Items) do
+                    if self._token ~= tok then return end
+                    local tile = Instance.new("TextButton")
+                    tile.LayoutOrder = idx
+                    tile.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+                    tile.BorderSizePixel = 0
+                    tile.AutoButtonColor = false
+                    tile.Text = ""
+                    tile.ClipsDescendants = true
+                    tile.ZIndex = z + 2
+                    tile.Parent = scroll
+                    U.addCorner(tile, 4)
+                    local st = U.addStroke(tile, Color3.fromRGB(48, 48, 48), 1, 0)
+
+                    local preview = Instance.new("Frame")
+                    preview.Position = UDim2.fromOffset(4, 4)
+                    preview.Size = UDim2.new(1, -8, 1, -24)
+                    preview.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+                    preview.BorderSizePixel = 0
+                    preview.ClipsDescendants = true
+                    preview.ZIndex = z + 2
+                    preview.Parent = tile
+
+                    local img = Instance.new("ImageLabel")
+                    img.AnchorPoint = Vector2.new(0.5, 0.5)
+                    img.Position = UDim2.fromScale(0.5, 0.5)
+                    img.Size = UDim2.fromScale(0.85, 0.85)
+                    img.BackgroundTransparency = 1
+                    img.ScaleType = Enum.ScaleType.Fit
+                    img.Image = item.Image or "rbxassetid://89204837120267"
+                    img.ZIndex = z + 3
+                    img.Parent = preview
+
+                    if item.Render then
+                        pcall(item.Render, item, {
+                            Content = preview,
+                            HideImage = function() img.Visible = false end,
+                        })
+                    end
+
+                    local tLbl = Instance.new("TextLabel")
+                    tLbl.AnchorPoint = Vector2.new(0, 1)
+                    tLbl.Position = UDim2.new(0, 4, 1, -2)
+                    tLbl.Size = UDim2.new(1, -8, 0, 16)
+                    tLbl.BackgroundTransparency = 1
+                    tLbl.Font = Enum.Font.Code
+                    tLbl.Text = tostring(item.Name)
+                    tLbl.TextColor3 = Theme.Silver
+                    tLbl.TextSize = 9
+                    tLbl.TextTruncate = Enum.TextTruncate.AtEnd
+                    tLbl.ZIndex = z + 3
+                    tLbl.Parent = tile
+
+                    local entry = {
+                        Item = item,
+                        Frame = tile,
+                        Stroke = st,
+                        Title = tLbl,
+                        SearchKey = string.lower(tostring(item.Name or "")),
+                    }
+                    table.insert(self._tiles, entry)
+                    tile.MouseButton1Click:Connect(function()
+                        obj:Set(item.Name, false)
+                    end)
+                    if #self.Items > 30 and idx % 24 == 0 then
+                        task.wait()
+                    end
+                end
+                if self._token == tok then
+                    self:_ApplyFilter()
+                    self:_SyncSelection()
+                end
+            end
+
+            if #self.Items <= 30 then
+                buildBatch()
+            else
+                trove:Add(task.spawn(buildBatch))
+            end
+        end
+
+        obj:SetState(obj.State)
+        WC.addCommonMethods(obj, root, nil)
+        WC.bindControl(sec, trove, obj, opts, false)
+        return obj
+    end
+
+    CoreBridge._WidgetsPickers = {
+        createDropdown = createDropdown,
+        createList = createList,
+        createColor = createColor,
+        createKeybind = createKeybind,
+        createSkinChanger = createSkinChanger,
+    }
+end
+
+do -- CoreBridge.CreateMenuAdapter
+    local U = CoreBridge._UI
+    local UI = U.UI
+    local WC = CoreBridge._WidgetsCore
+    local WP = CoreBridge._WidgetsPickers
+
+    local TITLE_MAP = {
+        Combat = {
+            Aimbot = {
+                Activation = "Aimbot · Activation",
+                ["Target Lock"] = "Aimbot · Target Lock",
+                Targeting = "Aimbot · Targeting",
+                ["Targeting FOV"] = "Aimbot · Targeting FOV",
+            },
+            ["Silent Aim"] = {
+                Activation = "Silent Aim · Activation",
+                Targeting = "Silent Aim · Targeting",
+                ["Targeting FOV"] = "Silent Aim · Targeting FOV",
+            },
+            Ragebot = {
+                Activation = "Ragebot · Activation",
+                ["Weapon Strategy"] = "Ragebot · Weapon Strategy",
+                Evasion = "Ragebot · Evasion",
+            },
+            ["Weapon Handling"] = {
+                ["Aim & Fire"] = "Weapon · Aim & Fire",
+                Cooldowns = "Weapon · Cooldowns",
+                Melee = "Weapon · Melee",
+                Grenades = "Weapon · Grenades",
+            },
+        },
+        Automation = {
+            ["Auto Loadout"] = {
+                Setup = "Auto Loadout · Setup",
+                ["Slot Editor"] = "Auto Loadout · Slot Editor",
+            },
+        },
+        Visuals = {
+            ["Player ESP"] = {
+                Text = "ESP · Text",
+                Enemies = "ESP · Enemies",
+                Teammates = "ESP · Teammates",
+            },
+            Crosshair = {
+                Text = "Crosshair · Text",
+                ["Motion & Effects"] = "Crosshair · Motion & Effects",
+            },
+            ["Weapon Visuals"] = {
+                Arms = "Weapon · Arms",
+                ["Held Item"] = "Weapon · Held Item",
+            },
+            ["Sound ESP"] = {
+                ["Activation & Filtering"] = "Sound ESP · Filtering",
+                Footsteps = "Sound ESP · Footsteps",
+                Other = "Sound ESP · Other",
+            },
+        },
+        Cosmetics = {
+            Overview = {
+                ["Cosmetic Runtime"] = "Cosmetics · Runtime",
+                ["Unlock All"] = "Cosmetics · Unlock All",
+                Community = "Cosmetics · Community",
+            },
+            Presets = {
+                Library = "Cosmetic Presets · Library",
+                Transfer = "Cosmetic Presets · Transfer",
+                Automation = "Cosmetic Presets · Automation",
+            },
+            Skins = { ["Apply To"] = "Skins · Apply To" },
+            Wraps = { ["Apply To"] = "Wraps · Apply To" },
+            Charms = {
+                ["Apply To"] = "Charms · Apply To",
+                ["Rank Charm Override"] = "Charms · Rank Override",
+            },
+            Finishers = { ["Apply To"] = "Finishers · Apply To" },
+        },
+        Player = {
+            Movement = {
+                Ground = "Movement · Ground",
+                Air = "Movement · Air",
+            },
+            ["Movement Recorder"] = {
+                Recorder = "Movement Recorder",
+                Markers = "Recorder · Markers",
+                ["Record / Replay"] = "Recorder · Record / Replay",
+                ["Playback Alignment"] = "Recorder · Playback Alignment",
+                ["Save Recording"] = "Recorder · Save Recording",
+                ["Recording Library"] = "Recorder · Recording Library",
+            },
+            ["Identity Spoofing"] = {
+                ["Local Player"] = "Identity · Local Player",
+                ["Other Player"] = "Identity · Other Player",
+            },
+        },
+        World = {
+            ["Post Processing"] = {
+                ["Tone & Color"] = "PostFX · Tone & Color",
+                ["Focus & Motion"] = "PostFX · Focus & Motion",
+                ["Light Effects"] = "PostFX · Light Effects",
+            },
+        },
+    }
+
+    local function qualifyTitle(topLabel, subLabel, rawTitle)
+        local t = TITLE_MAP[topLabel]
+        if t and t[subLabel] and t[subLabel][rawTitle] then
+            return t[subLabel][rawTitle]
+        end
+        return tostring(rawTitle or "Section")
+    end
+
+    local function normalizeSide(topLabel, subLabel, rawSide)
+        if topLabel == "Cosmetics" and (subLabel == "Wraps" or subLabel == "Finishers") then
+            return "Right"
+        end
+        local s = type(rawSide) == "string" and string.lower(rawSide) or nil
+        if s == "left" then return "Left" end
+        if s == "right" then return "Right" end
+        return nil
+    end
+
+    function CoreBridge._MakeSectionAdapter(sec)
+        local adapter = {
+            _menu = sec._menu,
+            _trove = sec._trove,
+            _container = sec._container,
+            _zBase = sec._zBase or 15,
+            Title = sec.Title,
+        }
+        function adapter:GetConfig() return self._menu and self._menu:GetConfig() end
+        function adapter:AddToggle(o) return WC.createToggle(self, o) end
+        function adapter:AddLabel(o) return WC.createLabel(self, o) end
+        function adapter:AddDivider(o) return WC.createDivider(self, o) end
+        function adapter:AddButton(o) return WC.createButton(self, o) end
+        function adapter:AddSlider(o) return WC.createSlider(self, o) end
+        function adapter:AddRangeSlider(o) return WC.createRangeSlider(self, o) end
+        function adapter:AddTextBox(o) return WC.createTextBox(self, o) end
+        function adapter:AddOrderedList(o) return WC.createOrderedList(self, o) end
+        function adapter:AddGroup(o) return WC.createGroup(self, o) end
+        function adapter:AddDropdown(o) return WP.createDropdown(self, o, false) end
+        function adapter:AddMultiDropdown(o) return WP.createDropdown(self, o, true) end
+        function adapter:AddList(o) return WP.createList(self, o) end
+        function adapter:AddMultiList(o) return WP.createList(self, o) end
+        function adapter:AddColor(o) return WP.createColor(self, o) end
+        function adapter:AddKeybind(o) return WP.createKeybind(self, o) end
+        function adapter:AddSkinChanger(o) return WP.createSkinChanger(self, o) end
+        function adapter:AddIconStrip(o) return WP.createDropdown(self, o, false) end
+        function adapter:AddViewport() return { SetModel = function() end, OnRealized = function() end, SetDistance = function() end, SetRotation = function() end, SetVisible = function() end, Destroy = function() end } end
+        function adapter:SetVisible(v)
+            if sec._wrapper then sec._wrapper.Visible = (v == true) end
+        end
+        function adapter:Connect(sig, fn)
+            if sig and fn then self._trove:Connect(sig, fn) end
+            return self
+        end
+        return adapter
+    end
+
+    CoreBridge._firstOpenCallbacks = {}
+    function CoreBridge.RunFirstOpenCallbacks()
+        local list = CoreBridge._firstOpenCallbacks
+        if #list == 0 then return end
+        task.spawn(function()
+            task.wait(0.05)
+            for _, cb in ipairs(list) do
+                task.spawn(function() pcall(cb) end)
+            end
+        end)
+    end
+
+    function CoreBridge.CreateMenuAdapter(opts)
+        opts = opts or {}
+        if CoreBridge.InitFeatureTabs then
+            CoreBridge.InitFeatureTabs()
+        end
+        local pages = CoreBridge.FeaturePages or {}
+        local trove = Trove.new("CoreMenuAdapter")
+
+        local ROUTE_MAP = {
+            Combat = { Page = pages.Combat, Name = "Combat" },
+            Automation = { Page = pages.Combat, Name = "Combat" },
+            Visuals = { Page = pages.Visuals, Name = "Visuals" },
+            Cosmetics = { Page = pages.Visuals, Name = "Visuals" },
+            Player = { Page = pages.Player, Name = "Player" },
+            World = { Page = pages.World, Name = "World" },
+        }
+
+        local menu = {
+            _trove = trove,
+            _config = opts.Config,
+            _colorAnim = opts.ColorAnimation,
+            _state = opts.State,
+            _stateData = opts.StateData,
+            _onUnload = opts.OnUnload,
+            Visible = true,
+            Keybind = Enum.KeyCode.RightShift,
+        }
+
+        function menu:GetConfig() return self._config end
+        function menu:GetColorAnimation() return self._colorAnim end
+        function menu:SetVisible(vis)
+            self.Visible = (vis == true)
+            if CoreBridge.SetHubVisible then CoreBridge.SetHubVisible(self.Visible) end
+        end
+        function menu:SetKeybindListEnabled(val)
+            CoreBridge._keybindHudEnabled = (val ~= false)
+            if CoreBridge._KeybindHUD then CoreBridge._KeybindHUD.Update() end
+        end
+        function menu:IsKeybindListEnabled()
+            return CoreBridge._keybindHudEnabled ~= false
+        end
+        function menu:SetWatermarkEnabled() end
+        function menu:SetWatermarkUsername() end
+        function menu:SetAccent() end
+        function menu:RegisterMobileButton() return nil end
+        function menu:IsMobile() return not (U.isPCDevice and U.isPCDevice()) end
+        function menu:CloseOverlays() end
+        function menu:HideSearchResults() end
+        function menu:InvalidateSearch() end
+        function menu:ShouldBlockKeybindCapture()
+            return (CoreBridge._capturingKeybind ~= nil) or (UserInputService:GetFocusedTextBox() ~= nil)
+        end
+        function menu:Dialog(dOpts, builder)
+            return CoreBridge._Dialog.Show(dOpts, builder)
+        end
+        function menu:Unload()
+            if self._onUnload then self._onUnload() end
+        end
+        function menu:Destroy()
+            trove:Destroy()
+            if CoreBridge._activeDialog then pcall(function() CoreBridge._activeDialog:Close() end) end
+            if CoreBridge._KeybindHUD then pcall(CoreBridge._KeybindHUD.DestroyHudFrame) end
+        end
+
+        function menu:AddTab(tOpts)
+            tOpts = tOpts or {}
+            local topLabel = tostring(tOpts.Label or "Combat")
+            local route = ROUTE_MAP[topLabel] or { Page = pages.Combat, Name = "Combat" }
+
+            local topTab = {}
+            function topTab:Open()
+                if CoreBridge.SelectCoreTab then CoreBridge.SelectCoreTab(route.Name) end
+            end
+            function topTab:AddTab(subOpts)
+                subOpts = subOpts or {}
+                local subLabel = tostring(subOpts.Label or "")
+                local subTab = {}
+
+                function subTab:Open()
+                    if CoreBridge.SelectCoreTab then CoreBridge.SelectCoreTab(route.Name) end
+                end
+                function subTab:OnFirstOpen(cb)
+                    if type(cb) == "function" then
+                        table.insert(CoreBridge._firstOpenCallbacks, cb)
+                    end
+                    return self
+                end
+                function subTab:Grid()
+                    local gridObj = {}
+                    function gridObj:AddSection(sOpts)
+                        sOpts = sOpts or {}
+                        local title = qualifyTitle(topLabel, subLabel, sOpts.Title)
+                        local colSide = normalizeSide(topLabel, subLabel, sOpts.Side)
+                        local content, wrapper = UI.createSectionBox(route.Page, title, colSide)
+                        return CoreBridge._MakeSectionAdapter({
+                            _menu = menu,
+                            _trove = trove:Extend(),
+                            _container = content,
+                            _wrapper = wrapper,
+                            _zBase = 15,
+                            Title = title,
+                        })
+                    end
+                    function gridObj:AddMultiSection(mOpts)
+                        mOpts = mOpts or {}
+                        local titles = mOpts.Titles or {}
+                        local out = {}
+                        for _, tTitle in ipairs(titles) do
+                            table.insert(out, self:AddSection({ Title = tTitle, Side = mOpts.Side }))
+                        end
+                        return table.unpack(out)
+                    end
+                    return gridObj
+                end
+                return subTab
+            end
+            return topTab
+        end
+
+        CoreBridge.Menu = menu
+        return menu
+    end
 end
 
 -- ============================================================================
@@ -6643,6 +9667,31 @@ local v86 = {
 }
 --  Environment Kicia's modules expect: the module table and the aliases its
 --  loader set up before them (v102 = rawget, v103 = rawset, v107 = pcall).
+local _rawDebug = type(debug) == "table" and debug or {}
+local function safeDbg(name, fallback, errDefault)
+    local fn = _rawDebug[name] or K.fn(name)
+    if type(fn) ~= "function" then
+        return fallback
+    end
+    return function(...)
+        local ok, r1, r2, r3, r4 = pcall(fn, ...)
+        if ok then return r1, r2, r3, r4 end
+        return errDefault
+    end
+end
+local debug = setmetatable({
+    getconstants = safeDbg("getconstants", function() return {} end, {}),
+    getproto = safeDbg("getproto", function() return {} end, {}),
+    getprotos = safeDbg("getprotos", function() return {} end, {}),
+    getstack = safeDbg("getstack", function() return {} end, {}),
+    getupvalue = safeDbg("getupvalue", function() return nil end, nil),
+    getupvalues = safeDbg("getupvalues", function() return {} end, {}),
+    info = _rawDebug.info or function() return nil end,
+    setconstant = safeDbg("setconstant", function() end, nil),
+    setupvalue = safeDbg("setupvalue", function() end, nil),
+    traceback = _rawDebug.traceback or function(msg) return tostring(msg or "") end,
+}, { __index = _rawDebug })
+
 local tbl17 = { cache = {} }
 local v102, v103, v107 = rawget, rawset, pcall
 --  The obfuscator's integrity counters. Every check in the lifted code has one
@@ -6665,16 +9714,30 @@ local function clonefn(f)
     end
     return f
 end
-local fireServer = clonefn(Instance.new("RemoteEvent").FireServer)
-local fireServer2 = clonefn(Instance.new("UnreliableRemoteEvent").FireServer)
+local fireServer = (function()
+    local ok, fn = pcall(function() return clonefn(Instance.new("RemoteEvent").FireServer) end)
+    return ok and type(fn) == "function" and fn or function() end
+end)()
+local fireServer2 = (function()
+    local ok, fn = pcall(function() return clonefn(Instance.new("UnreliableRemoteEvent").FireServer) end)
+    return ok and type(fn) == "function" and fn or function() end
+end)()
 local v104 = clonefn(K.fn("sethiddenproperty"))
 local v108 = clonefn(K.fn("setfflag")) or function() end
 local v109 = clonefn(K.fn("isexecutorclosure")) or function() return false end
 local v110 = clonefn(K.fn("setrawmetatable")) or setmetatable
 local v111 = clonefn(K.fn("getrawmetatable")) or getmetatable
-local v112 = clonefn(v111(game).__newindex)
-local v113 = clonefn(v111(game).__index)
-local v114 = clonefn(game.FindFirstChildOfClass)
+local v112, v113 = (function()
+    local ok, gmt = pcall(v111, game)
+    if ok and type(gmt) == "table" then
+        return clonefn(gmt.__newindex), clonefn(gmt.__index)
+    end
+    return nil, nil
+end)()
+local v114 = (function()
+    local ok, fn = pcall(function() return clonefn(game.FindFirstChildOfClass) end)
+    return ok and type(fn) == "function" and fn or function(inst, cls) return inst and inst:FindFirstChildOfClass(cls) end
+end)()
 local function n27() return 0 end
 local firetouchinterest = K.fn("firetouchinterest") or function() end
 local getconnections = K.fn("getconnections") or function() return {} end
@@ -66715,91 +69778,109 @@ return je.c
 end
 end
 do -- jf
-local function fn35()local I,W= tbl17 .bG(), tbl17 .aE(); tbl17 .hN();local N,P,a,e,c,E,p,T= tbl17 .h_(), tbl17 .ij(), tbl17 .ip(), tbl17 .n(), tbl17 .iw(), tbl17 .i_(), tbl17 .je(),cloneref(game:GetService("Players")).LocalPlayer;return function(l)do local UIS=game:GetService("UserInputService"); local cam=workspace.CurrentCamera; local vp=cam and cam.ViewportSize or Vector2.new(400,700); local small=math.min(vp.X,vp.Y)<720; local touch=UIS.TouchEnabled and (not UIS.KeyboardEnabled or UIS.PreferredInput==Enum.PreferredInput.Touch or small); if getgenv().KhForceMobileUi==true or touch then W.ForceMobileLayout(true); getgenv().KhForceMobileUi=true; end end;local t=W.Menu.new({Icon=K.LithiumLogo,Title=string.format("CORE.XYZ  ·  RIVALS"),Directory="CoreXYZ_Rivals/rivals",Config=l.ReactiveStoreAdapter,ColorAnimation=l.ColorAnimation,Persistence=I,State=l.GeneralState,StateData=l.GeneralStateData,OnUnload=function()e:Destroy();end});e:Add(t);local I=l.PlayerIdentities;t:SetWatermarkUsername(I:GetPresented(T));e:Connect(I.IdentityChanged,function(W)if W==T then t:SetWatermarkUsername(I:GetPresented(T));end;end);P(l,t);E(l,t);c(l,t);N(l,t);p(l,t);a(l,t);
-if CoreBridge and CoreBridge.UseHostUI then
-    local KiciaStore = tbl17.bG()
-    CoreBridge.Menu = t
-    CoreBridge.BootCtx = l
-    CoreBridge.ThemeMgr = tbl17.A()
-    CoreBridge.Store = l.StoreProfiles or KiciaStore
-    CoreBridge.OnCoreTabSelected = function(label, isKiciaHost)
-        if isKiciaHost then
-            local kt = CoreBridge.KiciaTabs and CoreBridge.KiciaTabs[label]
-            if kt then kt:Open(true) end
-        else
-            pcall(function() t:CloseOverlays(nil, true) end)
+local function fn35()
+    local I = tbl17.bG()
+    tbl17.aE()
+    tbl17.hN()
+    local N, P, a, e, c, E, p = tbl17.h_(), tbl17.ij(), tbl17.ip(), tbl17.n(), tbl17.iw(), tbl17.i_(), tbl17.je()
+    return function(l)
+        CoreBridge.InitFeatureTabs()
+        local t = CoreBridge.CreateMenuAdapter({
+            Title = "CORE.XYZ  ·  RIVALS",
+            Config = l.ReactiveStoreAdapter,
+            ColorAnimation = l.ColorAnimation,
+            Persistence = I,
+            State = l.GeneralState,
+            StateData = l.GeneralStateData,
+            OnUnload = function() e:Destroy() end,
+        })
+        e:Add(t)
+
+        P(l, t)
+        E(l, t)
+        c(l, t)
+        N(l, t)
+        p(l, t)
+        a(l, t)
+
+        CoreBridge.RunFirstOpenCallbacks()
+
+        local KiciaStore = tbl17.bG()
+        CoreBridge.Menu = t
+        CoreBridge.BootCtx = l
+        CoreBridge.ThemeMgr = tbl17.A()
+        CoreBridge.Store = l.StoreProfiles or KiciaStore
+        CoreBridge.OnCoreTabSelected = function()
+            pcall(function() t:CloseOverlays() end)
             pcall(function() t:HideSearchResults() end)
         end
-    end
-    CoreBridge.SyncKiciaVisibility = function(vis)
-        if t.Visible ~= vis then
-            t:SetVisible(vis, true)
+        CoreBridge.SyncKiciaVisibility = function(vis)
+            t.Visible = (vis == true)
         end
-    end
-    CoreBridge.ShouldBlockKeybindCapture = function(input)
-        return t:ShouldBlockKeybindCapture(input)
-    end
-    CoreBridge.GetMenuKeybind = function()
-        return t.Keybind
-    end
-    CoreBridge.SetKeybindListEnabled = function(val)
-        t:SetKeybindListEnabled(val)
-    end
-    CoreBridge.SetWatermarkEnabled = function(val)
-        t:SetWatermarkEnabled(val)
-    end
-    CoreBridge.SyncKiciaAccent = function(col)
-        if typeof(col) == "Color3" then
-            pcall(function() t:SetAccent(col) end)
-            pcall(function() tbl17.A().refresh("TabHighlight", col) end)
-            pcall(function()
-                if KiciaStore and KiciaStore.Set then KiciaStore:Set({ "Theme", "Accent" }, col) end
-            end)
+        CoreBridge.ShouldBlockKeybindCapture = function(input)
+            return t:ShouldBlockKeybindCapture(input)
         end
-    end
-    CoreBridge.SyncKiciaFullTheme = function(tokens)
-        if type(tokens) ~= "table" then return end
-        local Amod = tbl17.A()
-        for k, v in pairs(tokens) do
-            if typeof(v) == "Color3" and Amod.Tokens[k] ~= nil then
-                pcall(Amod.refresh, k, v)
-                if k == "Accent" then pcall(function() t:SetAccent(v) end) end
-                pcall(function() if KiciaStore and KiciaStore.Set then KiciaStore:Set({ "Theme", k }, v) end end)
+        CoreBridge.GetMenuKeybind = function()
+            return t.Keybind
+        end
+        CoreBridge.SetKeybindListEnabled = function(val)
+            t:SetKeybindListEnabled(val)
+        end
+        CoreBridge.SetWatermarkEnabled = function() end
+        CoreBridge.SyncKiciaAccent = function(col)
+            if typeof(col) == "Color3" then
+                pcall(function() t:SetAccent(col) end)
+                pcall(function() tbl17.A().refresh("TabHighlight", col) end)
+                pcall(function()
+                    if KiciaStore and KiciaStore.Set then KiciaStore:Set({ "Theme", "Accent" }, col) end
+                end)
             end
         end
-    end
-    CoreBridge.SaveKiciaProfile = function(name)
-        if KiciaStore and KiciaStore.SaveToFile and type(name) == "string" and name ~= "" then
-            pcall(function() KiciaStore:SaveToFile(name) end)
+        CoreBridge.SyncKiciaFullTheme = function(tokens)
+            if type(tokens) ~= "table" then return end
+            local Amod = tbl17.A()
+            for k, v in pairs(tokens) do
+                if typeof(v) == "Color3" and Amod.Tokens[k] ~= nil then
+                    pcall(Amod.refresh, k, v)
+                    if k == "Accent" then pcall(function() t:SetAccent(v) end) end
+                    pcall(function() if KiciaStore and KiciaStore.Set then KiciaStore:Set({ "Theme", k }, v) end end)
+                end
+            end
         end
-    end
-    CoreBridge.LoadKiciaProfile = function(name)
-        if KiciaStore and KiciaStore.LoadFromFile and type(name) == "string" and name ~= "" then
-            pcall(function() KiciaStore:LoadFromFile(name) end)
+        CoreBridge.SaveKiciaProfile = function(name)
+            if KiciaStore and KiciaStore.SaveToFile and type(name) == "string" and name ~= "" then
+                pcall(function() KiciaStore:SaveToFile(name) end)
+            end
         end
-    end
-    CoreBridge.ExportKiciaJson = function()
-        if KiciaStore and KiciaStore.ExportToJson then
-            local r = KiciaStore:ExportToJson()
-            if r and r.Ok then return r.Value end
+        CoreBridge.LoadKiciaProfile = function(name)
+            if KiciaStore and KiciaStore.LoadFromFile and type(name) == "string" and name ~= "" then
+                pcall(function() KiciaStore:LoadFromFile(name) end)
+            end
         end
-        return nil
-    end
-    CoreBridge.ImportKiciaJson = function(raw)
-        if KiciaStore and KiciaStore.LoadFromJson then
-            local r = KiciaStore:LoadFromJson(raw)
-            return r and r.Ok == true
+        CoreBridge.ExportKiciaJson = function()
+            if KiciaStore and KiciaStore.ExportToJson then
+                local r = KiciaStore:ExportToJson()
+                if r and r.Ok then return r.Value end
+            end
+            return nil
         end
-        return false
+        CoreBridge.ImportKiciaJson = function(raw)
+            if KiciaStore and KiciaStore.LoadFromJson then
+                local r = KiciaStore:LoadFromJson(raw)
+                return r and r.Ok == true
+            end
+            return false
+        end
+        CoreBridge.UnloadEngine = function()
+            if K and K.Unload then
+                pcall(K.Unload)
+            end
+        end
+
+        if CoreBridge.BuildSettingsTab then CoreBridge.BuildSettingsTab() end
+        if CoreBridge.LaunchHub then CoreBridge.LaunchHub() end
     end
-    if CoreBridge.BuildSettingsTab then CoreBridge.BuildSettingsTab() end
-    if CoreBridge.LaunchHub then CoreBridge.LaunchHub() end
-    t:SetVisible(true, true)
-else
-    t:AddSettingsTab()
-    t:SetVisible(true, true)
 end
-end;end
 
 tbl17.jf = function()
 local jf = tbl17.cache.jf
@@ -66815,15 +69896,19 @@ end
 do -- jg
 local function fn35()
 return function()
-for _, v115 in getconnections(game:GetService("Players").LocalPlayer.Idled) do
-if v115.Function == nil then
-if v115.Disable then
-v115:Disable()
-elseif v115.Disconnect then
-v115:Disconnect()
-end
-end
-end
+pcall(function()
+    local lp = game:GetService("Players").LocalPlayer
+    if not lp then return end
+    for _, v115 in ipairs(getconnections(lp.Idled) or {}) do
+        if v115 and v115.Function == nil then
+            if v115.Disable then
+                pcall(function() v115:Disable() end)
+            elseif v115.Disconnect then
+                pcall(function() v115:Disconnect() end)
+            end
+        end
+    end
+end)
 end
 end
 
@@ -72794,29 +75879,28 @@ end
 --  Lithium logo: written to disk once per load and turned into an asset id
 --  for the menu rail and the watermark.
 do
-    local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    local map = {}
-    for i = 1, 64 do map[alphabet:byte(i)] = i - 1 end
-    local function decode(s)
-        local out = buffer.create(#s * 3 // 4 + 3)
-        local n = 0
-        for i = 1, #s, 4 do
-            local a, b, c, d = s:byte(i, i + 3)
-            local vc, vd = map[c], map[d]
-            local v = map[a] * 262144 + map[b] * 4096 + (vc or 0) * 64 + (vd or 0)
-            buffer.writeu8(out, n, bit32.rshift(v, 16))
-            n += 1
-            if vc then buffer.writeu8(out, n, bit32.band(bit32.rshift(v, 8), 255)) n += 1 end
-            if vd then buffer.writeu8(out, n, bit32.band(v, 255)) n += 1 end
-        end
-        return buffer.readstring(out, 0, n)
-    end
     local wrf, gca = K.fn("writefile"), K.fn("getcustomasset") or K.fn("getsynasset")
-    if wrf and gca then
+    if buffer and bit32 and wrf and gca and type(LITHIUM_LOGO_B64) == "string" and #LITHIUM_LOGO_B64 > 0 then
+        local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        local map = {}
+        for i = 1, 64 do map[alphabet:byte(i)] = i - 1 end
+        local function decode(s)
+            local out = buffer.create(#s * 3 // 4 + 3)
+            local n = 0
+            for i = 1, #s, 4 do
+                local a, b, c, d = s:byte(i, i + 3)
+                local vc, vd = map[c], map[d]
+                local v = map[a] * 262144 + map[b] * 4096 + (vc or 0) * 64 + (vd or 0)
+                buffer.writeu8(out, n, bit32.rshift(v, 16))
+                n += 1
+                if vc then buffer.writeu8(out, n, bit32.band(bit32.rshift(v, 8), 255)) n += 1 end
+                if vd then buffer.writeu8(out, n, bit32.band(v, 255)) n += 1 end
+            end
+            return buffer.readstring(out, 0, n)
+        end
         local path = "CoreXYZ_Rivals/lithium_logo.png"
-        local ok = pcall(wrf, path, decode(LITHIUM_LOGO_B64))
-        local ok2, id = pcall(gca, path)
-        --  Kicia's original logo is used; the Lithium one is no longer applied.
+        pcall(wrf, path, decode(LITHIUM_LOGO_B64))
+        pcall(gca, path)
     end
 end
 
