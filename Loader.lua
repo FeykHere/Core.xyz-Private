@@ -1,4 +1,4 @@
---// Core.xyz Loader (Platoboost Auth + Universe ID Gate + Sharp Monochrome UI)
+--// Core.xyz Loader (Platoboost Auth + Universe ID Gate + Modern Key System UI)
 
 local CONFIG = {
 	ServiceId = 36271,
@@ -10,6 +10,8 @@ local CONFIG = {
 }
 
 local KEY_FILE = "CoreXYZ_Key.txt"
+local KEY_META_FILE = "CoreXYZ_KeyMeta.json"
+local DEFAULT_KEY_DURATION_SECONDS = 86400
 
 -------------------------------------------------------------------------------
 --! Embedded JSON & SHA-256 Cryptography Library (Scoped for 200-Local Safety)
@@ -509,6 +511,7 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
+local RunService = game:GetService("RunService")
 
 local service = CONFIG.ServiceId
 local secret = CONFIG.Secret
@@ -572,6 +575,86 @@ local function safeRequest(reqParams)
 	}, nil
 end
 
+local function parseTimestampValue(rawVal)
+	if type(rawVal) == "number" then
+		if rawVal > 1e12 then
+			return fMathFloor(rawVal / 1000)
+		end
+		if rawVal > 1e9 then
+			return fMathFloor(rawVal)
+		end
+	elseif type(rawVal) == "string" and rawVal ~= "" then
+		local asNum = tonumber(rawVal)
+		if asNum then
+			return parseTimestampValue(asNum)
+		end
+		if type(DateTime) == "table" and type(DateTime.fromIsoDate) == "function" then
+			local okDt, dtObj = pcall(DateTime.fromIsoDate, rawVal)
+			if okDt and dtObj and dtObj.UnixTimestamp then
+				return dtObj.UnixTimestamp
+			end
+		end
+		local yr, mo, dy, hr, mn, sc = rawVal:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[T ](%d%d):(%d%d):(%d%d)")
+		if yr then
+			local okTime, unixTs = pcall(os.time, {
+				year = tonumber(yr),
+				month = tonumber(mo),
+				day = tonumber(dy),
+				hour = tonumber(hr),
+				min = tonumber(mn),
+				sec = tonumber(sc),
+			})
+			if okTime and unixTs then
+				return unixTs
+			end
+		end
+	end
+	return nil
+end
+
+local function extractPlatoboostExpiry(decoded)
+	if type(decoded) ~= "table" then
+		return nil
+	end
+	local now = fOsTime()
+	local sources = {}
+	if type(decoded.data) == "table" then
+		table.insert(sources, decoded.data)
+	end
+	table.insert(sources, decoded)
+
+	for _, tbl in ipairs(sources) do
+		for _, field in ipairs({
+			"expiresAt", "expires_at", "expireAt", "expire_at",
+			"expiration", "expiry", "validUntil", "valid_until", "resetAt", "reset_at",
+		}) do
+			local ts = parseTimestampValue(tbl[field])
+			if ts and ts > (now - 60) then
+				return ts
+			end
+		end
+		for _, field in ipairs({ "secondsLeft", "seconds_left", "remainingSeconds", "ttl", "remaining", "timeLeft", "time_left" }) do
+			local secVal = tonumber(tbl[field])
+			if secVal and secVal > 0 then
+				return now + fMathFloor(secVal)
+			end
+		end
+		for _, field in ipairs({ "minutesLeft", "minutes_left", "remainingMinutes" }) do
+			local minVal = tonumber(tbl[field])
+			if minVal and minVal > 0 then
+				return now + fMathFloor(minVal * 60)
+			end
+		end
+		for _, field in ipairs({ "hoursLeft", "hours_left", "durationHours" }) do
+			local hrVal = tonumber(tbl[field])
+			if hrVal and hrVal > 0 then
+				return now + fMathFloor(hrVal * 3600)
+			end
+		end
+	end
+	return nil
+end
+
 local generateNonce = function()
 	local str = ""
 	for _ = 1, 16 do
@@ -583,6 +666,7 @@ end
 local cachedLink, cachedTime = "", 0
 local host = "https://api.platoboost.com"
 local hostResolved = false
+local lastVerifiedExpiry = nil
 
 local function resolveHost()
 	if hostResolved then
@@ -713,12 +797,14 @@ local redeemKey = function(key)
 				if type(decoded.data) == "table" and decoded.data.valid == true then
 					if useNonce then
 						if decoded.data.hash == lDigest("true-" .. nonce .. "-" .. secret) then
+							lastVerifiedExpiry = extractPlatoboostExpiry(decoded)
 							return true, "Key redeemed."
 						else
 							onMessage("failed to verify integrity.")
 							return false, "failed to verify integrity."
 						end
 					else
+						lastVerifiedExpiry = extractPlatoboostExpiry(decoded)
 						return true, "Key redeemed."
 					end
 				else
@@ -757,6 +843,7 @@ local verifyKey = function(key)
 		return false, msg
 	end
 	requestSending = true
+	lastVerifiedExpiry = nil
 
 	local activeHost = resolveHost()
 	local nonce = generateNonce()
@@ -792,12 +879,14 @@ local verifyKey = function(key)
 				if type(decoded.data) == "table" and decoded.data.valid == true then
 					if useNonce then
 						if decoded.data.hash == lDigest("true-" .. nonce .. "-" .. secret) then
+							lastVerifiedExpiry = extractPlatoboostExpiry(decoded)
 							return true, "Key verified."
 						else
 							onMessage("failed to verify integrity.")
 							return false, "failed to verify integrity."
 						end
 					else
+						lastVerifiedExpiry = extractPlatoboostExpiry(decoded)
 						return true, "Key verified."
 					end
 				else
@@ -865,7 +954,7 @@ local getFlag = function(name)
 end
 
 -------------------------------------------------------------------------------
---! Shared Utilities (Notifications, Safe GUI Parenting, Filesystem, Loader)
+--! Shared Utilities (Notifications, Safe GUI, Filesystem, Session Meta)
 -------------------------------------------------------------------------------
 local function sendNotification(title, text, duration)
 	pcall(function()
@@ -916,16 +1005,6 @@ local function destroyExistingGui(parent, guiName)
 	end)
 end
 
-local function applySharpStroke(instance, thickness, color)
-	local stroke = Instance.new("UIStroke")
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.LineJoinMode = Enum.LineJoinMode.Miter
-	stroke.Thickness = thickness or 1
-	stroke.Color = color or Color3.fromRGB(255, 255, 255)
-	stroke.Parent = instance
-	return stroke
-end
-
 local function safeIsFile(path)
 	if type(isfile) == "function" then
 		local ok, res = pcall(isfile, path)
@@ -956,6 +1035,59 @@ local function safeDeleteFile(path)
 		return pcall(delfile, path)
 	end
 	return false
+end
+
+local function persistKeySession(verifiedKey)
+	local now = fOsTime()
+	local existingMeta = nil
+	if safeIsFile(KEY_META_FILE) then
+		local rawMeta = safeReadFile(KEY_META_FILE)
+		if rawMeta and rawMeta ~= "" then
+			local okMeta, decodedMeta = pcall(lDecode, rawMeta)
+			if okMeta and type(decodedMeta) == "table" and decodedMeta.key == verifiedKey then
+				existingMeta = decodedMeta
+			end
+		end
+	end
+
+	local activatedAt = (existingMeta and tonumber(existingMeta.activatedAt)) or now
+	local hasServerExpiry = lastVerifiedExpiry ~= nil
+	local expiresAt = lastVerifiedExpiry
+
+	if not expiresAt then
+		if existingMeta and tonumber(existingMeta.expiresAt) and tonumber(existingMeta.expiresAt) > now then
+			expiresAt = tonumber(existingMeta.expiresAt)
+			hasServerExpiry = existingMeta.hasServerExpiry == true
+		else
+			expiresAt = activatedAt + DEFAULT_KEY_DURATION_SECONDS
+		end
+	end
+
+	local sessionData = {
+		key = verifiedKey,
+		serviceId = CONFIG.ServiceId,
+		secret = CONFIG.Secret,
+		host = host,
+		hwidHash = lDigest(fGetHwid()),
+		activatedAt = activatedAt,
+		expiresAt = expiresAt,
+		hasServerExpiry = hasServerExpiry,
+		verifiedAt = now,
+	}
+
+	safeWriteFile(KEY_META_FILE, lEncode({
+		key = sessionData.key,
+		serviceId = sessionData.serviceId,
+		activatedAt = sessionData.activatedAt,
+		expiresAt = sessionData.expiresAt,
+		hasServerExpiry = sessionData.hasServerExpiry,
+		verifiedAt = sessionData.verifiedAt,
+	}))
+
+	pcall(function()
+		local envTbl = (type(getgenv) == "function" and getgenv()) or _G
+		envTbl.__CoreXYZ_KeySession = sessionData
+	end)
 end
 
 local function toRawGitHubUrl(url)
@@ -1007,7 +1139,7 @@ local function executeTargetScript(targetUrl)
 end
 
 -------------------------------------------------------------------------------
---! Custom Monochrome Sharp Banner (Unsupported Game Notification)
+--! Modern Glassmorphic Toast Banner (Unsupported Game Notification)
 -------------------------------------------------------------------------------
 local function showUnsupportedBanner(messageText)
 	local guiParent = getSafeGuiParent()
@@ -1027,42 +1159,53 @@ local function showUnsupportedBanner(messageText)
 	local bannerFrame = Instance.new("Frame")
 	bannerFrame.Name = "UnsupportedBanner"
 	bannerFrame.AnchorPoint = Vector2.new(0.5, 0)
-	bannerFrame.Position = UDim2.new(0.5, 0, 0, -90)
-	bannerFrame.Size = UDim2.new(0, 340, 0, 74)
-	bannerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	bannerFrame.Position = UDim2.new(0.5, 0, 0, -96)
+	bannerFrame.Size = UDim2.new(0, 344, 0, 74)
+	bannerFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 	bannerFrame.BorderSizePixel = 0
 	bannerFrame.Parent = bannerGui
-	applySharpStroke(bannerFrame, 1, Color3.fromRGB(255, 255, 255))
+
+	local bCorner = Instance.new("UICorner")
+	bCorner.CornerRadius = UDim.new(0, 10)
+	bCorner.Parent = bannerFrame
+
+	local bStroke = Instance.new("UIStroke")
+	bStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	bStroke.Thickness = 1
+	bStroke.Color = Color3.fromRGB(64, 64, 78)
+	bStroke.Parent = bannerFrame
+
+	local bDot = Instance.new("Frame")
+	bDot.Position = UDim2.new(0, 14, 0, 16)
+	bDot.Size = UDim2.new(0, 7, 0, 7)
+	bDot.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+	bDot.BorderSizePixel = 0
+	bDot.Parent = bannerFrame
+	local bDotCorner = Instance.new("UICorner")
+	bDotCorner.CornerRadius = UDim.new(1, 0)
+	bDotCorner.Parent = bDot
 
 	local bannerHeader = Instance.new("TextLabel")
 	bannerHeader.Name = "HeaderTitle"
-	bannerHeader.Size = UDim2.new(1, -24, 0, 28)
-	bannerHeader.Position = UDim2.new(0, 12, 0, 0)
+	bannerHeader.Size = UDim2.new(1, -36, 0, 22)
+	bannerHeader.Position = UDim2.new(0, 28, 0, 9)
 	bannerHeader.BackgroundTransparency = 1
 	bannerHeader.Font = Enum.Font.GothamBold
 	bannerHeader.Text = "CORE.XYZ"
 	bannerHeader.TextSize = 13
-	bannerHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+	bannerHeader.TextColor3 = Color3.fromRGB(245, 245, 250)
 	bannerHeader.TextXAlignment = Enum.TextXAlignment.Left
 	bannerHeader.Parent = bannerFrame
 
-	local bannerDivider = Instance.new("Frame")
-	bannerDivider.Name = "Divider"
-	bannerDivider.Size = UDim2.new(1, 0, 0, 1)
-	bannerDivider.Position = UDim2.new(0, 0, 0, 28)
-	bannerDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	bannerDivider.BorderSizePixel = 0
-	bannerDivider.Parent = bannerFrame
-
 	local bannerMessage = Instance.new("TextLabel")
 	bannerMessage.Name = "Message"
-	bannerMessage.Size = UDim2.new(1, -24, 1, -29)
-	bannerMessage.Position = UDim2.new(0, 12, 0, 29)
+	bannerMessage.Size = UDim2.new(1, -28, 0, 22)
+	bannerMessage.Position = UDim2.new(0, 14, 0, 38)
 	bannerMessage.BackgroundTransparency = 1
 	bannerMessage.Font = Enum.Font.GothamMedium
 	bannerMessage.Text = messageText
 	bannerMessage.TextSize = 13
-	bannerMessage.TextColor3 = Color3.fromRGB(255, 95, 95)
+	bannerMessage.TextColor3 = Color3.fromRGB(255, 100, 100)
 	bannerMessage.TextXAlignment = Enum.TextXAlignment.Left
 	bannerMessage.Parent = bannerFrame
 
@@ -1076,7 +1219,7 @@ local function showUnsupportedBanner(messageText)
 
 	TweenService:Create(
 		bannerFrame,
-		TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+		TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 		{ Position = UDim2.new(0.5, 0, 0, 24) }
 	):Play()
 
@@ -1085,7 +1228,7 @@ local function showUnsupportedBanner(messageText)
 			local hideTween = TweenService:Create(
 				bannerFrame,
 				TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-				{ Position = UDim2.new(0.5, 0, 0, -90) }
+				{ Position = UDim2.new(0.5, 0, 0, -96) }
 			)
 			hideTween:Play()
 			hideTween.Completed:Wait()
@@ -1120,7 +1263,7 @@ end
 --! Step 3 — Saved Key Auto-Validation (ONLY if Game IS Supported)
 -------------------------------------------------------------------------------
 local initialStatusText = "Enter your key to continue."
-local initialStatusColor = Color3.fromRGB(215, 215, 215)
+local initialStatusColor = Color3.fromRGB(185, 188, 200)
 
 if safeIsFile(KEY_FILE) then
 	local rawSaved = safeReadFile(KEY_FILE)
@@ -1128,20 +1271,22 @@ if safeIsFile(KEY_FILE) then
 	if savedKey ~= "" then
 		local isValidSaved = verifyKey(savedKey)
 		if isValidSaved == true then
+			persistKeySession(savedKey)
 			sendNotification("Core.xyz", "Key verified! Loading script...", 4)
 			executeTargetScript(targetScriptUrl)
 			return
 		else
 			safeDeleteFile(KEY_FILE)
+			safeDeleteFile(KEY_META_FILE)
 			sendNotification("Core.xyz", "Your Saved key is Invalid/Expired.", 5)
 			initialStatusText = "Your Saved key is Invalid/Expired."
-			initialStatusColor = Color3.fromRGB(255, 95, 95)
+			initialStatusColor = Color3.fromRGB(255, 100, 100)
 		end
 	end
 end
 
 -------------------------------------------------------------------------------
---! Step 4 — Sharp-Corner Monochrome Key System UI
+--! Step 4 — Modern Monochrome Key System UI
 -------------------------------------------------------------------------------
 local function openKeySystemUI()
 	local guiParent = getSafeGuiParent()
@@ -1158,88 +1303,176 @@ local function openKeySystemUI()
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screenGui.DisplayOrder = 999999
 
-	local mainFrame = Instance.new("Frame")
-	mainFrame.Name = "MainContainer"
-	mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-	mainFrame.Size = UDim2.new(0, 396, 0, 212)
-	mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	mainFrame.BorderSizePixel = 0
-	mainFrame.ClipsDescendants = true
-	mainFrame.Parent = screenGui
-	applySharpStroke(mainFrame, 1, Color3.fromRGB(255, 255, 255))
+	local rootHolder = Instance.new("Frame")
+	rootHolder.Name = "RootHolder"
+	rootHolder.AnchorPoint = Vector2.new(0.5, 0.5)
+	rootHolder.Position = UDim2.new(0.5, 0, 0.5, 0)
+	rootHolder.Size = UDim2.new(0, 404, 0, 212)
+	rootHolder.BackgroundTransparency = 1
+	rootHolder.BorderSizePixel = 0
+	rootHolder.Parent = screenGui
 
 	local mainScale = Instance.new("UIScale")
-	mainScale.Scale = 0.94
-	mainScale.Parent = mainFrame
+	mainScale.Scale = 0.92
+	mainScale.Parent = rootHolder
 
-	-- 1. Top Header Bar
+	-- Soft Layered Ambient Drop Shadow
+	local shadowOuter = Instance.new("Frame")
+	shadowOuter.Name = "ShadowOuter"
+	shadowOuter.AnchorPoint = Vector2.new(0.5, 0.5)
+	shadowOuter.Position = UDim2.new(0.5, 0, 0.5, 4)
+	shadowOuter.Size = UDim2.new(1, 16, 1, 16)
+	shadowOuter.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	shadowOuter.BackgroundTransparency = 0.58
+	shadowOuter.BorderSizePixel = 0
+	shadowOuter.ZIndex = 1
+	shadowOuter.Parent = rootHolder
+	local shadowCorner = Instance.new("UICorner")
+	shadowCorner.CornerRadius = UDim.new(0, 16)
+	shadowCorner.Parent = shadowOuter
+
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Name = "MainContainer"
+	mainFrame.Size = UDim2.new(1, 0, 1, 0)
+	mainFrame.Position = UDim2.new(0, 0, 0, 0)
+	mainFrame.BackgroundColor3 = Color3.fromRGB(13, 13, 17)
+	mainFrame.BorderSizePixel = 0
+	mainFrame.ClipsDescendants = true
+	mainFrame.ZIndex = 2
+	mainFrame.Parent = rootHolder
+
+	local mainCorner = Instance.new("UICorner")
+	mainCorner.CornerRadius = UDim.new(0, 12)
+	mainCorner.Parent = mainFrame
+
+	local mainGrad = Instance.new("UIGradient")
+	mainGrad.Rotation = 90
+	mainGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 26)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 13)),
+	})
+	mainGrad.Parent = mainFrame
+
+	local mainStroke = Instance.new("UIStroke")
+	mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	mainStroke.Thickness = 1
+	mainStroke.Color = Color3.fromRGB(255, 255, 255)
+	mainStroke.Transparency = 0.72
+	mainStroke.Parent = mainFrame
+
+	-- Top Shimmer Accent Line
+	local topAccent = Instance.new("Frame")
+	topAccent.Name = "TopAccent"
+	topAccent.Position = UDim2.new(0, 0, 0, 0)
+	topAccent.Size = UDim2.new(1, 0, 0, 2)
+	topAccent.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	topAccent.BorderSizePixel = 0
+	topAccent.ZIndex = 5
+	topAccent.Parent = mainFrame
+
+	local topAccentGrad = Instance.new("UIGradient")
+	topAccentGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 45, 56)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 56)),
+	})
+	topAccentGrad.Parent = topAccent
+
+	-- 1. Clean Top Header Bar
 	local headerBar = Instance.new("Frame")
 	headerBar.Name = "HeaderBar"
-	headerBar.Position = UDim2.new(0, 0, 0, 0)
-	headerBar.Size = UDim2.new(1, 0, 0, 38)
-	headerBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	headerBar.Position = UDim2.new(0, 0, 0, 2)
+	headerBar.Size = UDim2.new(1, 0, 0, 44)
+	headerBar.BackgroundTransparency = 1
 	headerBar.BorderSizePixel = 0
 	headerBar.Active = true
+	headerBar.ZIndex = 3
 	headerBar.Parent = mainFrame
+
+	local statusDot = Instance.new("Frame")
+	statusDot.Name = "StatusDot"
+	statusDot.AnchorPoint = Vector2.new(0, 0.5)
+	statusDot.Position = UDim2.new(0, 18, 0.5, 0)
+	statusDot.Size = UDim2.new(0, 7, 0, 7)
+	statusDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	statusDot.BorderSizePixel = 0
+	statusDot.ZIndex = 4
+	statusDot.Parent = headerBar
+	local dotCorner = Instance.new("UICorner")
+	dotCorner.CornerRadius = UDim.new(1, 0)
+	dotCorner.Parent = statusDot
 
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "BrandTitle"
-	titleLabel.Position = UDim2.new(0, 14, 0, 0)
-	titleLabel.Size = UDim2.new(1, -56, 1, 0)
+	titleLabel.Position = UDim2.new(0, 34, 0, 0)
+	titleLabel.Size = UDim2.new(1, -86, 1, 0)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = "CORE.XYZ"
 	titleLabel.TextSize = 15
-	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLabel.TextColor3 = Color3.fromRGB(248, 248, 252)
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.ZIndex = 4
 	titleLabel.Parent = headerBar
-
-	local closeDivider = Instance.new("Frame")
-	closeDivider.Name = "CloseDivider"
-	closeDivider.AnchorPoint = Vector2.new(1, 0)
-	closeDivider.Position = UDim2.new(1, -38, 0, 0)
-	closeDivider.Size = UDim2.new(0, 1, 1, 0)
-	closeDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	closeDivider.BorderSizePixel = 0
-	closeDivider.Parent = headerBar
 
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Name = "CloseButton"
-	closeBtn.AnchorPoint = Vector2.new(1, 0)
-	closeBtn.Position = UDim2.new(1, 0, 0, 0)
-	closeBtn.Size = UDim2.new(0, 38, 1, 0)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
+	closeBtn.Position = UDim2.new(1, -14, 0.5, 0)
+	closeBtn.Size = UDim2.new(0, 26, 0, 26)
+	closeBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 31)
 	closeBtn.BorderSizePixel = 0
 	closeBtn.AutoButtonColor = false
 	closeBtn.Font = Enum.Font.GothamBold
 	closeBtn.Text = "X"
-	closeBtn.TextSize = 14
-	closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	closeBtn.TextSize = 11
+	closeBtn.TextColor3 = Color3.fromRGB(190, 194, 206)
+	closeBtn.ZIndex = 4
 	closeBtn.Parent = headerBar
+
+	local closeCorner = Instance.new("UICorner")
+	closeCorner.CornerRadius = UDim.new(0, 6)
+	closeCorner.Parent = closeBtn
+
+	local closeStroke = Instance.new("UIStroke")
+	closeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	closeStroke.Thickness = 1
+	closeStroke.Color = Color3.fromRGB(54, 54, 66)
+	closeStroke.Parent = closeBtn
 
 	local headerDivider = Instance.new("Frame")
 	headerDivider.Name = "HeaderDivider"
-	headerDivider.Position = UDim2.new(0, 0, 0, 38)
-	headerDivider.Size = UDim2.new(1, 0, 0, 1)
-	headerDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	headerDivider.Position = UDim2.new(0, 18, 0, 46)
+	headerDivider.Size = UDim2.new(1, -36, 0, 1)
+	headerDivider.BackgroundColor3 = Color3.fromRGB(64, 64, 78)
 	headerDivider.BorderSizePixel = 0
+	headerDivider.ZIndex = 3
 	headerDivider.Parent = mainFrame
+
+	local divGrad = Instance.new("UIGradient")
+	divGrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.15, 0.2),
+		NumberSequenceKeypoint.new(0.85, 0.2),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	divGrad.Parent = headerDivider
 
 	-- Body Container
 	local bodyFrame = Instance.new("Frame")
 	bodyFrame.Name = "Body"
-	bodyFrame.Position = UDim2.new(0, 0, 0, 39)
-	bodyFrame.Size = UDim2.new(1, 0, 1, -39)
+	bodyFrame.Position = UDim2.new(0, 0, 0, 47)
+	bodyFrame.Size = UDim2.new(1, 0, 1, -47)
 	bodyFrame.BackgroundTransparency = 1
 	bodyFrame.BorderSizePixel = 0
+	bodyFrame.ZIndex = 3
 	bodyFrame.Parent = mainFrame
 
 	-- 2. Live Status Label
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "StatusLabel"
-	statusLabel.Position = UDim2.new(0, 14, 0, 12)
-	statusLabel.Size = UDim2.new(1, -28, 0, 34)
+	statusLabel.Position = UDim2.new(0, 18, 0, 14)
+	statusLabel.Size = UDim2.new(1, -36, 0, 30)
 	statusLabel.BackgroundTransparency = 1
 	statusLabel.Font = Enum.Font.GothamMedium
 	statusLabel.Text = initialStatusText
@@ -1248,154 +1481,219 @@ local function openKeySystemUI()
 	statusLabel.TextColor3 = initialStatusColor
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 	statusLabel.TextYAlignment = Enum.TextYAlignment.Center
+	statusLabel.ZIndex = 4
 	statusLabel.Parent = bodyFrame
 
-	-- 3. Sharp Key Input Holder + TextBox
+	-- 3. Sleek Key Input Box
 	local inputHolder = Instance.new("Frame")
 	inputHolder.Name = "InputHolder"
-	inputHolder.Position = UDim2.new(0, 14, 0, 56)
-	inputHolder.Size = UDim2.new(1, -28, 0, 42)
+	inputHolder.Position = UDim2.new(0, 18, 0, 52)
+	inputHolder.Size = UDim2.new(1, -36, 0, 44)
 	inputHolder.BackgroundTransparency = 1
 	inputHolder.BorderSizePixel = 0
+	inputHolder.ZIndex = 4
 	inputHolder.Parent = bodyFrame
 
 	local keyBox = Instance.new("TextBox")
 	keyBox.Name = "KeyInput"
 	keyBox.Position = UDim2.new(0, 0, 0, 0)
 	keyBox.Size = UDim2.new(1, 0, 1, 0)
-	keyBox.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+	keyBox.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
 	keyBox.BorderSizePixel = 0
 	keyBox.Font = Enum.Font.Code
 	keyBox.Text = ""
 	keyBox.PlaceholderText = "Paste key here..."
-	keyBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 138)
-	keyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+	keyBox.PlaceholderColor3 = Color3.fromRGB(115, 118, 130)
+	keyBox.TextColor3 = Color3.fromRGB(248, 248, 252)
 	keyBox.TextSize = 14
 	keyBox.TextXAlignment = Enum.TextXAlignment.Left
 	keyBox.ClearTextOnFocus = false
 	keyBox.ClipsDescendants = true
+	keyBox.ZIndex = 5
 	keyBox.Parent = inputHolder
 
+	local keyBoxCorner = Instance.new("UICorner")
+	keyBoxCorner.CornerRadius = UDim.new(0, 8)
+	keyBoxCorner.Parent = keyBox
+
 	local keyBoxPadding = Instance.new("UIPadding")
-	keyBoxPadding.PaddingLeft = UDim.new(0, 10)
-	keyBoxPadding.PaddingRight = UDim.new(0, 10)
+	keyBoxPadding.PaddingLeft = UDim.new(0, 12)
+	keyBoxPadding.PaddingRight = UDim.new(0, 12)
 	keyBoxPadding.Parent = keyBox
 
-	local keyBoxStroke = applySharpStroke(keyBox, 1, Color3.fromRGB(255, 255, 255))
+	local keyBoxStroke = Instance.new("UIStroke")
+	keyBoxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	keyBoxStroke.Thickness = 1
+	keyBoxStroke.Color = Color3.fromRGB(56, 56, 70)
+	keyBoxStroke.Parent = keyBox
 
-	-- 4. Button Row with EXACTLY 2 Live-Animated Buttons ("Submit" & "Get Key")
+	keyBox.Focused:Connect(function()
+		TweenService:Create(keyBox, TweenInfo.new(0.16), { BackgroundColor3 = Color3.fromRGB(21, 21, 29) }):Play()
+		TweenService:Create(keyBoxStroke, TweenInfo.new(0.16), { Color = Color3.fromRGB(255, 255, 255) }):Play()
+	end)
+	keyBox.FocusLost:Connect(function()
+		TweenService:Create(keyBox, TweenInfo.new(0.18), { BackgroundColor3 = Color3.fromRGB(16, 16, 22) }):Play()
+		TweenService:Create(keyBoxStroke, TweenInfo.new(0.18), { Color = Color3.fromRGB(56, 56, 70) }):Play()
+	end)
+
+	-- 4. Button Row with EXACTLY 2 Modern Animated Buttons ("Submit" & "Get Key")
 	local buttonRow = Instance.new("Frame")
 	buttonRow.Name = "ButtonRow"
-	buttonRow.Position = UDim2.new(0, 14, 0, 114)
-	buttonRow.Size = UDim2.new(1, -28, 0, 42)
+	buttonRow.Position = UDim2.new(0, 18, 0, 110)
+	buttonRow.Size = UDim2.new(1, -36, 0, 40)
 	buttonRow.BackgroundTransparency = 1
 	buttonRow.BorderSizePixel = 0
+	buttonRow.ZIndex = 4
 	buttonRow.Parent = bodyFrame
 
 	local submitBtn = Instance.new("TextButton")
 	submitBtn.Name = "SubmitButton"
 	submitBtn.AnchorPoint = Vector2.new(0.5, 0.5)
-	submitBtn.Position = UDim2.new(0.25, -3, 0.5, 0)
-	submitBtn.Size = UDim2.new(0.5, -6, 1, 0)
-	submitBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	submitBtn.Position = UDim2.new(0.25, -5, 0.5, 0)
+	submitBtn.Size = UDim2.new(0.5, -10, 1, 0)
+	submitBtn.BackgroundColor3 = Color3.fromRGB(242, 242, 248)
 	submitBtn.BorderSizePixel = 0
 	submitBtn.AutoButtonColor = false
 	submitBtn.Font = Enum.Font.GothamBold
 	submitBtn.Text = "Submit"
-	submitBtn.TextSize = 14
-	submitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	submitBtn.TextSize = 13
+	submitBtn.TextColor3 = Color3.fromRGB(10, 10, 14)
+	submitBtn.ZIndex = 5
 	submitBtn.Parent = buttonRow
-	applySharpStroke(submitBtn, 1, Color3.fromRGB(255, 255, 255))
+
+	local submitCorner = Instance.new("UICorner")
+	submitCorner.CornerRadius = UDim.new(0, 8)
+	submitCorner.Parent = submitBtn
+
+	local submitStroke = Instance.new("UIStroke")
+	submitStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	submitStroke.Thickness = 1
+	submitStroke.Color = Color3.fromRGB(255, 255, 255)
+	submitStroke.Transparency = 0.25
+	submitStroke.Parent = submitBtn
 
 	local getKeyBtn = Instance.new("TextButton")
 	getKeyBtn.Name = "GetKeyButton"
 	getKeyBtn.AnchorPoint = Vector2.new(0.5, 0.5)
-	getKeyBtn.Position = UDim2.new(0.75, 3, 0.5, 0)
-	getKeyBtn.Size = UDim2.new(0.5, -6, 1, 0)
-	getKeyBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	getKeyBtn.Position = UDim2.new(0.75, 5, 0.5, 0)
+	getKeyBtn.Size = UDim2.new(0.5, -10, 1, 0)
+	getKeyBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 29)
 	getKeyBtn.BorderSizePixel = 0
 	getKeyBtn.AutoButtonColor = false
 	getKeyBtn.Font = Enum.Font.GothamBold
 	getKeyBtn.Text = "Get Key"
-	getKeyBtn.TextSize = 14
-	getKeyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	getKeyBtn.TextSize = 13
+	getKeyBtn.TextColor3 = Color3.fromRGB(242, 242, 248)
+	getKeyBtn.ZIndex = 5
 	getKeyBtn.Parent = buttonRow
-	applySharpStroke(getKeyBtn, 1, Color3.fromRGB(255, 255, 255))
+
+	local getKeyCorner = Instance.new("UICorner")
+	getKeyCorner.CornerRadius = UDim.new(0, 8)
+	getKeyCorner.Parent = getKeyBtn
+
+	local getKeyStroke = Instance.new("UIStroke")
+	getKeyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	getKeyStroke.Thickness = 1
+	getKeyStroke.Color = Color3.fromRGB(66, 66, 82)
+	getKeyStroke.Parent = getKeyBtn
 
 	-- Live Button Animations
-	local function attachLiveButtonAnimation(button, useScalePulse)
-		local btnScale
-		if useScalePulse then
-			btnScale = Instance.new("UIScale")
-			btnScale.Scale = 1
-			btnScale.Parent = button
-		end
+	local function attachStyledButton(button, strokeObj, styleCfg)
+		local btnScale = Instance.new("UIScale")
+		btnScale.Scale = 1
+		btnScale.Parent = button
 
 		local hoverInfo = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		local clickInfo = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		local isHovered = false
-		local colorTween
-		local scaleTween
+		local cTween, stTween, scTween
 
-		local function tweenColors(bgColor, txtColor)
-			if colorTween then
-				colorTween:Cancel()
+		local function playColors(bg, txt, brd)
+			if cTween then
+				cTween:Cancel()
 			end
-			colorTween = TweenService:Create(button, hoverInfo, {
-				BackgroundColor3 = bgColor,
-				TextColor3 = txtColor,
+			cTween = TweenService:Create(button, hoverInfo, {
+				BackgroundColor3 = bg,
+				TextColor3 = txt,
 			})
-			colorTween:Play()
+			cTween:Play()
+			if strokeObj and brd then
+				if stTween then
+					stTween:Cancel()
+				end
+				stTween = TweenService:Create(strokeObj, hoverInfo, { Color = brd })
+				stTween:Play()
+			end
 		end
 
-		local function tweenScale(targetScale)
-			if not btnScale then
-				return
+		local function playScale(target)
+			if scTween then
+				scTween:Cancel()
 			end
-			if scaleTween then
-				scaleTween:Cancel()
-			end
-			scaleTween = TweenService:Create(btnScale, clickInfo, {
-				Scale = targetScale,
-			})
-			scaleTween:Play()
+			scTween = TweenService:Create(btnScale, clickInfo, { Scale = target })
+			scTween:Play()
 		end
 
 		button.MouseEnter:Connect(function()
 			isHovered = true
-			tweenColors(Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0))
+			playColors(styleCfg.HoverBg, styleCfg.HoverText, styleCfg.HoverBorder)
 		end)
 
 		button.MouseLeave:Connect(function()
 			isHovered = false
-			tweenScale(1)
-			tweenColors(Color3.fromRGB(0, 0, 0), Color3.fromRGB(255, 255, 255))
+			playScale(1)
+			playColors(styleCfg.RestBg, styleCfg.RestText, styleCfg.RestBorder)
 		end)
 
 		button.MouseButton1Down:Connect(function()
-			tweenScale(0.95)
-			if isHovered then
-				tweenColors(Color3.fromRGB(215, 215, 215), Color3.fromRGB(0, 0, 0))
-			else
-				tweenColors(Color3.fromRGB(35, 35, 38), Color3.fromRGB(255, 255, 255))
-			end
+			playScale(0.95)
+			playColors(styleCfg.PressBg, styleCfg.PressText, styleCfg.HoverBorder)
 		end)
 
 		button.MouseButton1Up:Connect(function()
-			tweenScale(1)
+			playScale(1)
 			if isHovered then
-				tweenColors(Color3.fromRGB(255, 255, 255), Color3.fromRGB(0, 0, 0))
+				playColors(styleCfg.HoverBg, styleCfg.HoverText, styleCfg.HoverBorder)
 			else
-				tweenColors(Color3.fromRGB(0, 0, 0), Color3.fromRGB(255, 255, 255))
+				playColors(styleCfg.RestBg, styleCfg.RestText, styleCfg.RestBorder)
 			end
 		end)
 	end
 
-	attachLiveButtonAnimation(submitBtn, true)
-	attachLiveButtonAnimation(getKeyBtn, true)
-	attachLiveButtonAnimation(closeBtn, false)
+	attachStyledButton(submitBtn, submitStroke, {
+		RestBg = Color3.fromRGB(242, 242, 248),
+		RestText = Color3.fromRGB(10, 10, 14),
+		RestBorder = Color3.fromRGB(255, 255, 255),
+		HoverBg = Color3.fromRGB(255, 255, 255),
+		HoverText = Color3.fromRGB(0, 0, 0),
+		HoverBorder = Color3.fromRGB(255, 255, 255),
+		PressBg = Color3.fromRGB(210, 212, 222),
+		PressText = Color3.fromRGB(0, 0, 0),
+	})
 
-	-- Draggable Top Header Bar (Mouse + Touch Support)
+	attachStyledButton(getKeyBtn, getKeyStroke, {
+		RestBg = Color3.fromRGB(22, 22, 29),
+		RestText = Color3.fromRGB(242, 242, 248),
+		RestBorder = Color3.fromRGB(66, 66, 82),
+		HoverBg = Color3.fromRGB(255, 255, 255),
+		HoverText = Color3.fromRGB(0, 0, 0),
+		HoverBorder = Color3.fromRGB(255, 255, 255),
+		PressBg = Color3.fromRGB(210, 212, 222),
+		PressText = Color3.fromRGB(0, 0, 0),
+	})
+
+	attachStyledButton(closeBtn, closeStroke, {
+		RestBg = Color3.fromRGB(24, 24, 31),
+		RestText = Color3.fromRGB(190, 194, 206),
+		RestBorder = Color3.fromRGB(54, 54, 66),
+		HoverBg = Color3.fromRGB(255, 255, 255),
+		HoverText = Color3.fromRGB(0, 0, 0),
+		HoverBorder = Color3.fromRGB(255, 255, 255),
+		PressBg = Color3.fromRGB(210, 212, 222),
+		PressText = Color3.fromRGB(0, 0, 0),
+	})
+
+	-- Draggable Top Header Bar (Mouse + Touch)
 	local dragging = false
 	local dragInput = nil
 	local dragStart = nil
@@ -1406,14 +1704,14 @@ local function openKeySystemUI()
 			dragging = true
 			dragInput = input
 			dragStart = input.Position
-			startPos = mainFrame.Position
+			startPos = rootHolder.Position
 		end
 	end)
 
 	local dragInputChangedConn = UserInputService.InputChanged:Connect(function(input)
 		if dragging and (input == dragInput or input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			local delta = input.Position - dragStart
-			mainFrame.Position = UDim2.new(
+			rootHolder.Position = UDim2.new(
 				startPos.X.Scale,
 				startPos.X.Offset + delta.X,
 				startPos.Y.Scale,
@@ -1429,9 +1727,23 @@ local function openKeySystemUI()
 		end
 	end)
 
+	-- Ambient Accent Shimmer + Status Dot Pulse
 	local guiAlive = true
+	local animClock = 0
+	local animConn = RunService.Heartbeat:Connect(function(dt)
+		if not guiAlive then
+			return
+		end
+		animClock = animClock + dt
+		topAccentGrad.Offset = Vector2.new(math.sin(animClock * 1.7) * 0.48, 0)
+		statusDot.BackgroundTransparency = 0.25 + 0.25 * math.sin(animClock * 3.4)
+	end)
+
 	screenGui.Destroying:Connect(function()
 		guiAlive = false
+		if animConn then
+			animConn:Disconnect()
+		end
 		if dragInputBeganConn then
 			dragInputBeganConn:Disconnect()
 		end
@@ -1451,7 +1763,7 @@ local function openKeySystemUI()
 		task.spawn(function()
 			local offsets = { -8, 8, -6, 6, -3, 3, 0 }
 			local shakeStepInfo = TweenInfo.new(0.04, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-			TweenService:Create(keyBoxStroke, TweenInfo.new(0.08), { Color = Color3.fromRGB(255, 85, 85) }):Play()
+			TweenService:Create(keyBoxStroke, TweenInfo.new(0.08), { Color = Color3.fromRGB(255, 92, 92) }):Play()
 			for _, xOffset in ipairs(offsets) do
 				if not guiAlive or shakeToken ~= currentToken then
 					return
@@ -1462,7 +1774,8 @@ local function openKeySystemUI()
 			end
 			if guiAlive and shakeToken == currentToken then
 				keyBox.Position = UDim2.new(0, 0, 0, 0)
-				TweenService:Create(keyBoxStroke, TweenInfo.new(0.25), { Color = Color3.fromRGB(255, 255, 255) }):Play()
+				local restBorder = keyBox:IsFocused() and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(56, 56, 70)
+				TweenService:Create(keyBoxStroke, TweenInfo.new(0.25), { Color = restBorder }):Play()
 			end
 		end)
 	end
@@ -1470,7 +1783,7 @@ local function openKeySystemUI()
 	local function setStatus(text, color)
 		if guiAlive and statusLabel then
 			statusLabel.Text = text
-			statusLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+			statusLabel.TextColor3 = color or Color3.fromRGB(240, 240, 246)
 		end
 	end
 
@@ -1479,11 +1792,15 @@ local function openKeySystemUI()
 			return
 		end
 		guiAlive = false
+		if animConn then
+			animConn:Disconnect()
+			animConn = nil
+		end
 		local outInfo = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 		local scaleTween = TweenService:Create(mainScale, outInfo, { Scale = 0.88 })
 		scaleTween:Play()
 
-		for _, desc in ipairs(mainFrame:GetDescendants()) do
+		for _, desc in ipairs(rootHolder:GetDescendants()) do
 			if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
 				TweenService:Create(desc, outInfo, { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
 			elseif desc:IsA("Frame") then
@@ -1492,7 +1809,6 @@ local function openKeySystemUI()
 				TweenService:Create(desc, outInfo, { Transparency = 1 }):Play()
 			end
 		end
-		TweenService:Create(mainFrame, outInfo, { BackgroundTransparency = 1 }):Play()
 
 		if waitCompletion then
 			scaleTween.Completed:Wait()
@@ -1513,7 +1829,6 @@ local function openKeySystemUI()
 	local isFetchingLink = false
 	local copyResetToken = 0
 
-	-- Close Button
 	closeBtn.MouseButton1Click:Connect(function()
 		fadeOutAndDestroy(false)
 	end)
@@ -1527,30 +1842,30 @@ local function openKeySystemUI()
 		local enteredKey = trim(keyBox.Text)
 		if enteredKey == "" then
 			shakeInputBox()
-			setStatus("Please enter a key first.", Color3.fromRGB(255, 95, 95))
+			setStatus("Please enter a key first.", Color3.fromRGB(255, 100, 100))
 			return
 		end
 
 		isChecking = true
 		submitBtn.Text = "Checking..."
-		setStatus("Verifying key...", Color3.fromRGB(215, 215, 215))
+		setStatus("Verifying key...", Color3.fromRGB(190, 194, 206))
 
 		task.spawn(function()
 			local isValid = verifyKey(enteredKey)
 
 			if isValid == true then
 				safeWriteFile(KEY_FILE, enteredKey)
+				persistKeySession(enteredKey)
 				if guiAlive then
-					setStatus("Key Valid! Loading script...", Color3.fromRGB(255, 255, 255))
+					setStatus("Key Valid! Loading script...", Color3.fromRGB(90, 255, 150))
 					task.wait(0.25)
 					fadeOutAndDestroy(true)
 				end
 				executeTargetScript(targetScriptUrl)
 			else
-				-- Strictly NEVER save invalid or wrong keys to disk
 				if guiAlive then
 					shakeInputBox()
-					setStatus("Invalid or wrong key. Key was not saved.", Color3.fromRGB(255, 95, 95))
+					setStatus("Invalid or wrong key. Key was not saved.", Color3.fromRGB(255, 100, 100))
 					submitBtn.Text = "Submit"
 				end
 				isChecking = false
@@ -1565,7 +1880,7 @@ local function openKeySystemUI()
 		end
 	end)
 
-	-- Get Key Button Logic (Official Platoboost cacheLink -> Clipboard)
+	-- Get Key Button Logic
 	getKeyBtn.MouseButton1Click:Connect(function()
 		if isFetchingLink or not guiAlive then
 			return
@@ -1575,7 +1890,7 @@ local function openKeySystemUI()
 		copyResetToken = copyResetToken + 1
 		local currentCopyToken = copyResetToken
 		getKeyBtn.Text = "Fetching..."
-		setStatus("Fetching Platoboost key link...", Color3.fromRGB(215, 215, 215))
+		setStatus("Fetching Platoboost key link...", Color3.fromRGB(190, 194, 206))
 
 		task.spawn(function()
 			local ok, result = cacheLink()
@@ -1588,7 +1903,7 @@ local function openKeySystemUI()
 
 				if guiAlive then
 					if copied then
-						setStatus("Platoboost link copied to clipboard!", Color3.fromRGB(255, 255, 255))
+						setStatus("Platoboost link copied to clipboard!", Color3.fromRGB(90, 255, 150))
 						getKeyBtn.Text = "Copied!"
 						task.delay(2, function()
 							if guiAlive and copyResetToken == currentCopyToken and not isFetchingLink then
@@ -1596,13 +1911,13 @@ local function openKeySystemUI()
 							end
 						end)
 					else
-						setStatus("Clipboard unsupported. Copy URL: " .. result, Color3.fromRGB(255, 95, 95))
+						setStatus("Clipboard unsupported. Copy URL: " .. result, Color3.fromRGB(255, 100, 100))
 						getKeyBtn.Text = "Get Key"
 					end
 				end
 			else
 				if guiAlive then
-					setStatus(fToString(result or "Failed to fetch Platoboost link."), Color3.fromRGB(255, 95, 95))
+					setStatus(fToString(result or "Failed to fetch Platoboost link."), Color3.fromRGB(255, 100, 100))
 					getKeyBtn.Text = "Get Key"
 				end
 			end
@@ -1611,14 +1926,14 @@ local function openKeySystemUI()
 		end)
 	end)
 
-	-- Parent safely and play entrance tween
+	-- Parent safely and animate entrance
 	local okParent = pcall(function()
 		screenGui.Parent = guiParent
 	end)
 	if okParent then
 		TweenService:Create(
 			mainScale,
-			TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 			{ Scale = 1 }
 		):Play()
 	else
