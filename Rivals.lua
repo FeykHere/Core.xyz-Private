@@ -5238,7 +5238,6 @@ end
             Combat = createTab("Combat", 2),
             Visuals = createTab("Visuals", 3),
             Player = createTab("Player", 4),
-            World = createTab("World", 5),
         }
     end
     CoreBridge.IsVisible = function()
@@ -5262,7 +5261,7 @@ end
         end
     end
     CoreBridge.BuildSettingsTab = function()
-        local SettingsTab = createTab("Settings", 6)
+        local SettingsTab = createTab("Settings", 5)
 do
     createLabel(SettingsTab, "Customizable Floating Pill & Telemetry (Max 3)")
 
@@ -8961,6 +8960,7 @@ do -- CoreBridge._WidgetsPickers
         modeBtn.TextStrokeTransparency = 0.5
         modeBtn.TextSize = 10
         modeBtn.ZIndex = z + 3
+        modeBtn.Visible = false
         modeBtn.Parent = bar
 
         local keyBtn = Instance.new("TextButton")
@@ -8976,6 +8976,7 @@ do -- CoreBridge._WidgetsPickers
         keyBtn.TextStrokeTransparency = 0.5
         keyBtn.TextSize = 11
         keyBtn.ZIndex = z + 3
+        keyBtn.Visible = false
         keyBtn.Parent = bar
 
         local obj = {
@@ -8985,8 +8986,8 @@ do -- CoreBridge._WidgetsPickers
             Value = { Key = initKey, Mode = initMode },
             Active = false,
             FeatureEnabled = false,
-            ShowInList = opts.InKeybindList == true,
-            Invisible = false,
+            ShowInList = false,
+            Invisible = true,
             ListLabel = opts.ListLabel or opts.Label or "Keybind",
             Row = opts.Row or WC.wrapRowObject(hostFrame, ownLbl),
             Changed = trove:Add(Signal.new()),
@@ -9001,8 +9002,8 @@ do -- CoreBridge._WidgetsPickers
         WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
 
         local function syncBadgeText()
-            modeBtn.Text = string.sub(tostring(obj.Value.Mode or "T"), 1, 1)
-            modeBtn.Visible = (#modes > 1)
+            modeBtn.Visible = false
+            keyBtn.Visible = false
             if CoreBridge._capturingKeybind == obj then
                 keyBtn.Text = "[...]"
                 keyBtn.TextColor3 = Theme.White
@@ -9638,7 +9639,6 @@ do -- CoreBridge.CreateMenuAdapter
             Visuals = { Page = pages.Visuals, Name = "Visuals" },
             Cosmetics = { Page = pages.Visuals, Name = "Visuals" },
             Player = { Page = pages.Player, Name = "Player" },
-            World = { Page = pages.World, Name = "World" },
         }
 
         local menu = {
@@ -10324,87 +10324,146 @@ do
     tbl17.hH = function() return W end
 end
 
---  iQ: the Visuals > Player ESP page. Its builder is lost; rebuilt with the
---  same menu calls Kicia's other pages use, over Kicia's own Esp settings.
+--  iQ: Visuals > Player ESP page styled & organized like Core.xyz (One-shot / Core.xyz)
 tbl17.iQ = function()
     return function(_, _, grid)
-        local enable = tbl17.h6()
-        local fonts = tbl17.az().Order
+        local store = tbl17.bG()
         local function P(...) return { "Esp", ... } end
+        local function Q(...) return { "Esp", "Enemy", ... } end
 
-        local main = grid:AddSection({ Title = "Player ESP", Side = "left" })
-        enable(main, "Enable ESP", { "Always", "Toggle", "Hold" }, P("Main"), true)
-        main:AddDropdown({ Label = "Box Fit", Options = { "Static", "Dynamic" }, Config = P("Main", "Mode") })
+        -- Ensure Teammates ESP is off and Core.xyz highlight defaults are applied
+        pcall(function()
+            store:Set(P("Team", "Enabled"), false)
+            store:Set(Q("Chams", "Kind"), "Highlight")
+            store:Set(Q("Chams", "InnerTransparency"), 0.55)
+            store:Set(Q("Chams", "OutlineTransparency"), 0.1)
+        end)
 
-        local look = grid:AddSection({ Title = "Text", Side = "right" })
-        look:AddToggle({ Label = "Use Display Names", Config = P("Settings", "UseDisplayName") })
-        look:AddDropdown({ Label = "Font", Options = fonts, Config = P("Settings", "Font") })
-        look:AddSlider({ Label = "Font Size", Min = 8, Max = 32, Config = P("Settings", "FontSize") })
-        look:AddDropdown({ Label = "Text Case", Options = { "Standard", "UPPERCASE", "lowercase" }, Config = P("Settings", "TextCase") })
-        look:AddDropdown({ Label = "Text Surround", Options = { "None", "[]", "()", "<>", "{}" }, Config = P("Settings", "TextSurround") })
-        look:AddDivider({ Label = "Flags" })
-        look:AddDropdown({ Label = "Flag Font", Options = fonts, Config = P("Settings", "FlagFont") })
-        look:AddSlider({ Label = "Flag Font Size", Min = 6, Max = 24, Config = P("Settings", "FlagFontSize") })
-        look:AddDropdown({ Label = "Flag Text Case", Options = { "Standard", "UPPERCASE", "lowercase" }, Config = P("Settings", "FlagTextCase") })
-        look:AddDropdown({ Label = "Flag Surround", Options = { "None", "[]", "()", "<>", "{}" }, Config = P("Settings", "FlagTextSurround") })
-        look:AddGroup({ Source = look:AddToggle({ Label = "Scale With Distance", Config = P("Settings", "DistanceScaling") }) })
-            :AddSlider({ Label = "Reference Distance", Min = 10, Max = 300, Config = P("Settings", "DistanceScalingRef") })
-
-        local function side(title, key, where)
-            local s = grid:AddSection({ Title = title, Side = where })
-            local function Q(...) return P(key, ...) end
-            --  Kicia's ESP draws a side only when Main AND this side are enabled
-            enable(s, "Enable " .. title .. " ESP", { "Always", "Toggle", "Hold" }, P(key), true)
-            local function color(label, path, transparency)
-                local t = s:AddToggle({ Label = label, Config = Q(path, "Enabled") })
-                s:AddColor({ Row = t.Row, Config = Q(path, "Color"), Transparency = transparency and Q(path, "Transparency") or nil, Alpha = transparency or nil })
-                return t
-            end
-            local function gradient(label, path)
-                local t = s:AddToggle({ Label = label, Config = Q(path, "Enabled") })
-                s:AddColor({ Row = t.Row, Gradient = "editable", Alpha = true, Config = Q(path, "Color"), Transparency = Q(path, "Transparency") })
-                return t
-            end
-            color("Name", "Name", true)
-            s:AddGroup({ Source = color("Box", "Box") }):AddDropdown({ Label = "Style", Options = { "Full", "Corner" }, Config = Q("Box", "Style") })
-            gradient("Filled Box", "FilledBox")
-            local hb = s:AddToggle({ Label = "Health Bar", Config = Q("HealthBar", "Enabled") })
-            s:AddColor({ Row = hb.Row, Gradient = "editable", Config = Q("HealthBar", "Color") })
-            s:AddGroup({ Source = hb }):AddDropdown({ Label = "Color Mode", Options = { "Solid", "Gradient", "Reactive" }, Config = Q("HealthBar", "ColorMode") })
-            color("Health Number", "HealthNumber")
-            color("Held Weapon", "HeldWeapon", true)
-            local ab = s:AddToggle({ Label = "Ammo Bar", Config = Q("AmmoBar", "Enabled") })
-            s:AddColor({ Row = ab.Row, Gradient = "editable", Config = Q("AmmoBar", "Color") })
-            s:AddGroup({ Source = ab }):AddDropdown({ Label = "Color Mode", Options = { "Solid", "Gradient", "Reactive" }, Config = Q("AmmoBar", "ColorMode") })
-            color("Distance", "Distance")
-            color("Rank", "Rank")
-            color("Win Streak", "Winstreak")
-            color("Deflecting", "Deflecting", true)
-            local ch = s:AddGroup({ Source = s:AddToggle({ Label = "Chams", Config = Q("Chams", "Enabled") }) })
-            ch:AddDropdown({ Label = "Kind", Options = { "Legacy", "Highlight" }, Config = Q("Chams", "Kind") })
-            local fill = ch:AddLabel({ Label = "Fill" })
-            ch:AddColor({ Row = fill.Row, Alpha = true, Config = Q("Chams", "InnerColor"), Transparency = Q("Chams", "InnerTransparency") })
-            local outline = ch:AddLabel({ Label = "Outline" })
-            ch:AddColor({ Row = outline.Row, Alpha = true, Config = Q("Chams", "OutlineColor"), Transparency = Q("Chams", "OutlineTransparency") })
-            local glow = ch:AddToggle({ Label = "Glow", Config = Q("Chams", "Glow") })
-            ch:AddColor({ Row = glow.Row, Config = Q("Chams", "GlowColor") })
-            s:AddGroup({ Source = gradient("Skeleton", "Skeleton") })
-                :AddSlider({ Label = "Thickness", Min = 1, Max = 6, Config = Q("Skeleton", "Thickness") })
-            local hm = s:AddGroup({ Source = color("Head Marker", "HeadMarker", true) })
-            hm:AddDropdown({ Label = "Shape", Options = { "Cross", "Circle", "Diamond" }, Config = Q("HeadMarker", "Shape") })
-            hm:AddToggle({ Label = "Filled", Config = Q("HeadMarker", "Filled") })
-            local hmo = hm:AddToggle({ Label = "Outline", Config = Q("HeadMarker", "Outline") })
-            hm:AddColor({ Row = hmo.Row, Alpha = true, Config = Q("HeadMarker", "OutlineColor"), Transparency = Q("HeadMarker", "OutlineTransparency") })
-            local tr = s:AddGroup({ Source = gradient("Tracer", "Tracer") })
-            tr:AddSlider({ Label = "Thickness", Min = 1, Max = 6, Config = Q("Tracer", "Thickness") })
-            tr:AddDropdown({ Label = "From", Options = { "Bottom", "Center", "Top", "Mouse" }, Config = Q("Tracer", "Origin") })
-            tr:AddDropdown({ Label = "To", Options = { "Feet", "Head" }, Config = Q("Tracer", "Target") })
-            local tro = tr:AddToggle({ Label = "Outline", Config = Q("Tracer", "Outline") })
-            tr:AddColor({ Row = tro.Row, Alpha = true, Config = Q("Tracer", "OutlineColor"), Transparency = Q("Tracer", "OutlineTransparency") })
-            tr:AddSlider({ Label = "Outline Thickness", Min = 1, Max = 6, Config = Q("Tracer", "OutlineThickness") })
+        local function syncMasterEsp()
+            pcall(function()
+                local d = store.Data and store.Data.Esp and store.Data.Esp.Enemy
+                if not d then return end
+                local anyOn = (d.Chams and d.Chams.Enabled)
+                    or (d.Name and d.Name.Enabled)
+                    or (d.Box and d.Box.Enabled)
+                    or (d.FilledBox and d.FilledBox.Enabled)
+                    or (d.Skeleton and d.Skeleton.Enabled)
+                    or (d.HealthBar and d.HealthBar.Enabled)
+                    or (d.HealthNumber and d.HealthNumber.Enabled)
+                    or (d.Tracer and d.Tracer.Enabled)
+                    or (d.HeldWeapon and d.HeldWeapon.Enabled)
+                    or (d.HeadMarker and d.HeadMarker.Enabled)
+                store:Set(P("Main", "Enabled"), anyOn == true)
+                store:Set(Q("Enabled"), anyOn == true)
+            end)
         end
-        side("Enemies", "Enemy", "left")
-        side("Teammates", "Team", "right")
+
+        local main = grid:AddSection({ Title = "Enemy ESP & 3D Box", Side = "left" })
+
+        local espMainToggle = main:AddToggle({
+            Label = "ESP (Chams, Name & HP)",
+            Config = Q("Chams", "Enabled"),
+            OnChanged = function(val)
+                pcall(function()
+                    store:Set(Q("Name", "Enabled"), val == true)
+                    store:Set(Q("Distance", "Enabled"), val == true)
+                    store:Set(Q("Chams", "Kind"), "Highlight")
+                end)
+                syncMasterEsp()
+            end,
+        })
+        main:AddColor({
+            Row = espMainToggle.Row,
+            Config = Q("Box", "Color"),
+            OnChanged = function(col)
+                if typeof(col) == "Color3" then
+                    pcall(function()
+                        store:Set(Q("Name", "Color"), col)
+                        store:Set(Q("Chams", "InnerColor"), col)
+                        store:Set(Q("Chams", "OutlineColor"), col)
+                        store:Set(Q("Tracer", "Color"), ColorSequence.new(col))
+                        store:Set(Q("FilledBox", "Color"), ColorSequence.new(col))
+                    end)
+                end
+            end,
+        })
+
+        local boxToggle = main:AddToggle({
+            Label = "2D / 3D Box",
+            Config = Q("Box", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+        main:AddDropdown({
+            Label = "Box Style",
+            Options = { "Corner", "Full" },
+            Config = Q("Box", "Style"),
+        })
+        main:AddToggle({
+            Label = "Filled Box",
+            Config = Q("FilledBox", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+        main:AddToggle({
+            Label = "Skeleton ESP",
+            Config = Q("Skeleton", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+        main:AddToggle({
+            Label = "Animated Health Bar",
+            Config = Q("HealthBar", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+        main:AddToggle({
+            Label = "2D ESP Snaplines",
+            Config = Q("Tracer", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+        main:AddDropdown({
+            Label = "Snapline Origin",
+            Options = { "Bottom", "Center", "Top" },
+            Config = Q("Tracer", "Origin"),
+        })
+        main:AddToggle({
+            Label = "Held Weapon",
+            Config = Q("HeldWeapon", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+
+        local skelSec = grid:AddSection({ Title = "ESP · Skeleton", Side = "right" })
+        local skelColRow = skelSec:AddLabel({ Label = "Skeleton Color" })
+        skelSec:AddColor({
+            Row = skelColRow.Row,
+            Gradient = "editable",
+            Alpha = true,
+            Config = Q("Skeleton", "Color"),
+            Transparency = Q("Skeleton", "Transparency"),
+        })
+        skelSec:AddSlider({
+            Label = "Bone Thickness",
+            Min = 1,
+            Max = 6,
+            Config = Q("Skeleton", "Thickness"),
+        })
+        skelSec:AddToggle({
+            Label = "Head Marker",
+            Config = Q("HeadMarker", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+
+        local hbSec = grid:AddSection({ Title = "ESP · Health Bar", Side = "right" })
+        hbSec:AddDropdown({
+            Label = "Healthbar Type",
+            Options = { "Gradient", "Solid", "Reactive" },
+            Config = Q("HealthBar", "ColorMode"),
+        })
+        hbSec:AddToggle({
+            Label = "Health Number",
+            Config = Q("HealthNumber", "Enabled"),
+            OnChanged = function() syncMasterEsp() end,
+        })
+
+        syncMasterEsp()
+        local _ = boxToggle
     end
 end
 
@@ -28619,7 +28678,9 @@ BindInvisible = false,
 },
 SwitchDelay = v86[186],
 ReactionTime = v86[186],
-Mode = { Type = "Linear", Speed = 0.1 },
+Mode = { Type = "Lock", Speed = 0.1 },
+TargetPart = "Head",
+Prediction = { Enabled = false, Amount = 0.15 },
 }
 
 local fov = { Radius = 150 }
@@ -28647,7 +28708,7 @@ end
 fill.Gradient = colorSequence(tbl19)
 fill.Transparency = 0.15
 circle.Fill = fill
-circle.Animated = { Enabled = false, Speed = 90 }
+circle.Animated = { Enabled = false, Speed = 90, Style = "Still" }
 circle.FollowTarget = { Enabled = false, Speed = 20, Damper = 1, SnapDistance = 5 }
 fov.Circle = circle
 tbl18.Fov = fov
@@ -28655,7 +28716,7 @@ tbl18.ActivationConditions = atomic(table.clone(arg.ActivationConditions.Options
 tbl18.TargetConditions = atomic(table.clone(arg.TargetConditions.Options))
 tbl18.TargetHitboxes = targetHitboxes2
 tbl18.HitboxSelection = { Type = "ClosestToCrosshair", Random = table.clone(arg.RandomHitboxPercentages.Options) }
-tbl18.HitboxPoint = { Type = "Center", Surface = { SizeReductionPercentage = v86[160], PreserveDepth = false } }
+tbl18.HitboxPoint = { Type = "Surface", Surface = { SizeReductionPercentage = 0, PreserveDepth = false } }
 local extension = arg.Extension
 
 if extension ~= nil then
@@ -28953,15 +29014,15 @@ BindShowInList = true,
 BindInvisible = v86[153],
 },
 ActivationConditions = {
-Options = { NotReloading = true, ScopedIn = v86[153] },
+Options = { NotReloading = false, ScopedIn = false },
 Labels = { NotReloading = "Not Reloading", ScopedIn = "Scoped In" },
 },
 TargetConditions = {
 Options = {
 Visible = true,
 Vulnerable = true,
-NotDeflecting = true,
-NotShielded = true,
+NotDeflecting = false,
+NotShielded = false,
 WithinFov = true,
 },
 Labels = { WithinFov = "Within FOV" },
@@ -29024,6 +29085,8 @@ Enabled = v86[153],
 Keybind = { State = false, Kind = "Always", Bind = nil, ShowInList = v86[34], Invisible = false },
 ReactionTime = 0,
 SwitchDelay = v86[186],
+TargetPart = "Head",
+Prediction = { Enabled = false, Amount = 0.15 },
 }
 
 local fov = { Radius = 150 }
@@ -29055,7 +29118,7 @@ end
 fill.Gradient = colorSequence(tbl19)
 fill.Transparency = v86[126]
 circle.Fill = fill
-circle.Animated = { Enabled = false, Speed = v86[45] }
+circle.Animated = { Enabled = false, Speed = v86[45], Style = "Still" }
 circle.FollowTarget = { Enabled = false, Speed = 20, Damper = v86[63], SnapDistance = v86[175] }
 fov.Circle = circle
 tbl18.Fov = fov
@@ -29064,7 +29127,7 @@ tbl18.ActivationChance = arg.ActivationChance
 tbl18.TargetConditions = atomic(table.clone(arg.TargetConditions.Options))
 tbl18.TargetHitboxes = targetHitboxes2
 tbl18.HitboxSelection = { Type = "ClosestToCrosshair", Random = table.clone(arg.RandomHitboxPercentages.Options) }
-tbl18.HitboxPoint = { Type = "Center", Surface = { SizeReductionPercentage = 50, PreserveDepth = false } }
+tbl18.HitboxPoint = { Type = "Surface", Surface = { SizeReductionPercentage = 0, PreserveDepth = false } }
 local extension = arg.Extension
 
 if extension ~= nil then
@@ -29134,7 +29197,7 @@ Visible = false,
 Vulnerable = v86[34],
 NotDeflecting = false,
 NotShielded = false,
-WithinFov = false,
+WithinFov = true,
 },
 Labels = { NotDeflecting = "Not Deflecting", NotShielded = "Not Shielded", WithinFov = "Within FOV" },
 },
@@ -29272,10 +29335,10 @@ local v117 = tbl17.aT()
 return table.clone(v117)
 end,
 ActivationConditions = {
-Options = { NotReloading = v86[34], ScopedIn = false },
+Options = { NotReloading = false, ScopedIn = false },
 Labels = { NotReloading = "Not Reloading", ScopedIn = "Scoped In" },
 },
-TargetConditions = { Options = { Vulnerable = true, NotDeflecting = true, NotShielded = true }, Labels = {} },
+TargetConditions = { Options = { Vulnerable = true, NotDeflecting = false, NotShielded = false }, Labels = {} },
 TargetHitboxes = { Kind = "Stateful", Classes = fn36() },
 Extension = { ReactionTime = 0, ReleaseTime = 0 },
 }
@@ -34528,9 +34591,23 @@ end
 end
 do -- cl
 local function fn35()
+local function applyPred(pos, part, pred)
+    if type(pred) == "table" and pred.Enabled and type(pred.Amount) == "number" and pred.Amount > 0 then
+        local vel = part.AssemblyLinearVelocity
+        if vel == nil or vel.Magnitude < 0.01 then
+            local p = part.Parent
+            local hrp = p and p:FindFirstChild("HumanoidRootPart")
+            if hrp and hrp:IsA("BasePart") then vel = hrp.AssemblyLinearVelocity end
+        end
+        if typeof(vel) == "Vector3" then
+            pos = pos + vel * pred.Amount
+        end
+    end
+    return pos
+end
 local function fn36(l,I,W,N,P)local a,e,c,E=I.Position,I.CFrame,I.Size,l:ViewportPointToRay(W.X,W.Y);W,l=e:PointToObjectSpace(E.Origin+E.Direction*E.Direction:Dot(a-E.Origin)),(c-c*N/100*(P and(Vector3.new(1,1,0))or 1))/2;return e*Vector3.new(math.clamp(W.X,-l.X,l.X),math.clamp(W.Y,-l.Y,l.Y),math.clamp(W.Z,-l.Z,l.Z));end
-local function fn37(l,I,I)local W=I.Position;I=l:WorldToViewportPoint(W);return Vector2.new(I.X,I.Y),W;end
-return function(I)if I.Kind=="Center"then return  fn37 ;else local W,N=I.SizeReductionPercentage,I.PreserveDepth;return function(I,P,a)local e= fn36 (I,a,P,W,N);P=I:WorldToViewportPoint(e);return Vector2.new(P.X,P.Y),e;end;end;end
+local function fn37(l,_,I,pred)local W=applyPred(I.Position,I,pred);local v=l:WorldToViewportPoint(W);return Vector2.new(v.X,v.Y),W;end
+return function(I)if I.Kind=="Center"then return  fn37 ;else local W,N=I.SizeReductionPercentage,I.PreserveDepth;return function(I,P,a,pred)local e=applyPred( fn36 (I,a,P,W,N),a,pred);P=I:WorldToViewportPoint(e);return Vector2.new(P.X,P.Y),e;end;end;end
 end
 
 tbl17.cl = function()
@@ -34714,7 +34791,49 @@ arg._strokeGradient.Color = stroke.Gradient
 end
 
 index2.SetVisible = function(l,I)if l._visible==I then return;end;l._visible=I;l._parent.Enabled=I;end
-index2.Update = function(l,I)if not l._visible then return;end;local W,N,P=l._properties,l._strokeGradient,l._fillGradient;local a=W.Animated;if not l._canAnimate or not a.Enabled then if l._debounce then l._debounce=false;N.Rotation=45;P.Rotation=45;end;return;end;W=a.Speed*I;N.Rotation=(N.Rotation+W)%360;P.Rotation=(P.Rotation-W)%360;l._debounce=true;end
+index2.Update = function(l,I)
+    if not l._visible then return end
+    local W,N,P = l._properties,l._strokeGradient,l._fillGradient
+    local a = W and W.Animated
+    local style = (a and a.Style) or (a and a.Enabled and "Gradient") or "Still"
+    local baseGrad = W and W.Stroke and W.Stroke.Gradient or ColorSequence.new(Color3.fromRGB(255,0,0))
+    local baseTrans = (W and W.Stroke and W.Stroke.Transparency) or 0
+    local baseCol = baseGrad.Keypoints and baseGrad.Keypoints[1] and baseGrad.Keypoints[1].Value or Color3.fromRGB(255,0,0)
+    if not l._canAnimate or style == "Still" then
+        N.Color = baseGrad
+        N.Rotation = 45
+        P.Rotation = 45
+        l._stroke.Transparency = baseTrans
+        l._debounce = false
+        return
+    end
+    l._debounce = true
+    local spd = (a and a.Speed) or 90
+    if style == "Gradient" then
+        local h, s, v = baseCol:ToHSV()
+        local secondCol = Color3.fromHSV((h + 0.08) % 1, math.clamp(s, 0.35, 1), math.clamp(v * 0.38, 0.12, 1))
+        N.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, baseCol),
+            ColorSequenceKeypoint.new(0.5, secondCol),
+            ColorSequenceKeypoint.new(1, baseCol),
+        })
+        N.Rotation = (N.Rotation + spd * 1.8 * I) % 360
+        l._stroke.Transparency = baseTrans
+    elseif style == "Rainbow" then
+        local t = (os.clock() * 0.38) % 1
+        N.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromHSV(t, 0.85, 1)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromHSV((t + 0.33) % 1, 0.85, 1)),
+            ColorSequenceKeypoint.new(1, Color3.fromHSV((t + 0.66) % 1, 0.85, 1)),
+        })
+        N.Rotation = (N.Rotation + 160 * I) % 360
+        l._stroke.Transparency = baseTrans
+    elseif style == "Pulse" then
+        N.Color = baseGrad
+        local pulse = 0.5 + 0.5 * math.sin(os.clock() * 4.5)
+        l._stroke.Transparency = math.clamp(baseTrans + (1 - pulse) * 0.72, 0, 0.95)
+    end
+end
 
 index2.SetPosition = function(arg, position)
 arg._circle.Position = position
@@ -38752,14 +38871,7 @@ return arg:_RegisterPath(v124)
 end
 
 index2._GetEnabledKeybindState = function(arg, arg2, arg3)
-if not v115:Get(v121(arg2, { "Enabled" })) then
-return v86[153]
-end
-local v123 = v86[21]
-if v115:Get(v121(arg3, { "Kind" })) == v123 then
-return true
-end
-return v115:Get(v121(arg3, { "State" })) == true
+return v115:Get(v121(arg2, { "Enabled" })) == true
 end
 
 index2.GetEnabledKeybindState = function(arg, arg2)
@@ -39368,7 +39480,7 @@ end
 
 index2._UpdateRender = function(arg, arg2, arg3, arg4)
 local circle = arg4.Fov.Circle
-local flag19 = arg4.Enabled and circle.Visible and arg3 ~= nil
+local flag19 = circle.Visible == true
 local fovRender = arg._fovRender
 local fovFollower = arg._fovFollower
 fovRender:SetVisible(flag19)
@@ -39407,7 +39519,7 @@ local enabled = arg4.Fov.Circle.Visible and arg4.Fov.Circle.FollowTarget.Enabled
 local v136 = nil
 
 if enabled then
-v136 = arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135)
+v136 = arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135, arg4.Prediction)
 end
 
 arg._targetScreenPosition = v136
@@ -39418,7 +39530,7 @@ end
 
 if not v117.isBlockedFor("Aimbot", 0) then
 v117.claim("Aimbot", v86[186])
-arg._aimApplier:Apply(v136 or arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135), arg2, arg4.Mode, v86[34])
+arg._aimApplier:Apply(v136 or arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135, arg4.Prediction), arg2, arg4.Mode, v86[34])
 else
 v117.release("Aimbot")
 end
@@ -49853,41 +49965,49 @@ index2.Initialize = function(arg)
 if arg._restoreClosures ~= nil then
 return v115.VoidOk
 end
-local v117, v118 = v107(v116, equipment, { "Interface", "Customize", "Options" })
-if not v117 or v118 == nil then
-return v115.err("RemoteEventBlocker", "prototype_lookup", "Customize Options not found")
-end
-local v119 = getmetatable(v118)
-if v119 == nil then
-return v115.err("RemoteEventBlocker", "prototype_lookup", "Options metatable not found")
-end
-local v120 = v116(v119, "__index")
-if v120 == nil then
-return v115.err("RemoteEventBlocker", "prototype_lookup", "Options.__index not found")
-end
-local v121 = v102(v120, "_Init")
-if v121 == nil then
-return v115.err("RemoteEventBlocker", "function_lookup", "Options._Init not found")
-end
 local restoreClosures = {}
+pcall(function()
+local v117, v118 = v107(v116, equipment, { "Interface", "Customize", "Options" })
+if not v117 or v118 == nil then return end
+local v119 = getmetatable(v118)
+if v119 == nil then return end
+local v120 = v116(v119, "__index")
+if v120 == nil then return end
+local v121 = v102(v120, "_Init")
+if v121 == nil then return end
 
-for k in debug.getprotos(v121) do
-local v122 = debug.getproto(v121, k, v86[34])[1]
+local function patchFunc(fn)
+    if type(fn) ~= "function" then return end
+    local okC, consts = pcall(debug.getconstants, fn)
+    if not okC or type(consts) ~= "table" then return end
+    for k2, v123 in pairs(consts) do
+        if v123 == "FireServer" then
+            local okS = pcall(debug.setconstant, fn, k2, "GetChildren")
+            if okS then
+                table.insert(restoreClosures, { Func = fn, ConstantIndex = k2 })
+            end
+            break
+        end
+    end
+end
 
-if v122 ~= nil then
-for k2, v123 in debug.getconstants(v122) do
-if v123 == "FireServer" then
-table.insert(restoreClosures, { Func = v122, ConstantIndex = k2 })
-debug.setconstant(v122, k2, "GetChildren")
-break
+local okP, protos = pcall(debug.getprotos, v121)
+if okP and type(protos) == "table" then
+    for k in pairs(protos) do
+        local ok1, activeList = pcall(debug.getproto, v121, k, true)
+        if ok1 and type(activeList) == "table" then
+            for _, fn in ipairs(activeList) do
+                patchFunc(fn)
+            end
+        end
+        local ok2, rawProto = pcall(debug.getproto, v121, k)
+        if ok2 and type(rawProto) == "function" then
+            patchFunc(rawProto)
+        end
+    end
 end
-end
-end
-end
+end)
 
-if #restoreClosures == v86[186] then
-return v115.err("RemoteEventBlocker", "constant_lookup", "Failed to find FireServer constants in Options._Init")
-end
 arg._restoreClosures = restoreClosures
 return v115.VoidOk
 end
@@ -50182,8 +50302,8 @@ return tbl18
 end
 
 index2._RefreshInventory = function(arg)
-arg._dataHook:TriggerDataChangedSignal("CosmeticInventory")
-cosmeticsSelectionScene()
+pcall(function() arg._dataHook:TriggerDataChangedSignal("CosmeticInventory") end)
+pcall(cosmeticsSelectionScene)
 end
 
 index2.Apply = function(arg)
@@ -50264,13 +50384,13 @@ end
 arg._isApplied = layerActive
 
 if layerActive then
-arg._interactions:Apply()
-arg._favoritedHook:Apply()
-arg._inventoryHook:Apply()
+pcall(function() arg._inventoryHook:Apply() end)
+pcall(function() arg._favoritedHook:Apply() end)
+pcall(function() arg._interactions:Apply() end)
 else
-arg._interactions:Revert()
-arg._favoritedHook:Revert()
-arg._inventoryHook:Revert()
+pcall(function() arg._interactions:Revert() end)
+pcall(function() arg._favoritedHook:Revert() end)
+pcall(function() arg._inventoryHook:Revert() end)
 end
 end
 
@@ -62871,7 +62991,7 @@ end
 
 index2._UpdateFovRender = function(arg, arg2, arg3, arg4)
 local circle = arg4.Fov.Circle
-local flag19 = arg4.Enabled and circle.Visible and arg3 ~= nil
+local flag19 = circle.Visible == true
 local fovRender = arg._fovRender
 local fovFollower = arg._fovFollower
 fovRender:SetVisible(flag19)
@@ -62922,7 +63042,7 @@ end
 local circle = arg4.Fov.Circle
 
 if circle.Visible and circle.FollowTarget.Enabled then
-arg._targetScreenPosition = arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135)
+arg._targetScreenPosition = arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135, arg4.Prediction)
 else
 arg._targetScreenPosition = nil
 end
@@ -62959,7 +63079,7 @@ end
 if v102(v102(v134, "Info"), "Type") ~= "Gun" then
 return
 end
-local v135, v136 = arg._computeTargetPoint(workspace.CurrentCamera, v133(), currentHitbox)
+local v135, v136 = arg._computeTargetPoint(workspace.CurrentCamera, v133(), currentHitbox, data.SilentAim.Prediction)
 local v137 = arg2.Args["\1"]
 if type(v137) ~= "table" then
 return
@@ -64019,37 +64139,50 @@ end
 
 index2._CheckCrosshair = function(arg, arg2, arg3)
 local currentCamera = v123.CurrentCamera
+if currentCamera == nil then return false end
 local v124 = v122()
 local v125 = currentCamera:ViewportPointToRay(v124.X, v124.Y)
-local paramsIncluding = arg._worldInclude:GetParamsIncluding(arg._includedHitboxes)
+local allHitboxes = { HitboxHead = true, HitboxBody = true, HitboxHeadSmall = true, HitboxBodySmall = true }
+local paramsIncluding = arg._worldInclude:GetParamsIncluding(allHitboxes)
 local hit = v123:Raycast(v125.Origin, v125.Direction * 2000, paramsIncluding)
-if hit == nil then
-return v86[153]
+local v126 = nil
+if hit ~= nil and hit.Instance ~= nil then
+    local model = hit.Instance:FindFirstAncestorOfClass("Model")
+    if model ~= nil then
+        v126 = arg._fighters.StateByModel[model]
+    end
 end
-local model = hit.Instance:FindFirstAncestorOfClass("Model")
-if model == nil then
-return v86[153]
+-- Fallback raycast to detect any peeking enemy limb / body part even outside standard hitbox filter
+if v126 == nil then
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    local ignoreList = { currentCamera }
+    local lp = game:GetService("Players").LocalPlayer
+    if lp and lp.Character then table.insert(ignoreList, lp.Character) end
+    rp.FilterDescendantsInstances = ignoreList
+    rp.IgnoreWater = true
+    local rawHit = v123:Raycast(v125.Origin, v125.Direction * 2000, rp)
+    if rawHit ~= nil and rawHit.Instance ~= nil then
+        local cur = rawHit.Instance
+        while cur ~= nil and cur ~= v123 do
+            if cur:IsA("Model") and arg._fighters.StateByModel[cur] ~= nil then
+                v126 = arg._fighters.StateByModel[cur]
+                break
+            end
+            cur = cur.Parent
+        end
+    end
 end
-local v126 = arg._fighters.StateByModel[model]
 if v126 == nil or not v126.IsEnemy then
-return v86[153]
+    return false
 end
 local targetConditions = arg3.TargetConditions
-if targetConditions.Vulnerable and v126:IsInvincible() then
-return false
+if targetConditions and targetConditions.Vulnerable and v126:IsInvincible() then
+    return false
 end
-local state = v126.Character.State
-if not state.Alive then
-return false
-end
-local freefall = Enum.HumanoidStateType.Freefall
-if not (state.Humanoid:GetState() == freefall and arg._targetHitboxes.Air or arg._targetHitboxes.Ground)[hit.Instance.Name] then
-return v86[153]
-end
-local notDeflecting = targetConditions.NotDeflecting
-local notShielded = targetConditions.NotShielded
-if v117.isShielded(arg2, v126, v121().Position, notDeflecting, notShielded) then
-return false
+local state = v126.Character and v126.Character.State
+if not state or not state.Alive then
+    return false
 end
 return true
 end
@@ -68384,7 +68517,27 @@ return h0.c
 end
 end
 do -- h1
-local function fn35() tbl17 .aE();return function(l,I)local function W(...)return{I,"Fov",...};end;l:AddColor({Row=l:AddToggle({Label="Show Targeting Circle",Config=W("Circle","Visible")}).Row,Gradient="editable",Alpha=true,Config=W("Circle","Stroke","Gradient"),Transparency=W("Circle","Stroke","Transparency")});l:AddSlider({Label="Radius (px)",Min=1,Max=600,Config=W("Radius")});l:AddSlider({Label="Thickness",Min=0,Max=25,Config=W("Circle","Stroke","Thickness")});l:AddColor({Row=l:AddToggle({Label="Filled",Config=W("Circle","Fill","Enabled")}).Row,Gradient="editable",Alpha=true,Config=W("Circle","Fill","Gradient"),Transparency=W("Circle","Fill","Transparency")});l:AddGroup({Source=l:AddToggle({Label="Animated",Config=W("Circle","Animated","Enabled")})}):AddSlider({Label="Animation Speed (deg/s)",Min=0,Max=360,Config=W("Circle","Animated","Speed")});local I=l:AddGroup({Source=l:AddToggle({Label="Follow Target",Config=W("Circle","FollowTarget","Enabled")})});I:AddSlider({Label="Follow Speed",Default=20,Min=1,Max=50,Config=W("Circle","FollowTarget","Speed")});I:AddSlider({Label="Follow Damper",Default=1,Min=0,Max=30,Config=W("Circle","FollowTarget","Damper")});I:AddSlider({Label="Snap Distance",Default=5,Min=0,Max=10,Config=W("Circle","FollowTarget","SnapDistance")});end;end
+local function fn35()
+    tbl17.aE()
+    return function(l, I)
+        local function W(...) return { I, "Fov", ... } end
+        local fovToggle = l:AddToggle({ Label = "FOV Circle", Config = W("Circle", "Visible") })
+        l:AddColor({
+            Row = fovToggle.Row,
+            Gradient = "editable",
+            Alpha = true,
+            Config = W("Circle", "Stroke", "Gradient"),
+            Transparency = W("Circle", "Stroke", "Transparency"),
+        })
+        l:AddSlider({ Label = "Size", Min = 10, Max = 600, Config = W("Radius") })
+        l:AddSlider({ Label = "Thickness", Min = 1, Max = 25, Config = W("Circle", "Stroke", "Thickness") })
+        l:AddDropdown({
+            Label = "Animated",
+            Options = { "Still", "Gradient", "Rainbow", "Pulse" },
+            Config = W("Circle", "Animated", "Style"),
+        })
+    end
+end
 
 tbl17.h1 = function()
 local h1 = tbl17.cache.h1
@@ -68438,7 +68591,46 @@ return h3.c
 end
 end
 do -- h4
-local function fn35() tbl17 .aF(); tbl17 .aE();local I,W,N,P= tbl17 .dX(), tbl17 .h2(), tbl17 .h3(), tbl17 .a7();return function(l,a,e,c,E)local p,T,t,x=e.Options,e.Labels,E.Options,E.Labels;l:AddMultiDropdown({Label="Target Filters",Options=N(p),Default=I(P(p)),Labels=T,Config={a,"TargetConditions"}});E=l:AddGroup({Source=l:AddDropdown({Label="Aim Point",Options={"Center","Surface"},Labels={Surface="Closest Point"},Config={a,"HitboxPoint","Type"}}),Option="Surface"});E:AddSlider({Label="Surface Reduction (%)",Min=0,Max=100,Step=0.01,Config={a,"HitboxPoint","Surface","SizeReductionPercentage"}});E:AddToggle({Label="Preserve Depth",Config={a,"HitboxPoint","Surface","PreserveDepth"}});p=l:AddGroup({Source=l:AddDropdown({Label="Hitbox Selection",Options={"ClosestToCrosshair","Random"},Labels={ClosestToCrosshair="Closest to Crosshair",Random="Weighted Random"},Config={a,"HitboxSelection","Type"}}),Option="Random"});for I in t,nil,nil do p:AddSlider({Label=x[I]or I,Min=0,Max=100,Step=1,Config={a,"HitboxSelection","Random",I}});end;return W(l,a,c);end;end
+local function fn35()
+    tbl17.aF()
+    tbl17.aE()
+    local store = tbl17.bG()
+    local atomic = tbl17.i().atomic
+    local function syncHitboxes(featureKey, choice)
+        local headOn = (choice == "Head" or choice == "Both")
+        local bodyOn = (choice == "Body" or choice == "Both")
+        pcall(function()
+            for _, stateKey in ipairs({ "Air", "Ground" }) do
+                store:Set({ featureKey, "TargetHitboxes", "Standard", stateKey }, atomic({ HitboxHead = headOn, HitboxBody = bodyOn }))
+                store:Set({ featureKey, "TargetHitboxes", "Small", stateKey }, atomic({ HitboxHeadSmall = headOn, HitboxBodySmall = bodyOn }))
+            end
+        end)
+    end
+    return function(l, a)
+        l:AddDropdown({
+            Label = "Target Part",
+            Options = { "Head", "Body", "Both" },
+            Config = { a, "TargetPart" },
+            OnChanged = function(val)
+                syncHitboxes(a, val)
+            end,
+        })
+        l:AddToggle({
+            Label = "Prediction",
+            Config = { a, "Prediction", "Enabled" },
+        })
+        l:AddSlider({
+            Label = "Prediction Amount",
+            Min = 0,
+            Max = 1,
+            Step = 0.01,
+            Config = { a, "Prediction", "Amount" },
+        })
+        local cur = (store.Data and store.Data[a] and store.Data[a].TargetPart) or "Head"
+        syncHitboxes(a, cur)
+        return {}
+    end
+end
 
 tbl17.h4 = function()
 local h4 = tbl17.cache.h4
@@ -68453,7 +68645,19 @@ return h4.c
 end
 end
 do -- h5
-local function fn35() tbl17 .aF(); tbl17 .aE();local I,W= tbl17 .h1(), tbl17 .h4();return function(l,N,P)local a,e=l:AddSection({Title="Targeting",Side="left"}),l:AddSection({Title="Targeting FOV",Side="right"});l=W(a,N,P.TargetConditions,P.TargetHitboxes,P.RandomHitboxPercentages);I(e,N);return l;end;end
+local function fn35()
+    tbl17.aF()
+    tbl17.aE()
+    local I, W = tbl17.h1(), tbl17.h4()
+    return function(l, N, _, side)
+        local targetSide = side or "left"
+        local a = l:AddSection({ Title = "Targeting", Side = targetSide })
+        local e = l:AddSection({ Title = "FOV Circle", Side = targetSide })
+        local res = W(a, N)
+        I(e, N)
+        return res
+    end
+end
 
 tbl17.h5 = function()
 local h5 = tbl17.cache.h5
@@ -68467,7 +68671,19 @@ return h5.c
 end
 end
 do -- h6
-local function fn35() tbl17 .aE();local I= tbl17 .a6();return function(l,W,N,P,a,e)local c,E=if e==nil then if W=="Enabled"then(P[#P]:gsub("(%l)(%u)","%1 %2"))else W else e,l:AddToggle({Label=W,Config=I(P,{"Enabled"})});local W=l:AddKeybind({Row=E.Row,Modes=N,InKeybindList=a,ListLabel=c,ConfigMap={Key=I(P,{"Keybind","Bind"}),Mode=I(P,{"Keybind","Kind"}),Active=I(P,{"Keybind","State"}),ShowInList=I(P,{"Keybind","ShowInList"}),Invisible=I(P,{"Keybind","Invisible"})}});W:SetFeatureEnabled(E.Value);E:Connect(E.ValueChanged,function(l)W:SetFeatureEnabled(l);end);return E,W;end;end
+local function fn35()
+    tbl17.aE()
+    local I = tbl17.a6()
+    return function(l, W, _, P)
+        local E = l:AddToggle({ Label = W, Config = I(P, { "Enabled" }) })
+        local noopKeybind = {
+            SetFeatureEnabled = function() end,
+            Connect = function() end,
+            SetVisible = function() end,
+        }
+        return E, noopKeybind
+    end
+end
 
 tbl17.h6 = function()
 local h6 = tbl17.cache.h6
@@ -68482,7 +68698,16 @@ return h6.c
 end
 end
 do -- h7
-local function fn35() tbl17 .aF(); tbl17 .aE();local I,W,N,P,a= tbl17 .dX(), tbl17 .h5(), tbl17 .h6(), tbl17 .h3(), tbl17 .a7();local function l(e,c)N(e,"Enable Aimbot",{"Always","Toggle","Hold"},{"Aimbot"},true);local N,E=c.Options,c.Labels;e:AddMultiDropdown({Label="Activation Rules",Options=P(N),Default=I(a(N)),Config={"Aimbot","ActivationConditions"},Labels=E});e:AddSlider({Label="Reaction Delay (s)",Min=0,Max=2,Step=0.01,Config={"Aimbot","ReactionTime"}});e:AddSlider({Label="Switch Delay (s)",Min=0,Max=2,Step=0.01,Config={"Aimbot","SwitchDelay"}});c={"Lock","Linear","Spring"};table.insert(c,3,"AI");E=e:AddDropdown({Label="Aim Mode",Options=c,Config={"Aimbot","Mode","Type"}});e:AddGroup({Source=E,Option="Linear"}):AddSlider({Label="Linear Speed",Min=0.01,Max=1,Step=0.01,Config={"Aimbot","Mode","Speed"}});e:AddGroup({Source=E,Option="AI"}):AddSlider({Label="AI Speed",Min=0.01,Max=1,Step=0.01,Config={"Aimbot","Mode","Speed"}});e:AddGroup({Source=E,Option="Spring"}):AddSlider({Label="Spring Speed",Min=0.01,Max=1,Step=0.01,Config={"Aimbot","Mode","Speed"}});end;local function I(N)local P=N:AddToggle({Label="Enable Target Lock",Config={"Aimbot","TargetLock","Enabled"}});local a=N:AddKeybind({Row=P.Row,Modes={"Tap"},Default={Key="None",Mode="Tap"},InKeybindList=true,ListLabel="Target Lock",ConfigMap={Key={"Aimbot","TargetLock","Bind"},ShowInList={"Aimbot","TargetLock","BindShowInList"},Invisible={"Aimbot","TargetLock","BindInvisible"}}});a:SetFeatureEnabled(P.Value==true);P:Connect(P.ValueChanged,function(e)a:SetFeatureEnabled(e==true);end);N:AddGroup({Source=P}):AddDropdown({Label="Lock Mode",Options={"ToggleLock","AutoLock","ManualOnly"},Labels={ToggleLock="Toggle Lock",AutoLock="Auto Lock",ManualOnly="Manual Only"},Config={"Aimbot","TargetLock","Mode"}});end;return function(N,P)local a,e=N:AddSection({Title="Activation",Side="left"}),N:AddSection({Title="Target Lock",Side="right"});if P.PinHint~=nil then a:AddLabel({Label=P.PinHint});end;l(a,P.ActivationConditions);I(e);return W(N,"Aimbot",P);end;end
+local function fn35()
+    tbl17.aF()
+    tbl17.aE()
+    local W, N = tbl17.h5(), tbl17.h6()
+    return function(grid, P)
+        local a = grid:AddSection({ Title = "Aimbot", Side = "left" })
+        N(a, "Enable Aimbot", nil, { "Aimbot" }, false)
+        return W(grid, "Aimbot", P, "left")
+    end
+end
 
 tbl17.h7 = function()
 local h7 = tbl17.cache.h7
@@ -68496,7 +68721,7 @@ return h7.c
 end
 end
 do -- h8
-local function fn35()local I= tbl17 .aB(); tbl17 .gv(); tbl17 .aE();return function(l,W)return function()l:Dialog({Title="Manage Sounds",Description="Add or remove custom sounds."},function(l)local N,P;l:AddPage({Title="Add a Sound",Description="Enter a name and sound source.",Glyph="+",ActionText="Add Sound",OnAction=function()local a,e=N,P;local c=W:AddCustom(a.Value,e.Value);if not c.Ok then I.get():Notify(c.Error.Detail);return false;end;a:Set("",true);e:Set("",true);return true;end},function(a)N=a:AddTextBox({Label="Name"});P=a:AddTextBox({Label="Sound Source",Placeholder="Id / File name / Url"});end);local N,P;P=l:AddPage({Title="Remove a Sound",Description="Select a sound to remove.",Glyph="\226\136\146",ActionText="Remove Sound",Variant="danger",ActionEnabled=false,Confirmation={Title="Remove selected sound?",Description=function()local l=N.Value;if l==nil then return"The selected sound will be permanently removed.";end;return string.format("\"%s\" will be permanently removed.",tostring(l));end,ActionText="Confirm"},OnOpen=function()local l=N;l:SetOptions(W:GetNames());P:SetActionEnabled(l.Value~=nil);end,OnAction=function()local l=N.Value;if l==nil then return false;end;local a=W:RemoveCustom(l);if not a.Ok then I.get():Notify(a.Error.Detail);return false;end;return true;end},function(l)local I=l:AddList({Label="Sound",Options=W:GetNames(),Height=150,Search=true,SelectFirst=false});N=I;I:Connect(I.ValueChanged,function(l)P:SetActionEnabled(l~=nil);end);I:Connect(W.Changed,function(l)I:SetOptions(l);end);end);end);end;end;end
+local function fn35()local I= tbl17 .aB(); tbl17 .gv(); tbl17 .aE();return function(l,W)return function()end;end;end
 
 tbl17.h8 = function()
 local h8 = tbl17.cache.h8
@@ -68511,7 +68736,17 @@ return h8.c
 end
 end
 do -- h9
-local function fn35() tbl17 .aF(); tbl17 .aE();local I,W,N,P,a= tbl17 .dX(), tbl17 .h5(), tbl17 .h6(), tbl17 .h3(), tbl17 .a7();local function l(e,c)N(e,"Enable Silent Aim",{"Always","Toggle","Hold"},{"SilentAim"},true);e:AddSlider({Label="Activation Chance (%)",Min=0,Max=100,Config={"SilentAim","ActivationChance"}});local N=c.ExpandActivationSection;if N~=nil then N(e);end;N=c.ActivationConditions;local c,E=N.Options,N.Labels;e:AddMultiDropdown({Label="Activation Rules",Options=P(c),Default=I(a(c)),Config={"SilentAim","ActivationConditions"},Labels=E});e:AddSlider({Label="Reaction Delay (s)",Min=0,Max=2,Step=0.01,Config={"SilentAim","ReactionTime"}});e:AddSlider({Label="Switch Delay (s)",Min=0,Max=2,Step=0.01,Config={"SilentAim","SwitchDelay"}});end;return function(I,N)local P=I:AddSection({Title="Activation",Side="left"});if N.PinHint~=nil then P:AddLabel({Label=N.PinHint});end;l(P,N);return W(I,"SilentAim",N);end;end
+local function fn35()
+    tbl17.aF()
+    tbl17.aE()
+    local W, N = tbl17.h5(), tbl17.h6()
+    return function(grid, P)
+        local s = grid:AddSection({ Title = "Silent Aim", Side = "right" })
+        N(s, "Enable Silent Aim", nil, { "SilentAim" }, false)
+        s:AddSlider({ Label = "Hit Chance", Min = 0, Max = 100, Config = { "SilentAim", "ActivationChance" } })
+        return W(grid, "SilentAim", P, "right")
+    end
+end
 
 tbl17.h9 = function()
 local h9 = tbl17.cache.h9
@@ -68525,7 +68760,17 @@ return h9.c
 end
 end
 do -- ia
-local function fn35() tbl17 .aF(); tbl17 .aE();local I,W,N,P,a= tbl17 .dX(), tbl17 .h2(), tbl17 .h6(), tbl17 .h3(), tbl17 .a7();return function(l,e)local c,E=e.ActivationConditions,e.TargetConditions;local p,T,t,x,S=c.Options,c.Labels,E.Options,E.Labels,l:AddSection({Title="Triggerbot",Side="left"});if e.PinHint~=nil then S:AddLabel({Label=e.PinHint});end;N(S,"Enable Triggerbot",{"Always","Toggle","Hold"},{"Triggerbot"},true);S:AddMultiDropdown({Label="Activation Rules",Options=P(p),Default=I(a(p)),Labels=T,Config={"Triggerbot","ActivationConditions"}});S:AddMultiDropdown({Label="Target Filters",Options=P(t),Default=I(a(t)),Labels=x,Config={"Triggerbot","TargetConditions"}});S:AddSlider({Label="Reaction Delay (s)",Min=0,Max=2,Step=0.01,Config={"Triggerbot","ReactionTime"}});S:AddSlider({Label="Release Delay (s)",Min=0,Max=2,Step=0.01,Config={"Triggerbot","ReleaseTime"}});return(W(S,"Triggerbot",e.TargetHitboxes));end;end
+local function fn35()
+    tbl17.aF()
+    tbl17.aE()
+    local N = tbl17.h6()
+    return function(l)
+        local S = l:AddSection({ Title = "Triggerbot", Side = "right" })
+        N(S, "Triggerbot", nil, { "Triggerbot" }, false)
+        S:AddSlider({ Label = "Delay", Min = 0, Max = 0.5, Step = 0.01, Config = { "Triggerbot", "ReactionTime" } })
+        return {}
+    end
+end
 
 tbl17.ia = function()
 local ia = tbl17.cache.ia
@@ -68540,94 +68785,69 @@ return ia.c
 end
 end
 do -- ib
-local function fn35()local I= tbl17 .a8(); tbl17 .aE(); tbl17 .hN();return function(l,W,N)local P=W:AddSection({Title="Elimination Feedback",Side="right"});P:AddToggle({Label="Enable Elimination Feedback",Config={"PlayerElimination","Enabled"}});P:AddDivider({Label="Sound"});W=P:AddGroup({Source=P:AddToggle({Label="Play Elimination Sound",Config={"PlayerElimination","Sound","Enabled"}})});local a=W:AddDropdown({Label="Elimination Sound",Options=l.SfxSoundStorage:GetNames(),Config={"PlayerElimination","Sound","Name"}});a:Connect(l.SfxSoundStorage.Changed,function(e)a:SetOptions(e);end);W:AddSlider({Label="Elimination Volume",Min=0.1,Max=10,Step=0.1,Config={"PlayerElimination","Sound","Volume"}});W:AddSlider({Label="Elimination Pitch",Min=0.1,Max=3,Step=0.1,Config={"PlayerElimination","Sound","Pitch"}});W:AddButton({Label="Manage Custom Sounds",OnClick=N});P:AddDivider({Label="Visual Chams"});l=P:AddToggle({Label="Enable Elimination Chams",Config={"PlayerElimination","Chams","Enabled"}});P:AddColor({Row=l.Row,Alpha=true,Config={"PlayerElimination","Chams","Color"},Transparency={"PlayerElimination","Chams","Transparency"},Animatable=true});W=P:AddGroup({Source=l});W:AddSlider({Label="Elimination Chams Duration",Min=0.1,Max=3,Step=0.1,Config={"PlayerElimination","Chams","Duration"}});W:AddDropdown({Label="Elimination Chams Material",Options=I.Names,Config={"PlayerElimination","Chams","Material"}});P:AddDivider({Label="Flash"});l=P:AddToggle({Label="Enable Elimination Flash",Config={"PlayerElimination","KillFlash","Enabled"}});P:AddColor({Row=l.Row,Config={"PlayerElimination","KillFlash","Color"},Animatable=true});P:AddGroup({Source=l}):AddSlider({Label="Elimination Flash Duration",Min=0.1,Max=3,Step=0.1,Config={"PlayerElimination","KillFlash","Duration"}});P:AddDivider({Label="Notification"});P:AddGroup({Source=P:AddToggle({Label="Enable Elimination Notification",Config={"PlayerElimination","Notification","Enabled"}})}):AddTextBox({Label="Elimination Notification Text",Config={"PlayerElimination","Notification","Text"}});end;end
-
+local function fn35() return function() end end
 tbl17.ib = function()
 local ib = tbl17.cache.ib
-
-if not ib then
-local ib2 = { c = fn35() }
-tbl17.cache.ib = ib2
-ib = ib2
-end
-
+if not ib then ib = { c = fn35() }; tbl17.cache.ib = ib end
 return ib.c
 end
 end
 do -- ic
-local function fn35()local I= tbl17 .a8(); tbl17 .aE(); tbl17 .hN();return function(l,W,N)local P=W:AddSection({Title="Hit Feedback",Side="left"});P:AddToggle({Label="Enable Hit Feedback",Config={"PlayerHit","Enabled"}});P:AddDivider({Label="Sound"});local a,e=P:AddGroup({Source=P:AddToggle({Label="Play Hit Sound",Config={"PlayerHit","Sound","Enabled"}})}),l.SfxSoundStorage:GetNames();local c=a:AddDropdown({Label="Headshot Sound",Options=e,Config={"PlayerHit","Sound","HeadName"}});c:Connect(l.SfxSoundStorage.Changed,function(E)c:SetOptions(E);end);a:AddSlider({Label="Headshot Volume",Min=0.1,Max=10,Step=0.1,Config={"PlayerHit","Sound","HeadVolume"}});a:AddSlider({Label="Headshot Pitch",Min=0.1,Max=3,Step=0.1,Config={"PlayerHit","Sound","HeadPitch"}});local c=a:AddDropdown({Label="Body Hit Sound",Options=e,Config={"PlayerHit","Sound","BodyName"}});c:Connect(l.SfxSoundStorage.Changed,function(e)c:SetOptions(e);end);a:AddSlider({Label="Body Hit Volume",Min=0.1,Max=10,Step=0.1,Config={"PlayerHit","Sound","BodyVolume"}});a:AddSlider({Label="Body Hit Pitch",Min=0.1,Max=3,Step=0.1,Config={"PlayerHit","Sound","BodyPitch"}});a:AddToggle({Label="Mute Game Hit Sound",Config={"PlayerHit","Sound","DisableGameSound"}});a:AddButton({Label="Manage Custom Sounds",OnClick=N});P:AddDivider({Label="Visual Chams"});l=P:AddToggle({Label="Enable Hit Chams",Config={"PlayerHit","Chams","Enabled"}});P:AddColor({Row=l.Row,Alpha=true,Config={"PlayerHit","Chams","Color"},Transparency={"PlayerHit","Chams","Transparency"},Animatable=true});N=P:AddGroup({Source=l});N:AddSlider({Label="Hit Chams Duration",Min=0.1,Max=3,Step=0.1,Config={"PlayerHit","Chams","Duration"}});N:AddDropdown({Label="Hit Chams Material",Options=I.Names,Config={"PlayerHit","Chams","Material"}});P:AddDivider({Label="Flash"});W=P:AddToggle({Label="Enable Hit Flash",Config={"PlayerHit","HitFlash","Enabled"}});P:AddColor({Row=W.Row,Config={"PlayerHit","HitFlash","Color"},Animatable=true});P:AddGroup({Source=W}):AddSlider({Label="Hit Flash Duration",Min=0.1,Max=3,Step=0.1,Config={"PlayerHit","HitFlash","Duration"}});P:AddDivider({Label="Notification"});P:AddGroup({Source=P:AddToggle({Label="Enable Hit Notification",Config={"PlayerHit","Notification","Enabled"}})}):AddTextBox({Label="Hit Notification Text",Config={"PlayerHit","Notification","Text"}});end;end
-
+local function fn35() return function() end end
 tbl17.ic = function()
 local ic = tbl17.cache.ic
-
-if not ic then
-local ic2 = { c = fn35() }
-tbl17.cache.ic = ic2
-ic = ic2
-end
-
+if not ic then ic = { c = fn35() }; tbl17.cache.ic = ic end
 return ic.c
 end
 end
 do -- id
-local function fn35() tbl17 .aE();local function l(I,W,N,P,a,e)I:AddGroup({Source=I:AddToggle({Label=W,Config={"ItemModifiers",P,"Enabled"}})}):AddSlider({Label=N,Min=a,Max=e,Config={"ItemModifiers",P,"Percentage"}});end;return function(I)local W,N,P,a=I:AddSection({Title="Aim & Fire",Side="left"}),I:AddSection({Title="Cooldowns",Side="left"}),I:AddSection({Title="Melee",Side="right"}),I:AddSection({Title="Grenades",Side="right"});l(W,"Reduce Recoil","Recoil Reduction (%)","Recoil",0,100);W:AddToggle({Label="Remove Spread",Config={"ItemModifiers","NoSpread"}});W:AddToggle({Label="Automatic Fire",Config={"ItemModifiers","AutomaticWeapon"}});l(W,"Aim Speed Override","Aim Speed (%)","AimSpeed",50,500);l(N,"Fire Cooldown Override","Percentage","FireCooldown",0,100);l(N,"Aim Cooldown Override","Percentage","AimCooldown",1,100);l(N,"Melee Cooldown Override","Percentage","MeleeCooldown",0,100);l(N,"Dash Cooldown Override","Percentage","DashCooldown",0,100);P:AddToggle({Label="Always Backstab",Config={"ItemModifiers","AlwaysBackstab"}});P:AddGroup({Source=P:AddToggle({Label="Extend Melee Range",Config={"ItemModifiers","ExtendMeleeRange","Enabled"}})}):AddSlider({Label="Range",Min=5,Max=20,Config={"ItemModifiers","ExtendMeleeRange","Range"}});N=a:AddGroup({Source=a:AddToggle({Label="Fuse Override",Config={"ItemModifiers","GrenadeFuse","Enabled"}})});N:AddDropdown({Label="Explode On",Options={"Impact","Throw"},Config={"ItemModifiers","GrenadeFuse","ExplodeOn"}});N:AddToggle({Label="Remove Fuse",Config={"ItemModifiers","GrenadeFuse","RemoveFuse"}});end;end
-
+local function fn35() return function() end end
 tbl17.id = function()
 local id = tbl17.cache.id
-
-if not id then
-local id2 = { c = fn35() }
-tbl17.cache.id = id2
-id = id2
-end
-
+if not id then id = { c = fn35() }; tbl17.cache.id = id end
 return id.c
 end
 end
 do -- ie
-local function fn35()local I= tbl17 .gR(); tbl17 .aE();local W= tbl17 .h6();local function l(N)W(N,"Enable Ragebot",{"Always","Toggle","Hold"},{"Ragebot"},true);if not I.IsArcadeServer then N:AddToggle({Label="Utilize Health Lead",Config={"Ragebot","UtilizeHealthLead"}});end;end;return function(I)l(I:AddSection({Title="Activation",Side="left"}));local l,W=I:AddSection({Title="Weapon Strategy",Side="left"}),{"Primary","Secondary","Melee"};for I,I in W,nil,nil do l:AddToggle({Label=string.format("%s Enabled",tostring(I)),Config={"Ragebot","Weapons","Enabled",I}});end;end;end
-
+local function fn35() return function() end end
 tbl17.ie = function()
 local ie = tbl17.cache.ie
-
-if not ie then
-ie = { c = fn35() }
-tbl17.cache.ie = ie
-end
-
+if not ie then ie = { c = fn35() }; tbl17.cache.ie = ie end
 return ie.c
 end
 end
 do -- ih
-local function fn35() tbl17 .aE();local I= tbl17 .h6();local function l(W)I(W,"Enable Ragebot",{"Always","Toggle","Hold"},{"Ragebot"},true);W:AddToggle({Label="Prioritize Hackers",Config={"Ragebot","PrioritizeHackers"}});W:AddSlider({Label="Stability",Min=0,Max=1.5,Step=0.001,Config={"Ragebot","Stability"}});W:AddSlider({Label="Shoot Frames",Min=1,Max=5,Config={"Ragebot","ShootFrames"}});end;local function I(W)local N={"Primary","Secondary","Melee"};for P,P in N,nil,nil do W:AddToggle({Label=string.format("%s Enabled",tostring(P)),Config={"Ragebot","Weapons","Enabled",P}});end;W:AddOrderedList({Label="Weapon Priority",Items=N,Default=N,Config={"Ragebot","Weapons","Priority"}});W:AddDropdown({Label="On Empty",Options={"Reload","Swap","SwapOrReload"},Labels={SwapOrReload="Swap or Reload"},Config={"Ragebot","Weapons","OnEmpty"}});end;local function W(N,P)local a=N:AddGroup({Source=P,Option="ProjectileBreaker"});a:AddRangeSlider({Label="Forward Depth",Min=0,Max=10,Step=0.1,Config={"Ragebot","Evasion","ProjectileBreaker","DepthForward"}});a:AddSlider({Label="Forward Frequency",Min=0,Max=20,Step=0.1,Config={"Ragebot","Evasion","ProjectileBreaker","DepthForwardFrequency"}});a:AddRangeSlider({Label="Upward Depth",Min=0,Max=10,Step=0.1,Config={"Ragebot","Evasion","ProjectileBreaker","DepthUp"}});a:AddSlider({Label="Upward Frequency",Min=0,Max=20,Step=0.1,Config={"Ragebot","Evasion","ProjectileBreaker","DepthUpFrequency"}});a:AddSlider({Label="Reposition Interval (s)",Min=0.05,Max=2,Step=0.01,Config={"Ragebot","Evasion","ProjectileBreaker","RepositionInterval"}});a:AddToggle({Label="Fallback Character Origin",Config={"Ragebot","Evasion","ProjectileBreaker","FallbackAnchorFromCharacter"}});a:AddSlider({Label="Fallback Radius",Min=5,Max=100000000,Config={"Ragebot","Evasion","ProjectileBreaker","FallbackBaseRadius"}});a:AddSlider({Label="Fallback Random Factor",Min=0,Max=1,Step=0.1,Config={"Ragebot","Evasion","ProjectileBreaker","FallbackRadiusRandomFactor"}});end;local function N(P)local a=P:AddDropdown({Label="Evasion Mode",Options={"Off","Random","Translocate","ProjectileBreaker"},Labels={ProjectileBreaker="Projectile Breaker"},Config={"Ragebot","Evasion","Mode"}});local e=P:AddGroup({Source=a,Option="Random"});e:AddToggle({Label="Character Origin",Config={"Ragebot","Evasion","Random","AnchorFromCharacter"}});e:AddSlider({Label="Base Radius",Min=5,Max=100000000,Config={"Ragebot","Evasion","Random","BaseRadius"}});e:AddSlider({Label="Random Factor",Min=0,Max=1,Step=0.1,Config={"Ragebot","Evasion","Random","RadiusRandomFactor"}});P:AddGroup({Source=a,Option="Translocate"}):AddSlider({Label="Offset",Min=-5,Max=5,Step=0.1,Config={"Ragebot","Evasion","Translocate","Offset"}});W(P,a);end;return function(W)l(W:AddSection({Title="Activation",Side="left"}));I(W:AddSection({Title="Weapon Strategy",Side="left"}));N(W:AddSection({Title="Evasion",Side="right"}));end;end
-
+local function fn35() return function() end end
 tbl17.ih = function()
 local ih = tbl17.cache.ih
-
-if not ih then
-ih = { c = fn35() }
-tbl17.cache.ih = ih
-end
-
+if not ih then ih = { c = fn35() }; tbl17.cache.ih = ih end
 return ih.c
 end
 end
 do -- ii
-local function fn35() tbl17 .aE();local I= tbl17 .h6();return function(l,W)local N=l:AddSection({Title="Flickbot",Side="right"});I(N,"Enable Flickbot",{"Hold","Toggle"},{"Flickbot"},true);N:AddGroup({Source=N:AddToggle({Label="Shoot",Config={"Flickbot","Shoot"}})}):AddSlider({Label="Shot Delay (ms)",Min=0,Max=250,Config={"Flickbot","ShotDelay"}});N:AddSlider({Label="Cooldown (ms)",Min=0,Max=2000,Config={"Flickbot","Cooldown"}});N:AddSlider({Label="Flick Duration (ms)",Min=30,Max=400,Config={"Flickbot","FlickDuration"}});N:AddSlider({Label="Curvature",Min=0,Max=50,Config={"Flickbot","Curvature"}});N:AddSlider({Label="Humanness",Min=0,Max=100,Config={"Flickbot","Humanness"}});N:AddButton({Label="Open Aimbot Targeting",OnClick=W});end;end
-
+local function fn35() return function() end end
 tbl17.ii = function()
 local ii = tbl17.cache.ii
-
-if not ii then
-ii = { c = fn35() }
-tbl17.cache.ii = ii
-end
-
+if not ii then ii = { c = fn35() }; tbl17.cache.ii = ii end
 return ii.c
 end
 end
 do -- ij
-local function fn35()local I,W,N,P= tbl17 .aU(), tbl17 .gR(), tbl17 .aW(), tbl17 .aY(); tbl17 .aE(); tbl17 .hN();local a,e,c,E,p,T,t,x,S= tbl17 .h0(), tbl17 .h7(), tbl17 .h8(), tbl17 .h9(), tbl17 .ia(), tbl17 .ib(), tbl17 .ic(), tbl17 .id(),{Combat="rbxassetid://99199363807265",CameraAim="rbxassetid://83752373575368",SilentAim="rbxassetid://109514269737059",FireAssist="rbxassetid://81854854241463",WeaponHandling="rbxassetid://128279962545721",HitFeedback="rbxassetid://140427675871522",Ragebot="rbxassetid://125012650497883"};return function(J,B)local X=B:AddTab({Label="Combat",Icon=S.Combat,Description="Aim assistance, fire control, weapon handling, feedback, and ragebot."});local H=X:AddTab({Label="Aimbot",Icon=S.CameraAim,Description="Camera-based aim assistance and target locking."});local k,D=H:Grid({Columns=2}),table.clone(I.BuildSpec);D.PinHint="Hold a weapon, then click the pin next to a setting to give that weapon its own value.";a(J.StoreProfiles,e(k,D));D,k=X:AddTab({Label="Silent Aim",Icon=S.SilentAim,Description="Redirect projectiles toward targets without moving the camera."}):Grid({Columns=2}),table.clone(N.BuildSpec);k.PinHint="Hold a weapon, then click the pin next to a setting to give that weapon its own value.";a(J.StoreProfiles,E(D,k));k=X:AddTab({Label="Ragebot",Icon=S.Ragebot,Description="Aggressive targeting, weapon priority, and evasive movement."}):Grid({Columns=2});if W.IsArcadeServer or false or false then  tbl17 .ie()(k);else  tbl17 .ih()(k);end;D,k=X:AddTab({Label="Fire Assist",Icon=S.FireAssist,Description="Automatic firing and fast camera flicks."}):Grid({Columns=2}),table.clone(P.BuildSpec);k.PinHint="Hold a weapon, then click the pin next to a setting to give that weapon its own value.";a(J.StoreProfiles,p(D,k)); tbl17 .ii()(D,function()H:Open();end);x((X:AddTab({Label="Weapon Handling",Icon=S.WeaponHandling,Description="Aim, firing, cooldown, melee, and grenade behavior."}):Grid({Columns=2})));D,k=X:AddTab({Label="Hit Feedback",Icon=S.HitFeedback,Description="Sound, visual, flash, and notification feedback."}):Grid({Columns=2}),c(B,J.SfxSoundStorage);t(J,D,k);T(J,D,k);end;end
+local function fn35()
+    local I, N, P = tbl17.aU(), tbl17.aW(), tbl17.aY()
+    tbl17.aE()
+    tbl17.hN()
+    local e, E, p = tbl17.h7(), tbl17.h9(), tbl17.ia()
+    return function(_, B)
+        local X = B:AddTab({ Label = "Combat", Description = "Aimbot, Silent Aim, and Triggerbot." })
+        local H = X:AddTab({ Label = "Aimbot", Description = "Camera-based aim assistance." }):Grid({ Columns = 2 })
+        e(H, table.clone(I.BuildSpec))
+        local D = X:AddTab({ Label = "Silent Aim", Description = "Redirect projectiles toward targets." }):Grid({ Columns = 2 })
+        E(D, table.clone(N.BuildSpec))
+        local F = X:AddTab({ Label = "Triggerbot", Description = "Automatic firing when enemy peaks." }):Grid({ Columns = 2 })
+        p(F, table.clone(P.BuildSpec))
+    end
+end
 
 tbl17.ij = function()
 local ij = tbl17.cache.ij
@@ -69473,7 +69693,20 @@ return iv.c
 end
 end
 do -- iw
-local function fn35() tbl17 .aE(); tbl17 .hN();local I,W,N,P,a= tbl17 .iq(), tbl17 .ir(), tbl17 .is(), tbl17 .it(),{Player="rbxassetid://114567720540659",Movement="rbxassetid://114280087699339",Recorder="rbxassetid://70520152532392",Character="rbxassetid://101118444346965",Identity="rbxassetid://109514257830136"};return function(e,c)local E=c:AddTab({Label="Player",Icon=a.Player,Description="Movement, character appearance, and identity."});P((E:AddTab({Label="Movement",Icon=a.Movement,Description="Ground and air movement."}):Grid({Columns=2})));c=e.MovementRecorder;if c then  tbl17 .iu()(c,(E:AddTab({Label="Movement Recorder",Icon=a.Recorder,Description="Record, replay, and manage movement routes."}):Grid({Columns=2})));end;c=E:AddTab({Label="Character",Icon=a.Character,Description="Animations and character appearance."}):Grid({Columns=2});I(c);W(c);e=E:AddTab({Label="Identity Spoofing",Icon=a.Identity,Description="Presented device and player identity."}):Grid({Columns=2});N(e); tbl17 .iv()(e);end;end
+local function fn35()
+    tbl17.aE()
+    tbl17.hN()
+    local W, N, P = tbl17.ir(), tbl17.is(), tbl17.it()
+    return function(_, c)
+        local E = c:AddTab({ Label = "Player", Description = "Movement, character appearance, and identity." })
+        P(E:AddTab({ Label = "Movement", Description = "Ground and air movement." }):Grid({ Columns = 2 }))
+        local charGrid = E:AddTab({ Label = "Character", Description = "Character appearance." }):Grid({ Columns = 2 })
+        W(charGrid)
+        local idGrid = E:AddTab({ Label = "Identity", Description = "Presented device and player identity." }):Grid({ Columns = 2 })
+        N(idGrid)
+        tbl17.iv()(idGrid)
+    end
+end
 
 tbl17.iw = function()
 local iw = tbl17.cache.iw
@@ -69503,7 +69736,15 @@ return ix.c
 end
 end
 do -- iy
-local function fn35() tbl17 .aE();return function(l)local I=l:AddSection({Title="Gameplay Overlays",Side="right"});I:AddToggle({Label="Hide Flashbang Effect",Config={"Removables","NoFlashbang"}});I:AddToggle({Label="Hide Burn Effect",Config={"Removables","NoBurnEffect"}});I:AddToggle({Label="Hide ADS Vignette",Config={"Removables","NoAdsVignette"}});I:AddToggle({Label="Hide Scope Overlay",Config={"Removables","NoScopeOverlay"}});I:AddToggle({Label="Hide Scope Reticle",Config={"Removables","NoScopeReticle"}});I:AddToggle({Label="Hide Hitmarker",Config={"Removables","NoHitmarker"}});end;end
+local function fn35()
+    tbl17.aE()
+    return function(l)
+        local I = l:AddSection({ Title = "Gameplay Overlays", Side = "left" })
+        I:AddToggle({ Label = "Hide Flashbang Effect", Config = { "Removables", "NoFlashbang" } })
+        I:AddToggle({ Label = "Hide Burn Effect", Config = { "Removables", "NoBurnEffect" } })
+        I:AddToggle({ Label = "Hide Scope Overlay", Config = { "Removables", "NoScopeOverlay" } })
+    end
+end
 
 tbl17.iy = function()
 local iy = tbl17.cache.iy
@@ -69518,7 +69759,7 @@ return iy.c
 end
 end
 do -- iz
-local function fn35() tbl17 .aE();return function(l)local I=l:AddSection({Title="Stretched Resolution",Side="right"});I:AddToggle({Label="Enable Stretched Resolution",Config={"StretchedResolution","Enabled"}});I:AddSlider({Label="X Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","X"}});I:AddSlider({Label="Y Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","Y"}});end;end
+local function fn35() tbl17 .aE();return function(l)local I=l:AddSection({Title="Stretched Resolution",Side="left"});I:AddToggle({Label="Enable Stretched Resolution",Config={"StretchedResolution","Enabled"}});I:AddSlider({Label="X Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","X"}});I:AddSlider({Label="Y Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","Y"}});end;end
 
 tbl17.iz = function()
 local iz = tbl17.cache.iz
@@ -69533,7 +69774,7 @@ return iz.c
 end
 end
 do -- iA
-local function fn35() tbl17 .aE();local I= tbl17 .h6();return function(l)local W=l:AddSection({Title="Third Person",Side="left"});I(W,"Enable Third Person",{"Toggle"},{"ThirdPerson"},true);W:AddToggle({Label="Ray Check",Config={"ThirdPerson","RayCheck"}});W:AddToggle({Label="Show Replica",Config={"ThirdPerson","ShowReplica"}});W:AddSlider({Label="X Offset",Min=-15,Max=15,Step=0.1,Config={"ThirdPerson","X"}});W:AddSlider({Label="Y Offset",Min=-5,Max=10,Step=0.1,Config={"ThirdPerson","Y"}});W:AddSlider({Label="Z Offset",Min=0,Max=15,Step=0.1,Config={"ThirdPerson","Z"}});end;end
+local function fn35() return function() end end
 
 tbl17.iA = function()
 local ia = tbl17.cache.iA
@@ -69548,7 +69789,15 @@ return ia.c
 end
 end
 do -- iB
-local function fn35() tbl17 .aE();local I,W,N,P= tbl17 .ix(), tbl17 .iy(), tbl17 .iz(), tbl17 .iA();return function(l)P(l);I(l);W(l);N(l);end;end
+local function fn35()
+    tbl17.aE()
+    local I, W, N = tbl17.ix(), tbl17.iy(), tbl17.iz()
+    return function(l)
+        I(l)
+        W(l)
+        N(l)
+    end
+end
 
 tbl17.iB = function()
 local ib = tbl17.cache.iB
@@ -69837,7 +70086,50 @@ return iz.c
 end
 end
 do -- i_
-local function fn35() tbl17 .aE(); tbl17 .hN();local I,W,N,P,a,e= tbl17 .iB(), tbl17 .iL(), tbl17 .iQ(), tbl17 .iR(), tbl17 .iZ(),{Visuals="rbxassetid://127234874352422",PlayerEsp="rbxassetid://85332511060401",Crosshair="rbxassetid://83752373575368",Weapon="rbxassetid://121406454377051",Camera="rbxassetid://114084146151777",Sound="rbxassetid://102139623610548"};return function(l,c)local E=c:AddTab({Label="Visuals",Icon=e.Visuals,Description="Player information, crosshair, weapon, camera, and sound visuals."});N(l,c,(E:AddTab({Label="Player ESP",Icon=e.PlayerEsp,Description="Player overlays, team-specific styling, and a synchronized preview."}):Grid({Columns=2})));W(l,c,(E:AddTab({Label="Crosshair",Icon=e.Crosshair,Description="Crosshair lines, images, text, motion, and target-follow effects."}):Grid({Columns=2})));a((E:AddTab({Label="Weapon Visuals",Icon=e.Weapon,Description="Viewmodel position, materials, motion, and projectile effects."}):Grid({Columns=2})));I((E:AddTab({Label="Camera & Screen",Icon=e.Camera,Description="Third person, camera field of view, overlays, and screen scaling."}):Grid({Columns=2})));P((E:AddTab({Label="Sound ESP",Icon=e.Sound,Description="Visualize footsteps and other sounds by source and loudness."}):Grid({Columns=2})));end;end
+local function fn35()
+    tbl17.aE()
+    tbl17.hN()
+    local I, N = tbl17.iB(), tbl17.iQ()
+    local toSet = tbl17.dX()
+    local allTypes = tbl17.dY().All
+    local allRarities = tbl17.e1()
+    return function(l, c)
+        local E = c:AddTab({ Label = "Visuals", Description = "Player ESP, camera overlays, and Unlock All." })
+        local espGrid = E:AddTab({ Label = "Player ESP", Description = "Core.xyz ESP." }):Grid({ Columns = 2 })
+        N(l, c, espGrid)
+
+        local unlockSec = espGrid:AddSection({ Title = "Unlock All", Side = "right" })
+        local function applyUnlockAll(state)
+            local on = (state == true)
+            pcall(function()
+                l.CosmeticsConfig:SetUnlockedTypes(toSet(allTypes))
+                l.CosmeticsConfig:SetUnlockedRarities(toSet(allRarities))
+                l.CosmeticsConfig:SetRuntimeEnabled(on)
+                l.Cosmetics:SetUnlockerEnabled(on)
+            end)
+        end
+        local unlockToggle = unlockSec:AddToggle({
+            Label = "Unlock All",
+            OnChanged = function(val)
+                applyUnlockAll(val)
+            end,
+        })
+        pcall(function()
+            local st = l.CosmeticsConfig:GetStateConfigState()
+            if st and st.UnlockerEnabled then
+                unlockToggle:Set(true, true)
+                applyUnlockAll(true)
+            end
+            unlockToggle:Connect(l.CosmeticsConfig.StateConfigLoaded, function(newSt)
+                local on = newSt and newSt.UnlockerEnabled == true
+                unlockToggle:Set(on, true)
+                if on then applyUnlockAll(true) end
+            end)
+        end)
+
+        I(E:AddTab({ Label = "Camera & Screen", Description = "Camera field of view, overlays, and screen scaling." }):Grid({ Columns = 2 }))
+    end
+end
 
 tbl17.i_ = function()
 local i = tbl17.cache.i_
@@ -70078,7 +70370,7 @@ local function fn35()
     local I = tbl17.bG()
     tbl17.aE()
     tbl17.hN()
-    local N, P, a, e, c, E, p = tbl17.h_(), tbl17.ij(), tbl17.ip(), tbl17.n(), tbl17.iw(), tbl17.i_(), tbl17.je()
+    local P, e, c, E = tbl17.ij(), tbl17.n(), tbl17.iw(), tbl17.i_()
     return function(l)
         CoreBridge.InitFeatureTabs()
         local t = CoreBridge.CreateMenuAdapter({
@@ -70095,9 +70387,6 @@ local function fn35()
         P(l, t)
         E(l, t)
         c(l, t)
-        N(l, t)
-        p(l, t)
-        a(l, t)
 
         CoreBridge.RunFirstOpenCallbacks()
 
