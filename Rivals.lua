@@ -9544,6 +9544,10 @@ do -- CoreBridge.CreateMenuAdapter
                 ["Local Player"] = "Identity · Local Player",
                 ["Other Player"] = "Identity · Other Player",
             },
+            Identity = {
+                ["Local Player"] = "Identity · Local Player",
+                ["Other Player"] = "Identity · Other Player",
+            },
         },
         World = {
             ["Post Processing"] = {
@@ -10429,7 +10433,7 @@ tbl17.iQ = function()
             OnChanged = function() syncMasterEsp() end,
         })
 
-        local skelSec = grid:AddSection({ Title = "ESP · Skeleton", Side = "right" })
+        local skelSec = grid:AddSection({ Title = "ESP · Skeleton", Side = "left" })
         local skelColRow = skelSec:AddLabel({ Label = "Skeleton Color" })
         skelSec:AddColor({
             Row = skelColRow.Row,
@@ -10450,7 +10454,7 @@ tbl17.iQ = function()
             OnChanged = function() syncMasterEsp() end,
         })
 
-        local hbSec = grid:AddSection({ Title = "ESP · Health Bar", Side = "right" })
+        local hbSec = grid:AddSection({ Title = "ESP · Health Bar", Side = "left" })
         hbSec:AddDropdown({
             Label = "Healthbar Type",
             Options = { "Gradient", "Solid", "Reactive" },
@@ -35057,7 +35061,18 @@ end
 end
 do -- ct
 local function fn35()
-return tbl17.g().new().Connect
+local rawConnect = tbl17.g().new().Connect
+return function(sig, cb)
+return rawConnect(sig, function(...)
+local packed = table.pack(...)
+task.spawn(function()
+if setthreadidentity then
+pcall(setthreadidentity, 8)
+end
+pcall(cb, table.unpack(packed, 1, packed.n))
+end)
+end)
+end
 end
 
 tbl17.ct = function()
@@ -35078,12 +35093,7 @@ tbl17.g()
 local v115 = tbl17.ct()
 
 return function(arg, arg2)
-return v115(arg, function(...)
-local v116 = getthreadidentity()
-setthreadidentity(8)
-arg2(...)
-setthreadidentity(v116)
-end)
+return v115(arg, arg2)
 end
 end
 
@@ -35851,6 +35861,7 @@ end
 local function fn37(arg2)
 local v123 = v121()
 v122(8)
+pcall(function()
 local player = v102(arg2, "Player")
 
 if player == localPlayer then
@@ -35861,7 +35872,6 @@ arg.LocalState = nil
 end
 
 arg:_BuildLocalFighter(player, arg2)
-v122(v123)
 return
 end
 
@@ -35874,6 +35884,7 @@ arg._trove:Remove(v124)
 end
 
 arg:_BuildRemoteFighter(player, arg2)
+end)
 v122(v123)
 end
 
@@ -35881,13 +35892,13 @@ local function fn38(arg2)
 if true then
 local v123 = v121()
 v122(8)
+pcall(function()
 local localState = arg.LocalState
 
 if localState and localState.Inner == arg2 then
 arg._trove:Remove(localState)
 arg.LocalState = nil
 arg.LocalStateRemoved:Fire(localState)
-v122(v123)
 return
 end
 
@@ -35900,10 +35911,9 @@ arg._trove:Remove(v124)
 arg.StateByPlayer[player] = nil
 arg.EnemyByPlayer[player] = nil
 arg.RemoteStateRemoved:Fire(v124)
-v122(v123)
 return
 end
-
+end)
 v122(v123)
 else
 while v86[34] do
@@ -41070,7 +41080,7 @@ setthreadidentity(8)
 
 for _, v123 in v120, nil, nil do
 if v123.Enabled and v123.Handler then
-v123.Handler(tbl18)
+pcall(v123.Handler, tbl18)
 if not tbl18.Block then
 continue
 end
@@ -48278,22 +48288,35 @@ return
 end
 v103(arg2, "Info", arg4)
 setmetatable(arg2, v125)
+pcall(function()
 local v126 = debug.getstack(2, v86[63])
 
 if type(v126) ~= "table" then
 v126 = debug.getstack(v86[56], 2)
 end
 
+if type(v126) ~= "table" or v126[1] == nil then
+return
+end
+
 local viewModel = v102(v126[1], "ViewModel")
-local player = v102(v102(arg2, "ClientFighter"), "Player")
+local clientFighter = v102(arg2, "ClientFighter")
+local player = clientFighter and v102(clientFighter, "Player") or nil
 local name = v102(arg2, "Name")
 
-if player == localPlayer then
+if player == localPlayer and name ~= nil then
 arg.ViewModelCreated:Fire(name)
+end
+
+if viewModel == nil or player == nil or name == nil then
+return
 end
 
 local v127 = arg._store:Get(player, name)
 local v128 = viewModel[v116.encode("Data")]
+if type(v128) ~= "table" then
+return
+end
 local flag19 = arg._rankPatchActive and player == localPlayer and (v127 == nil or v127.Charm == nil)
 local v129 = nil
 
@@ -48325,6 +48348,7 @@ end
 if v129 ~= nil then
 v128[v116.encode("Charm")] = v129
 end
+end)
 end,
 }
 
@@ -59997,7 +60021,6 @@ v123 = v102(v123, "_next")
 end
 
 if v124 == nil then
-game:GetService("Players").LocalPlayer:Kick("JumpPower error: ent")
 return v116.err("JumpPower", "callback_search", "Failed to find `EntityAdded` callback")
 end
 arg:_ReplaceConstantsWithProxy(v124)
@@ -60051,12 +60074,18 @@ end
 
 index2.SetMultiplierEnabled = function(arg, isEnabled)
 arg._isEnabled = isEnabled
+if isEnabled then
 return arg:_AttemptLoadHook()
+end
+return v116.VoidOk
 end
 
 index2.SetMultiplier = function(arg, multiplier)
 arg._multiplier = multiplier
+if arg._isEnabled then
 return arg:_AttemptLoadHook()
+end
+return v116.VoidOk
 end
 
 index2.Destroy = function(arg)
@@ -65540,8 +65569,7 @@ end
 return baseWalkspeed
 end
 
-game:GetService("Players").LocalPlayer:Kick("Unexpected behavior (client physics 1)")
-return nil
+return v102(v122, arg3)
 end }))
 
 arg._isHookLoaded = true
@@ -65550,22 +65578,34 @@ end
 
 index2.SetMultiplierEnabled = function(arg, multiplierEnabled)
 arg._multiplierEnabled = multiplierEnabled
+if multiplierEnabled or arg._slidingMultiplierEnabled then
 return arg:_AttemptLoadHook()
+end
+return v117.VoidOk
 end
 
 index2.SetMultiplier = function(arg, multiplier)
 arg._multiplier = multiplier
+if arg._multiplierEnabled or arg._slidingMultiplierEnabled then
 return arg:_AttemptLoadHook()
+end
+return v117.VoidOk
 end
 
 index2.SetSlidingMultiplierEnabled = function(arg, slidingMultiplierEnabled)
 arg._slidingMultiplierEnabled = slidingMultiplierEnabled
+if arg._multiplierEnabled or slidingMultiplierEnabled then
 return arg:_AttemptLoadHook()
+end
+return v117.VoidOk
 end
 
 index2.SetSlidingMultiplier = function(arg, slidingMultiplier)
 arg._slidingMultiplier = slidingMultiplier
+if arg._multiplierEnabled or arg._slidingMultiplierEnabled then
 return arg:_AttemptLoadHook()
+end
+return v117.VoidOk
 end
 
 index2.Destroy = function(arg)
@@ -68649,12 +68689,9 @@ local function fn35()
     tbl17.aF()
     tbl17.aE()
     local I, W = tbl17.h1(), tbl17.h4()
-    return function(l, N, _, side)
-        local targetSide = side or "left"
-        local a = l:AddSection({ Title = "Targeting", Side = targetSide })
-        local e = l:AddSection({ Title = "FOV Circle", Side = targetSide })
-        local res = W(a, N)
-        I(e, N)
+    return function(sec, N)
+        local res = W(sec, N)
+        I(sec, N)
         return res
     end
 end
@@ -68705,7 +68742,7 @@ local function fn35()
     return function(grid, P)
         local a = grid:AddSection({ Title = "Aimbot", Side = "left" })
         N(a, "Enable Aimbot", nil, { "Aimbot" }, false)
-        return W(grid, "Aimbot", P, "left")
+        return W(a, "Aimbot", P, "left")
     end
 end
 
@@ -68744,7 +68781,7 @@ local function fn35()
         local s = grid:AddSection({ Title = "Silent Aim", Side = "right" })
         N(s, "Enable Silent Aim", nil, { "SilentAim" }, false)
         s:AddSlider({ Label = "Hit Chance", Min = 0, Max = 100, Config = { "SilentAim", "ActivationChance" } })
-        return W(grid, "SilentAim", P, "right")
+        return W(s, "SilentAim", P, "right")
     end
 end
 
@@ -68765,7 +68802,7 @@ local function fn35()
     tbl17.aE()
     local N = tbl17.h6()
     return function(l)
-        local S = l:AddSection({ Title = "Triggerbot", Side = "right" })
+        local S = l:AddSection({ Title = "Triggerbot", Side = "left" })
         N(S, "Triggerbot", nil, { "Triggerbot" }, false)
         S:AddSlider({ Label = "Delay", Min = 0, Max = 0.5, Step = 0.01, Config = { "Triggerbot", "ReactionTime" } })
         return {}
@@ -69621,7 +69658,7 @@ return iq.c
 end
 end
 do -- ir
-local function fn35()local I= tbl17 .a8(); tbl17 .aE();return function(l)local W=l:AddSection({Title="Character Appearance",Side="right"});l=W:AddToggle({Label="Enable Character Chams",Config={"Chams","Character","Enabled"}});W:AddColor({Row=l.Row,Alpha=true,Config={"Chams","Character","Color"},Transparency={"Chams","Character","Transparency"},Animatable=true});local N=W:AddGroup({Source=l});N:AddDropdown({Label="Character Chams Material",Options=I.List,Config={"Chams","Character","Material"}});N:AddToggle({Label="Strip Character Chams Textures",Config={"Chams","Character","StripTextures"}});end;end
+local function fn35()local I= tbl17 .a8(); tbl17 .aE();return function(l)local W=l:AddSection({Title="Character Appearance",Side="left"});l=W:AddToggle({Label="Enable Character Chams",Config={"Chams","Character","Enabled"}});W:AddColor({Row=l.Row,Alpha=true,Config={"Chams","Character","Color"},Transparency={"Chams","Character","Transparency"},Animatable=true});local N=W:AddGroup({Source=l});N:AddDropdown({Label="Character Chams Material",Options=I.List,Config={"Chams","Character","Material"}});N:AddToggle({Label="Strip Character Chams Textures",Config={"Chams","Character","StripTextures"}});end;end
 
 tbl17.ir = function()
 local ir = tbl17.cache.ir
@@ -69636,7 +69673,7 @@ return ir.c
 end
 end
 do -- is
-local function fn35() tbl17 .aE();local I= tbl17 .a2();local W= tbl17 .a7()(I);return function(l)local I=l:AddSection({Title="Device Spoof",Side="left"});I:AddToggle({Label="Enable Device Spoof",Config={"DeviceSpoof","Enabled"}});I:AddDropdown({Label="Presented Platform",Options=W,Config={"DeviceSpoof","SpoofType"}});end;end
+local function fn35() tbl17 .aE();local I= tbl17 .a2();local W= tbl17 .a7()(I);return function(l)local I=l:AddSection({Title="Device Spoof",Side="right"});I:AddToggle({Label="Enable Device Spoof",Config={"DeviceSpoof","Enabled"}});I:AddDropdown({Label="Presented Platform",Options=W,Config={"DeviceSpoof","SpoofType"}});end;end
 
 tbl17.is = function()
 local is = tbl17.cache.is
@@ -69678,7 +69715,7 @@ return iu.c
 end
 end
 do -- iv
-local function fn35()local I= tbl17 .bG(); tbl17 .aE();local W= tbl17 .a6();local function l(N,P)local a=I:Get(P);if type(a)=="number"then N:Set(tostring(a),true);end;N:OnChanged(function(a)local e=tonumber(a);if e~=nil and e~=I:Get(P)then I:Set(P,e);end;end);N:Connect(I:GetPropertyChangedSignal(P),function(I)if type(I)=="number"then N:Set(tostring(I),true);end;end);end;local I={{Field="Name",Label="Name",Value={Kind="text",Placeholder="Value"}},{Field="DisplayName",Label="Display Name",Value={Kind="text",Placeholder="Value"}},{Field="Avatar",Label="Avatar",Value={Kind="text",Placeholder="User ID"}},{Field="Winstreak",Label="Winstreak",Value={Kind="number",Placeholder="Value"}},{Field="Level",Label="Level",Value={Kind="number",Placeholder="Value"}},{Field="CasualWins",Label="Casual Wins",Value={Kind="number",Placeholder="Value"}},{Field="RankedWins",Label="Ranked Wins",Value={Kind="number",Placeholder="Value"}},{Field="CasualWinPercent",Label="Casual Win %",Value={Kind="percent",Placeholder="Win %"}},{Field="RankedWinPercent",Label="Ranked Win %",Value={Kind="percent",Placeholder="Win %"}},{Field="RankedElo",Label="Ranked ELO",Value={Kind="number",Placeholder="Value"}},{Field="LeaderboardRank",Label="Leaderboard Rank",Value={Kind="number",Placeholder="Value"}},{Field="FavoriteMap",Label="Favorite Map",Value={Kind="text",Placeholder="Favorite Map"}},{Field="NametagStatus",Label="Nametag Status",Value={Kind="dropdown",Placeholder="Status",Options={"Prime","Contraband"}}},{Field="Influencer",Label="Influencer",Value={Kind="toggle"}},{Field="RobloxEmployee",Label="Roblox Employee",Value={Kind="toggle"}},{Field="NosniyTeam",Label="Nosniy Games Team",Value={Kind="toggle"}}};local N,P=W(I,{{Field="Ping",Label="Ping",Value={Kind="dropdown",Placeholder="Ping Value",Options={"Low","Medium","High"}}},{Field="Keys",Label="Keys",Value={Kind="number",Placeholder="Value"}},{Field="EventCurrency",Label="Event Currency",Value={Kind="number",Placeholder="Value"}}}),I;local function I(a,e,c,E)for p,p in E,nil,nil do local E,T=a:AddToggle({Label=string.format("%s %s",tostring(e),tostring(p.Label)),Config=W(c,{p.Field,"Enabled"})}),p.Value;if T.Kind=="toggle"then continue;end;local e,t=W(c,{p.Field,"Value"}),a:AddGroup({Source=E});if T.Kind=="percent"then t:AddSlider({Label=T.Placeholder,Min=0,Max=100,Step=0.1,Config=e});elseif T.Kind=="number"then l(t:AddTextBox({Label=T.Placeholder}),e);elseif T.Kind=="text"then t:AddTextBox({Label=T.Placeholder,Config=e});elseif T.Kind=="dropdown"then t:AddDropdown({Label=T.Placeholder,Options=T.Options,Config=e});end;end;end;return function(l)local W,a=l:AddMultiSection({Titles={"Local Player","Other Player"},Side="right"});I(W,"Local Player",{"PlayerSpoofer","LocalPlayer"},N);I(a,"Other Player",{"PlayerSpoofer","OtherPlayers"},P);end;end
+local function fn35()local I= tbl17 .bG(); tbl17 .aE();local W= tbl17 .a6();local function l(N,P)local a=I:Get(P);if type(a)=="number"then N:Set(tostring(a),true);end;N:OnChanged(function(a)local e=tonumber(a);if e~=nil and e~=I:Get(P)then I:Set(P,e);end;end);N:Connect(I:GetPropertyChangedSignal(P),function(I)if type(I)=="number"then N:Set(tostring(I),true);end;end);end;local I={{Field="Name",Label="Name",Value={Kind="text",Placeholder="Value"}},{Field="DisplayName",Label="Display Name",Value={Kind="text",Placeholder="Value"}},{Field="Avatar",Label="Avatar",Value={Kind="text",Placeholder="User ID"}},{Field="Winstreak",Label="Winstreak",Value={Kind="number",Placeholder="Value"}},{Field="Level",Label="Level",Value={Kind="number",Placeholder="Value"}},{Field="CasualWins",Label="Casual Wins",Value={Kind="number",Placeholder="Value"}},{Field="RankedWins",Label="Ranked Wins",Value={Kind="number",Placeholder="Value"}},{Field="CasualWinPercent",Label="Casual Win %",Value={Kind="percent",Placeholder="Win %"}},{Field="RankedWinPercent",Label="Ranked Win %",Value={Kind="percent",Placeholder="Win %"}},{Field="RankedElo",Label="Ranked ELO",Value={Kind="number",Placeholder="Value"}},{Field="LeaderboardRank",Label="Leaderboard Rank",Value={Kind="number",Placeholder="Value"}},{Field="FavoriteMap",Label="Favorite Map",Value={Kind="text",Placeholder="Favorite Map"}},{Field="NametagStatus",Label="Nametag Status",Value={Kind="dropdown",Placeholder="Status",Options={"Prime","Contraband"}}},{Field="Influencer",Label="Influencer",Value={Kind="toggle"}},{Field="RobloxEmployee",Label="Roblox Employee",Value={Kind="toggle"}},{Field="NosniyTeam",Label="Nosniy Games Team",Value={Kind="toggle"}}};local N,P=W(I,{{Field="Ping",Label="Ping",Value={Kind="dropdown",Placeholder="Ping Value",Options={"Low","Medium","High"}}},{Field="Keys",Label="Keys",Value={Kind="number",Placeholder="Value"}},{Field="EventCurrency",Label="Event Currency",Value={Kind="number",Placeholder="Value"}}}),I;local function I(a,e,c,E)for p,p in E,nil,nil do local E,T=a:AddToggle({Label=string.format("%s %s",tostring(e),tostring(p.Label)),Config=W(c,{p.Field,"Enabled"})}),p.Value;if T.Kind=="toggle"then continue;end;local e,t=W(c,{p.Field,"Value"}),a:AddGroup({Source=E});if T.Kind=="percent"then t:AddSlider({Label=T.Placeholder,Min=0,Max=100,Step=0.1,Config=e});elseif T.Kind=="number"then l(t:AddTextBox({Label=T.Placeholder}),e);elseif T.Kind=="text"then t:AddTextBox({Label=T.Placeholder,Config=e});elseif T.Kind=="dropdown"then t:AddDropdown({Label=T.Placeholder,Options=T.Options,Config=e});end;end;end;return function(l)local W,a=l:AddSection({Title="Local Player",Side="left"}),l:AddSection({Title="Other Player",Side="right"});I(W,"Local Player",{"PlayerSpoofer","LocalPlayer"},N);I(a,"Other Player",{"PlayerSpoofer","OtherPlayers"},P);end;end
 
 tbl17.iv = function()
 local iv = tbl17.cache.iv
@@ -69721,7 +69758,7 @@ return iw.c
 end
 end
 do -- ix
-local function fn35() tbl17 .aE();return function(l)local I=l:AddSection({Title="Camera FOV",Side="left"});I:AddToggle({Label="Enable Camera FOV",Config={"CameraFov","Enabled"}});I:AddSlider({Label="Field of View",Min=30,Max=120,Config={"CameraFov","Value"}});end;end
+local function fn35() tbl17 .aE();return function(l)local I=l:AddSection({Title="Camera FOV",Side="right"});I:AddToggle({Label="Enable Camera FOV",Config={"CameraFov","Enabled"}});I:AddSlider({Label="Field of View",Min=30,Max=120,Config={"CameraFov","Value"}});end;end
 
 tbl17.ix = function()
 local ix = tbl17.cache.ix
@@ -69739,7 +69776,7 @@ do -- iy
 local function fn35()
     tbl17.aE()
     return function(l)
-        local I = l:AddSection({ Title = "Gameplay Overlays", Side = "left" })
+        local I = l:AddSection({ Title = "Gameplay Overlays", Side = "right" })
         I:AddToggle({ Label = "Hide Flashbang Effect", Config = { "Removables", "NoFlashbang" } })
         I:AddToggle({ Label = "Hide Burn Effect", Config = { "Removables", "NoBurnEffect" } })
         I:AddToggle({ Label = "Hide Scope Overlay", Config = { "Removables", "NoScopeOverlay" } })
@@ -69759,7 +69796,7 @@ return iy.c
 end
 end
 do -- iz
-local function fn35() tbl17 .aE();return function(l)local I=l:AddSection({Title="Stretched Resolution",Side="left"});I:AddToggle({Label="Enable Stretched Resolution",Config={"StretchedResolution","Enabled"}});I:AddSlider({Label="X Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","X"}});I:AddSlider({Label="Y Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","Y"}});end;end
+local function fn35() tbl17 .aE();return function(l)local I=l:AddSection({Title="Stretched Resolution",Side="right"});I:AddToggle({Label="Enable Stretched Resolution",Config={"StretchedResolution","Enabled"}});I:AddSlider({Label="X Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","X"}});I:AddSlider({Label="Y Scale",Min=0.01,Max=1,Step=0.01,Config={"StretchedResolution","Y"}});end;end
 
 tbl17.iz = function()
 local iz = tbl17.cache.iz
@@ -76266,13 +76303,10 @@ local v203 = v147:Add(v176.new(v134.TextIndicatorList))
 local v204 = v147:Add(v172.new())
 v204:Initialize()
 local v205 = v147:Add(v184.new(v204))
-v147:Add(v182.new())
 v147:Add(v133.new(v199))
 local v206 = v147:Add(v173.new(v190))
-v147:Add(v119.new(v199, v191)):Initialize()
 local v207 = v147:Add(v143.new(v199))
 local v208 = v147:Add(v150.new())
-v147:Add(v118.new(v208:Reserve(), v199, v190))
 local v209 = v147:Add(v167.new())
 local v210 = v147:Add(v161.new())
 local v211 = v147:Add(v170.new())
@@ -76281,7 +76315,6 @@ v188:ReportResult(v153.MigrateSounds(v211))
 v188:ReportResult(v153.MigrateImages(v212))
 local v213 = v147:Add(v166.new(v209, v199, v211))
 local v214 = v147:Add(v165.new(v209, v199, v200, v211))
-v147:Add(v122.new(v209:Reserve({ "RespawnNowAnimation" })))
 v147:Add(v142.new(v199, v190, v208:Reserve()))
 local v215 = v147:Add(v178.new())
 local v216 = v147:Add(v155.new(v199, v197))
@@ -76312,15 +76345,11 @@ local v229 = v147:Add(v116.new(v199, v190))
 local v230 = v147:Add(v141.new(v190, playerIdentities, v212))
 local v231 = v147:Add(v162.new(v199))
 local v232 = v147:Add(v175.new(v199, v191))
-local v233 = v147:Add(v120.new(v199))
-v147:Add(v117.new(v199))
-v147:Add(v121.new()):Initialise(v209)
+local v233 = nil
 v147:Add(v151.new(v199, v207, v208))
 v147:Add(v137.new(v199, v209, v221))
 local v234 = v147:Add(v123.new(v209, v199))
-local v235 = v209
-local reserve = v235.Reserve
-local v236 = v147:Add(tbl17.j_().new(v199, v191, v202, v208, reserve(v235, { "DataValueChanged" })))
+local v236 = nil
 local v237 = v147:Add(v128.new(v199, v190, v197, v193, v192:Reserve(), v215))
 local v238 = v147:Add(v129.new(v237))
 v188:ReportResult(v238:LoadCoreConfig())
@@ -76370,7 +76399,9 @@ end
 v228:Update(arg2)
 v219:Update(arg2)
 v232:Update()
+if v233 then
 v233:Update()
+end
 v198:Update(arg2)
 v199:FlushViewAngles()
 end)
