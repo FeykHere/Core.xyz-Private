@@ -7037,18 +7037,21 @@ do -- CoreBridge._WidgetsCore
     end
 
     local function getOrMakeAccessoryBar(rowFrame, zBase)
-        if not rowFrame then return nil end
-        local bar = rowFrame:FindFirstChild("AccessoryBar")
+        local realRow = (type(rowFrame) == "table" and rowFrame._frame) or rowFrame
+        if typeof(realRow) ~= "Instance" then return nil end
+        local bar = realRow:FindFirstChild("AccessoryBar")
         if not bar then
+            local isTall = realRow.Size and realRow.Size.Y and realRow.Size.Y.Offset > 22
+            local xOff = (realRow.Name:match("^Slider_") or realRow.Name:match("^RangeSlider_")) and -68 or -2
             bar = Instance.new("Frame")
             bar.Name = "AccessoryBar"
             bar.AnchorPoint = Vector2.new(1, 0.5)
-            bar.Position = UDim2.new(1, -2, 0.5, 0)
+            bar.Position = isTall and UDim2.new(1, xOff, 0, 7) or UDim2.new(1, -2, 0.5, 0)
             bar.Size = UDim2.fromOffset(0, 18)
             bar.AutomaticSize = Enum.AutomaticSize.X
             bar.BackgroundTransparency = 1
             bar.ZIndex = (zBase or 15) + 2
-            bar.Parent = rowFrame
+            bar.Parent = realRow
 
             local lay = Instance.new("UIListLayout")
             lay.FillDirection = Enum.FillDirection.Horizontal
@@ -7102,7 +7105,8 @@ do -- CoreBridge._WidgetsCore
     local function bindControl(sec, trove, ctrl, opts, debounce)
         local config = sec._menu and sec._menu:GetConfig()
         if config ~= nil and opts and opts.Config ~= nil then
-            local pMod = tbl17.P()
+            local m = K and K._tbl17
+            local pMod = m and m.P and m.P()
             if pMod and pMod.bind then
                 pMod.bind(trove, config, ctrl, opts.Config, debounce and { Debounce = true } or opts)
             end
@@ -7241,7 +7245,7 @@ do -- CoreBridge._WidgetsCore
 
         local lbl = Instance.new("TextLabel")
         lbl.Position = UDim2.fromOffset(2, 0)
-        lbl.Size = UDim2.new(1, -68, 0, 16)
+        lbl.Size = UDim2.new(1, -8, 0, 16)
         lbl.AutomaticSize = Enum.AutomaticSize.Y
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Code
@@ -8601,7 +8605,8 @@ do -- CoreBridge._WidgetsPickers
 
         local config = sec._menu and sec._menu:GetConfig()
         if config ~= nil and opts.Config ~= nil then
-            local nMod = tbl17.N()
+            local m = K and K._tbl17
+            local nMod = m and m.N and m.N()
             if nMod and nMod.bindConfig then
                 nMod.bindConfig(obj, config, opts)
             end
@@ -8858,7 +8863,8 @@ do -- CoreBridge._WidgetsPickers
         if opts.ConfigMap ~= nil then
             local config = sec._menu and sec._menu:GetConfig()
             local cm = opts.ConfigMap
-            local deser = tbl17.w and tbl17.w().deserializeKey
+            local m = K and K._tbl17
+            local deser = m and m.w and m.w().deserializeKey
             if config ~= nil then
                 local function bindField(path, sig, getter, setter)
                     if path == nil then return end
@@ -9693,6 +9699,7 @@ local debug = setmetatable({
 }, { __index = _rawDebug })
 
 local tbl17 = { cache = {} }
+K._tbl17 = tbl17
 local v102, v103, v107 = rawget, rawset, pcall
 --  The obfuscator's integrity counters. Every check in the lifted code has one
 --  branch that hangs and one that runs the real code; these values sit inside
@@ -51643,6 +51650,11 @@ return v116.VoidOk
 end
 
 index2.LoadCoreConfig = function(arg)
+if arg._configManager.Exists and not arg._configManager:Exists("core_config") then
+arg:_RestoreSessionState()
+arg:_ConnectAutoSave()
+return v116.VoidOk
+end
 local coreConfig = arg._configManager:LoadFromFile("core_config")
 
 if not coreConfig.Ok then
