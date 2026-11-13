@@ -367,6 +367,20 @@ pcall(function()
     Env.TextService = safeGetService("TextService")
 end)
 
+local function getDetectedExecutorName()
+    local execName = "Delta"
+    pcall(function()
+        if type(Env.identifyexecutor) == "function" then
+            local n = Env.identifyexecutor()
+            if n and tostring(n) ~= "" then execName = tostring(n) end
+        elseif type(Env.getexecutorname) == "function" then
+            local n = Env.getexecutorname()
+            if n and tostring(n) ~= "" then execName = tostring(n) end
+        end
+    end)
+    return execName
+end
+
 local CURRENT_PLACE_ID = tostring(game.PlaceId or 0)
 local FS_FOLDER = "CoreXYZ_Data"
 local MUSIC_FOLDER = "CoreXyz_Music"
@@ -2662,7 +2676,7 @@ local function createTab(name, order, opts)
     local tabCount = #State.Tabs
     for _, t in ipairs(State.Tabs) do
         if t.Btn then
-            t.Btn.Size = UDim2.new(1 / math.max(tabCount, 1), -4, 1, 0)
+            t.Btn.Size = UDim2.new(1 / math.max(tabCount, 1), -6, 1, 0)
         end
     end
 
@@ -3283,7 +3297,8 @@ do
         pcall(function()
             local bPos = btn and btn.AbsolutePosition
             if bPos and (bPos.X > 0 or bPos.Y > 0) then
-                local vp = (Camera and Camera.ViewportSize) or Vector2.new(1280, 720)
+                local curCam = workspace.CurrentCamera
+                local vp = (curCam and curCam.ViewportSize) or Vector2.new(1280, 720)
                 local targetX = math.clamp(bPos.X + 115, 110, math.max(120, vp.X - 115))
                 local targetY = math.clamp(bPos.Y + 115, 120, math.max(130, vp.Y - 120))
                 pickerPopup.Position = UDim2.fromOffset(targetX, targetY)
@@ -5638,6 +5653,16 @@ do
         ContrastCheckLabel.Text = string.format("Contrast check: %s (%.1f:1)", rating, ratio)
         ContrastCheckLabel.TextColor3 = col
     end
+
+    local ESP_FONT_MAP = {
+        Gotham = Enum.Font.GothamMedium,
+        GothamBold = Enum.Font.GothamBold,
+        Code = Enum.Font.Code,
+        Ubuntu = Enum.Font.Ubuntu,
+        SourceSans = Enum.Font.SourceSans,
+        SciFi = Enum.Font.SciFi,
+        Arcade = Enum.Font.Arcade,
+    }
 
     local function applyFullUITheme()
         Theme.Deep = ConfigState.ThemeBgColor or Theme.Deep
