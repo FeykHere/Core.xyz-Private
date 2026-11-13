@@ -10894,7 +10894,7 @@ return f.c
 end
 end
 do -- g
-local function fn35()local I;local function W(N,...)local P=I;I=nil;N(...);I=P;end;local function N(...)W(...);while true do W(coroutine.yield());end;end;local W={};W.__index=W;W.Disconnect=function(P)if not P.Connected then return;end;P.Connected=false;if P._signal._handlerListHead==P then P._signal._handlerListHead=P._next;else local a=P._signal._handlerListHead;while a and a._next~=P do a=a._next;end;if a then a._next=P._next;end;end;end;W.Destroy=W.Disconnect;setmetatable(W,{__index=function(P,P)error(("Attempt to get Connection::%s (not a valid member)"):format(tostring(P)),2);end,__newindex=function(P,P,a)error(("Attempt to set Connection::%s (not a valid member)"):format(tostring(P)),2);end});local P={};P.__index=P;P.new=function()return(setmetatable({_handlerListHead=false,_proxyHandler=nil,_yieldedThreads=nil},P));end;P.Wrap=function(a)assert(typeof(a)=="RBXScriptSignal","Argument #1 to Signal.Wrap must be a RBXScriptSignal; got "..typeof(a));local e=P.new();e._proxyHandler=a:Connect(function(...)e:Fire(...);end);return e;end;P.Is=function(a)return type(a)=="table"and getmetatable(a)==P;end;P.Connect=function(a,e)local c=setmetatable({Connected=true,_signal=a,_fn=e,_next=false},W);if a._handlerListHead then c._next=a._handlerListHead;a._handlerListHead=c;else a._handlerListHead=c;end;return c;end;P.ConnectOnce=function(W,a)return W:Once(a);end;P.Once=function(W,a)local e;local c=false;e=W:Connect(function(...)if c then return;end;c=true;e:Disconnect();a(...);end);return e;end;P.GetConnections=function(W)local a,e={},W._handlerListHead;while e do table.insert(a,e);e=e._next;end;return a;end;P.DisconnectAll=function(W)local a=W._handlerListHead;while a do a.Connected=false;a=a._next;end;W._handlerListHead=false;a= v102 (W,"_yieldedThreads");if a then for e in a,nil,nil do if coroutine.status(e)=="suspended"then warn(debug.traceback(e,"signal disconnected; yielded thread cancelled",2));task.cancel(e);end;end;table.clear(W._yieldedThreads);end;end;P.Fire=function(W,...)local a=W._handlerListHead;while a do if a.Connected then W=I;if not W then I=coroutine.create(N);end;task.spawn(I,a._fn,...);end;a=a._next;end;end;P.FireDeferred=function(I,...)local W=I._handlerListHead;while W do local I=W;task.defer(function(...)if I.Connected then I._fn(...);end;end,...);W=W._next;end;end;P.Wait=function(I)local W= v102 (I,"_yieldedThreads");if not W then W={}; v103 (I,"_yieldedThreads",W);end;local N=coroutine.running();W[N]=true;I:Once(function(...)W[N]=nil;if coroutine.status(N)=="suspended"then task.spawn(N,...);end;end);return coroutine.yield();end;P.Destroy=function(I)I:DisconnectAll();local W= v102 (I,"_proxyHandler");if W then W:Disconnect();end;end;return table.freeze({new=P.new,Wrap=P.Wrap,Is=P.Is});end
+local function fn35()local I;local function W(N,...)local P=I;I=nil;if setthreadidentity then pcall(setthreadidentity,8);end;pcall(N,...);I=P;end;local function N(...)W(...);while true do W(coroutine.yield());end;end;local W={};W.__index=W;W.Disconnect=function(P)if not P.Connected then return;end;P.Connected=false;if P._signal._handlerListHead==P then P._signal._handlerListHead=P._next;else local a=P._signal._handlerListHead;while a and a._next~=P do a=a._next;end;if a then a._next=P._next;end;end;end;W.Destroy=W.Disconnect;setmetatable(W,{__index=function(P,P)error(("Attempt to get Connection::%s (not a valid member)"):format(tostring(P)),2);end,__newindex=function(P,P,a)error(("Attempt to set Connection::%s (not a valid member)"):format(tostring(P)),2);end});local P={};P.__index=P;P.new=function()return(setmetatable({_handlerListHead=false,_proxyHandler=nil,_yieldedThreads=nil},P));end;P.Wrap=function(a)assert(typeof(a)=="RBXScriptSignal","Argument #1 to Signal.Wrap must be a RBXScriptSignal; got "..typeof(a));local e=P.new();e._proxyHandler=a:Connect(function(...)e:Fire(...);end);return e;end;P.Is=function(a)return type(a)=="table"and getmetatable(a)==P;end;P.Connect=function(a,e)local c=setmetatable({Connected=true,_signal=a,_fn=e,_next=false},W);if a._handlerListHead then c._next=a._handlerListHead;a._handlerListHead=c;else a._handlerListHead=c;end;return c;end;P.ConnectOnce=function(W,a)return W:Once(a);end;P.Once=function(W,a)local e;local c=false;e=W:Connect(function(...)if c then return;end;c=true;e:Disconnect();a(...);end);return e;end;P.GetConnections=function(W)local a,e={},W._handlerListHead;while e do table.insert(a,e);e=e._next;end;return a;end;P.DisconnectAll=function(W)local a=W._handlerListHead;while a do a.Connected=false;a=a._next;end;W._handlerListHead=false;a= v102 (W,"_yieldedThreads");if a then for e in a,nil,nil do if coroutine.status(e)=="suspended"then warn(debug.traceback(e,"signal disconnected; yielded thread cancelled",2));task.cancel(e);end;end;table.clear(W._yieldedThreads);end;end;P.Fire=function(W,...)local a=W._handlerListHead;while a do if a.Connected then W=I;if not W then I=coroutine.create(N);end;task.spawn(I,a._fn,...);end;a=a._next;end;end;P.FireDeferred=function(I,...)local W=I._handlerListHead;while W do local I=W;task.defer(function(...)if I.Connected then I._fn(...);end;end,...);W=W._next;end;end;P.Wait=function(I)local W= v102 (I,"_yieldedThreads");if not W then W={}; v103 (I,"_yieldedThreads",W);end;local N=coroutine.running();W[N]=true;I:Once(function(...)W[N]=nil;if coroutine.status(N)=="suspended"then task.spawn(N,...);end;end);return coroutine.yield();end;P.Destroy=function(I)I:DisconnectAll();local W= v102 (I,"_proxyHandler");if W then W:Disconnect();end;end;return table.freeze({new=P.new,Wrap=P.Wrap,Is=P.Is});end
 
 tbl17.g = function()
 local g = tbl17.cache.g
@@ -29091,6 +29091,7 @@ ReactionTime = 0,
 SwitchDelay = v86[186],
 TargetPart = "Head",
 Prediction = { Enabled = false, Amount = 0.15 },
+Smoothness = 0,
 }
 
 local fov = { Radius = 150 }
@@ -34479,16 +34480,21 @@ setmetatable(tbl18, index2)
 return tbl18
 end
 
-index2._Lock = function(arg, arg2)
+index2._Lock = function(arg, arg2, smoothness)
 local n = arg2 - arg._getAimOrigin()
+if type(smoothness) == "number" and smoothness > 0 then
+local factor = 1 + smoothness * 0.75
+arg._move(n.X / factor, n.Y / factor)
+else
 arg._move(n.X, n.Y)
+end
 end
 
 index2._Linear = function(I,W,N)local P= compute (I._getAimOrigin(),W,N*10);if P~=nil then I._move(P.X,P.Y);end;end
 index2._Ai = function(I,W,N,P)local a= compute2 (I._getAimOrigin(),W,N,P);if a~=nil then I._move(a.X,a.Y);end;end
 index2._Spring = function(l,I,W,N)local P=l._getAimOrigin();local a=l._spring:Compute(P,I,W,N);if a~=nil then l._move(a.X,a.Y);end;end
 index2._SigmaMouse = function(l,I,W)local N=l._getAimOrigin();local P=l._sigma:Compute(N,I,W);if P~=nil then l._move(P.X,P.Y);end;end
-index2.Apply = function(l,I,W,N,P)if N.Type=="Lock"then l:_Lock(I);elseif N.Type=="Linear"then l:_Linear(I,N.Speed);elseif N.Type=="AI"then if P then l:_Ai(I,W,N.Speed);else l:_Linear(I,N.Speed);end;elseif N.Type=="Spring"then l:_Spring(I,W,N.Speed);elseif N.Type=="SigmaMouse"then l:_SigmaMouse(I,W);end;end
+index2.Apply = function(l,I,W,N,P,smoothness)if N.Type=="Lock"then l:_Lock(I,smoothness);elseif N.Type=="Linear"then l:_Linear(I,N.Speed);elseif N.Type=="AI"then if P then l:_Ai(I,W,N.Speed);else l:_Linear(I,N.Speed);end;elseif N.Type=="Spring"then l:_Spring(I,W,N.Speed);elseif N.Type=="SigmaMouse"then l:_SigmaMouse(I,W);end;end
 return index2
 end
 
@@ -34799,7 +34805,7 @@ index2.Update = function(l,I)
     if not l._visible then return end
     local W,N,P = l._properties,l._strokeGradient,l._fillGradient
     local a = W and W.Animated
-    local style = (a and a.Style) or (a and a.Enabled and "Gradient") or "Still"
+    local style = (a and a.Style) or (a and a.Enabled and "Animated") or "Still"
     local baseGrad = W and W.Stroke and W.Stroke.Gradient or ColorSequence.new(Color3.fromRGB(255,0,0))
     local baseTrans = (W and W.Stroke and W.Stroke.Transparency) or 0
     local baseCol = baseGrad.Keypoints and baseGrad.Keypoints[1] and baseGrad.Keypoints[1].Value or Color3.fromRGB(255,0,0)
@@ -34813,7 +34819,7 @@ index2.Update = function(l,I)
     end
     l._debounce = true
     local spd = (a and a.Speed) or 90
-    if style == "Gradient" then
+    if style == "Animated" or style == "Gradient" then
         local h, s, v = baseCol:ToHSV()
         local secondCol = Color3.fromHSV((h + 0.08) % 1, math.clamp(s, 0.35, 1), math.clamp(v * 0.38, 0.12, 1))
         N.Color = ColorSequence.new({
@@ -35064,13 +35070,12 @@ local function fn35()
 local rawConnect = tbl17.g().new().Connect
 return function(sig, cb)
 return rawConnect(sig, function(...)
-local packed = table.pack(...)
-task.spawn(function()
+coroutine.wrap(function(...)
 if setthreadidentity then
 pcall(setthreadidentity, 8)
 end
-pcall(cb, table.unpack(packed, 1, packed.n))
-end)
+pcall(cb, ...)
+end)(...)
 end)
 end
 end
@@ -39540,7 +39545,7 @@ end
 
 if not v117.isBlockedFor("Aimbot", 0) then
 v117.claim("Aimbot", v86[186])
-arg._aimApplier:Apply(v136 or arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135, arg4.Prediction), arg2, arg4.Mode, v86[34])
+arg._aimApplier:Apply(v136 or arg._computeTargetPoint(workspace.CurrentCamera, v133(), v135, arg4.Prediction), arg2, arg4.Mode, v86[34], arg4.Smoothness)
 else
 v117.release("Aimbot")
 end
@@ -43544,7 +43549,16 @@ local fire = v102(v116, "Fire")
 if fire == nil then
 return
 end
+local prevId = getthreadidentity and getthreadidentity() or 8
+if setthreadidentity then
+pcall(setthreadidentity, 2)
+end
+pcall(function()
 coroutine.wrap(fire)(arg)
+end)
+if setthreadidentity then
+pcall(setthreadidentity, prevId)
+end
 end
 end
 
@@ -45573,11 +45587,24 @@ local v115 = tbl17.dP()
 local equipment = tbl17.aS().Equipment
 local lobby = tbl17.aS().Lobby
 
-local function fn36(arg, arg2)
+local function isEquipmentOpened()
+local ok, state = pcall(v115, equipment, "EquipmentState")
+if not ok or type(state) ~= "table" then
+return false
+end
+return v102(state, "SelectedWeapon") ~= nil
+end
+
+local function fn36(arg, arg2, requireOpened)
 local v116 = v115(v115(getmetatable(arg), "__index"), arg2)
 
 return function()
+if requireOpened and not isEquipmentOpened() then
+return
+end
+pcall(function()
 coroutine.wrap(v116)(arg)
+end)
 end
 end
 
@@ -45588,7 +45615,7 @@ local v116 = getthreadidentity()
 setthreadidentity(v86[56])
 
 for _, v117 in arg, nil, nil do
-v117()
+pcall(v117)
 end
 
 setthreadidentity(v116)
@@ -45599,11 +45626,11 @@ end
 local v116 = v115(equipment, { "Interface", "Customize", "Cosmetics" })
 local floatingModel = v115(equipment, "FloatingModel")
 local buttons = v115(lobby, "Buttons")
-local tbl18 = { CosmeticsSelectionScene = fn37({ (fn36(v116, "OnStateChanged")) }) }
+local tbl18 = { CosmeticsSelectionScene = fn37({ (fn36(v116, "OnStateChanged", true)) }) }
 local tbl19 = {}
-local v117 = fn36(v116, "_BulkUpdateEquipped")
-local v118 = fn36(buttons, "_UpdateButtonInformation")
-local v119 = fn36(floatingModel, "_GenerateViewModel")
+local v117 = fn36(v116, "_BulkUpdateEquipped", true)
+local v118 = fn36(buttons, "_UpdateButtonInformation", false)
+local v119 = fn36(floatingModel, "_GenerateViewModel", true)
 tbl19[1] = v117
 tbl19[2] = v118
 tbl19[3] = v119
@@ -48288,13 +48315,15 @@ return
 end
 v103(arg2, "Info", arg4)
 setmetatable(arg2, v125)
-pcall(function()
-local v126 = debug.getstack(2, v86[63])
-
-if type(v126) ~= "table" then
-v126 = debug.getstack(v86[56], 2)
+local prevId = getthreadidentity and getthreadidentity() or 2
+if setthreadidentity then
+pcall(setthreadidentity, 8)
 end
-
+local okStack, v126 = pcall(debug.getstack, 2, v86[63])
+if not okStack or type(v126) ~= "table" then
+okStack, v126 = pcall(debug.getstack, v86[56], 2)
+end
+pcall(function()
 if type(v126) ~= "table" or v126[1] == nil then
 return
 end
@@ -48349,6 +48378,9 @@ if v129 ~= nil then
 v128[v116.encode("Charm")] = v129
 end
 end)
+if setthreadidentity then
+pcall(setthreadidentity, prevId)
+end
 end,
 }
 
@@ -49919,12 +49951,24 @@ v103(equipmentState, "CosmeticInverted", nil)
 setmetatable(equipmentState, {
 __index = function(arg2, arg3)
 if arg3 == "CosmeticInverted" then
+local prevId = getthreadidentity and getthreadidentity() or 2
+if setthreadidentity then
+pcall(setthreadidentity, 8)
+end
+local ok, res = pcall(function()
 local v121 = v117.getSelectedItem()
-
 if v121 ~= nil then
 local v122 = arg._isWrapInverted(v121)
 arg._isInverted = v122
 return v122
+end
+return nil
+end)
+if setthreadidentity then
+pcall(setthreadidentity, prevId)
+end
+if ok and res ~= nil then
+return res
 end
 end
 
@@ -49990,6 +50034,7 @@ if arg._restoreClosures ~= nil then
 return v115.VoidOk
 end
 local restoreClosures = {}
+local patchedSet = {}
 pcall(function()
 local v117, v118 = v107(v116, equipment, { "Interface", "Customize", "Options" })
 if not v117 or v118 == nil then return end
@@ -50001,13 +50046,14 @@ local v121 = v102(v120, "_Init")
 if v121 == nil then return end
 
 local function patchFunc(fn)
-    if type(fn) ~= "function" then return end
+    if type(fn) ~= "function" or patchedSet[fn] then return end
     local okC, consts = pcall(debug.getconstants, fn)
     if not okC or type(consts) ~= "table" then return end
     for k2, v123 in pairs(consts) do
         if v123 == "FireServer" then
             local okS = pcall(debug.setconstant, fn, k2, "GetChildren")
             if okS then
+                patchedSet[fn] = true
                 table.insert(restoreClosures, { Func = fn, ConstantIndex = k2 })
             end
             break
@@ -50015,21 +50061,38 @@ local function patchFunc(fn)
     end
 end
 
-local okP, protos = pcall(debug.getprotos, v121)
-if okP and type(protos) == "table" then
-    for k in pairs(protos) do
-        local ok1, activeList = pcall(debug.getproto, v121, k, true)
-        if ok1 and type(activeList) == "table" then
-            for _, fn in ipairs(activeList) do
-                patchFunc(fn)
+local function scanAndPatch()
+    local prevId = getthreadidentity and getthreadidentity() or 2
+    if setthreadidentity then
+        pcall(setthreadidentity, 8)
+    end
+    local okP, protos = pcall(debug.getprotos, v121)
+    if okP and type(protos) == "table" then
+        for k in pairs(protos) do
+            local ok1, activeList = pcall(debug.getproto, v121, k, true)
+            if ok1 and type(activeList) == "table" then
+                for _, fn in ipairs(activeList) do
+                    patchFunc(fn)
+                end
+            end
+            local ok2, rawProto = pcall(debug.getproto, v121, k)
+            if ok2 and type(rawProto) == "function" then
+                patchFunc(rawProto)
             end
         end
-        local ok2, rawProto = pcall(debug.getproto, v121, k)
-        if ok2 and type(rawProto) == "function" then
-            patchFunc(rawProto)
-        end
+    end
+    if setthreadidentity then
+        pcall(setthreadidentity, prevId)
     end
 end
+
+scanAndPatch()
+v103(v120, "_Init", function(...)
+    local res = v121(...)
+    pcall(scanAndPatch)
+    return res
+end)
+arg._restoreInit = { Table = v120, Orig = v121 }
 end)
 
 arg._restoreClosures = restoreClosures
@@ -50037,13 +50100,18 @@ return v115.VoidOk
 end
 
 index2.Destroy = function(arg)
+local restoreInit = arg._restoreInit
+if restoreInit ~= nil then
+arg._restoreInit = nil
+pcall(v103, restoreInit.Table, "_Init", restoreInit.Orig)
+end
 local restoreClosures = arg._restoreClosures
 
 if restoreClosures ~= nil then
 arg._restoreClosures = nil
 
 for _, v117 in restoreClosures, nil, nil do
-debug.setconstant(v117.Func, v117.ConstantIndex, v86[77])
+pcall(debug.setconstant, v117.Func, v117.ConstantIndex, v86[77])
 end
 end
 end
@@ -50093,35 +50161,64 @@ __index = function(arg2, arg3)
 if arg3 ~= v86[128] then
 return v102(v118, arg3)
 end
-local v119, v120 = debug.info(2, "sf")
+local prevId = getthreadidentity and getthreadidentity() or 2
+if setthreadidentity then
+pcall(setthreadidentity, 8)
+end
+pcall(function()
+local v119, v120 = debug.info(3, "sf")
+if v119 == nil or not v119:match("Cosmetics$") then
+v119, v120 = debug.info(2, "sf")
+end
 local flag19 = v119 ~= nil and v120 ~= nil and v119:match("Cosmetics$") ~= nil
 
 if flag19 then
 local v121 = v86[170]
-flag19 = type(debug.getupvalues(v120)[v121]) == "boolean"
+local upvals = debug.getupvalues(v120)
+flag19 = type(upvals) == "table" and type(upvals[v121]) == "boolean"
 end
 
 if flag19 then
 debug.setupvalue(v120, 9, v86[153])
 end
+end)
+if setthreadidentity then
+pcall(setthreadidentity, prevId)
+end
 
-return v102(arg2, "Frame\0rahh")
+local frameVal = v102(arg2, "Frame\0rahh")
+if frameVal == nil then
+frameVal = v102(arg2, "Frame")
+end
+return frameVal
 end,
 __newindex = function(arg2, arg3, arg4)
 if arg3 ~= "Frame" then
 v103(arg2, arg3, arg4)
 return
 end
-local v119 = debug.info(3, "s")
+local prevId = getthreadidentity and getthreadidentity() or 2
+if setthreadidentity then
+pcall(setthreadidentity, 8)
+end
+pcall(function()
+local v119 = debug.info(4, "s")
+if v119 == nil or not v119:match("Cosmetics$") then
+v119 = debug.info(3, "s")
+end
 
 if v119 ~= nil and v119:match("Cosmetics$") ~= nil and not v102(arg2, "IsLocked") then
-local v120 = arg4:FindFirstChild(v86[33])
+local v120 = arg4 and arg4:FindFirstChild(v86[33])
 
 if v120 ~= nil then
 v120.MouseButton1Click:Connect(function()
 arg.SlotSelected:Fire()
 end)
 end
+end
+end)
+if setthreadidentity then
+pcall(setthreadidentity, prevId)
 end
 
 v103(arg2, "Frame\0rahh", arg4)
@@ -68573,7 +68670,7 @@ local function fn35()
         l:AddSlider({ Label = "Thickness", Min = 1, Max = 25, Config = W("Circle", "Stroke", "Thickness") })
         l:AddDropdown({
             Label = "Animated",
-            Options = { "Still", "Gradient", "Rainbow", "Pulse" },
+            Options = { "Still", "Animated", "Rainbow", "Pulse" },
             Config = W("Circle", "Animated", "Style"),
         })
     end
@@ -68742,6 +68839,7 @@ local function fn35()
     return function(grid, P)
         local a = grid:AddSection({ Title = "Aimbot", Side = "left" })
         N(a, "Enable Aimbot", nil, { "Aimbot" }, false)
+        a:AddSlider({ Label = "Smoothness", Min = 0, Max = 20, Step = 0.5, Config = { "Aimbot", "Smoothness" } })
         return W(a, "Aimbot", P, "left")
     end
 end
@@ -69658,7 +69756,7 @@ return iq.c
 end
 end
 do -- ir
-local function fn35()local I= tbl17 .a8(); tbl17 .aE();return function(l)local W=l:AddSection({Title="Character Appearance",Side="left"});l=W:AddToggle({Label="Enable Character Chams",Config={"Chams","Character","Enabled"}});W:AddColor({Row=l.Row,Alpha=true,Config={"Chams","Character","Color"},Transparency={"Chams","Character","Transparency"},Animatable=true});local N=W:AddGroup({Source=l});N:AddDropdown({Label="Character Chams Material",Options=I.List,Config={"Chams","Character","Material"}});N:AddToggle({Label="Strip Character Chams Textures",Config={"Chams","Character","StripTextures"}});end;end
+local function fn35()local I= tbl17 .a8(); tbl17 .aE();return function(l)local W=l:AddSection({Title="Character Appearance",Side="right"});l=W:AddToggle({Label="Enable Character Chams",Config={"Chams","Character","Enabled"}});W:AddColor({Row=l.Row,Alpha=true,Config={"Chams","Character","Color"},Transparency={"Chams","Character","Transparency"},Animatable=true});local N=W:AddGroup({Source=l});N:AddDropdown({Label="Character Chams Material",Options=I.List,Config={"Chams","Character","Material"}});N:AddToggle({Label="Strip Character Chams Textures",Config={"Chams","Character","StripTextures"}});end;end
 
 tbl17.ir = function()
 local ir = tbl17.cache.ir
@@ -69687,7 +69785,7 @@ return is.c
 end
 end
 do -- it
-local function fn35() tbl17 .aE();local I= tbl17 .h6();local function l(W,N,P,a,e)W:AddGroup({Source=I(W,N,{"Always","Toggle","Hold"},{"Movement",P},a)}):AddSlider({Label=e.Label,Min=e.Min,Max=e.Max,Step=e.Step,Config={"Movement",P,"Speed"}});end;return function(W)local N,P=W:AddSection({Title="Ground",Side="left"}),W:AddSection({Title="Air",Side="right"});l(N,"Walk Speed","WalkSpeed",true,{Label="Multiplier",Min=1,Max=10,Step=0.01});l(N,"Sliding","Sliding",true,{Label="Multiplier",Min=1,Max=10,Step=0.01});I(N,"Noclip",{"Always","Toggle","Hold"},{"Movement","Noclip"},true);l(N,"Auto Strafe","AutoStrafe",true,{Label="Speed",Min=1,Max=200});l(P,"Jump Power","JumpPower",false,{Label="Multiplier",Min=0.1,Max=10,Step=0.01});l(P,"Flight","Flight",true,{Label="Speed",Min=25,Max=500});P:AddToggle({Label="Infinite Double Jumps",Config={"ItemModifiers","InfiniteDoubleJumps"}});N=P:AddGroup({Source=I(P,"Long Jump",{"Tap"},{"Movement","LongJump"},true)});N:AddDropdown({Label="Mode",Options={"Under Feet","Camera Look"},Config={"Movement","LongJump","Mode"}});N:AddSlider({Label="Force",Min=0,Max=300,Config={"Movement","LongJump","Force"}});N:AddSlider({Label="Upward Velocity",Min=0,Max=200,Config={"Movement","LongJump","UpwardVelocity"}});N:AddSlider({Label="Behind Offset",Min=0,Max=8,Step=0.1,Config={"Movement","LongJump","Behind"}});end;end
+local function fn35() tbl17 .aE();local I= tbl17 .h6();local function l(W,N,P,a,e)W:AddGroup({Source=I(W,N,{"Always","Toggle","Hold"},{"Movement",P},a)}):AddSlider({Label=e.Label,Min=e.Min,Max=e.Max,Step=e.Step,Config={"Movement",P,"Speed"}});end;return function(W)local N=W:AddSection({Title="Movement",Side="left"});l(N,"Walk Speed","WalkSpeed",true,{Label="Multiplier",Min=1,Max=10,Step=0.01});l(N,"Sliding","Sliding",true,{Label="Multiplier",Min=1,Max=10,Step=0.01});I(N,"Noclip",{"Always","Toggle","Hold"},{"Movement","Noclip"},true);l(N,"Auto Strafe","AutoStrafe",true,{Label="Speed",Min=1,Max=200});l(N,"Jump Power","JumpPower",false,{Label="Multiplier",Min=0.1,Max=10,Step=0.01});l(N,"Flight","Flight",true,{Label="Speed",Min=25,Max=500});N:AddToggle({Label="Infinite Double Jumps",Config={"ItemModifiers","InfiniteDoubleJumps"}});local G=N:AddGroup({Source=I(N,"Long Jump",{"Tap"},{"Movement","LongJump"},true)});G:AddDropdown({Label="Mode",Options={"Under Feet","Camera Look"},Config={"Movement","LongJump","Mode"}});G:AddSlider({Label="Force",Min=0,Max=300,Config={"Movement","LongJump","Force"}});G:AddSlider({Label="Upward Velocity",Min=0,Max=200,Config={"Movement","LongJump","UpwardVelocity"}});G:AddSlider({Label="Behind Offset",Min=0,Max=8,Step=0.1,Config={"Movement","LongJump","Behind"}});end;end
 
 tbl17.it = function()
 local it = tbl17.cache.it
@@ -69733,15 +69831,12 @@ do -- iw
 local function fn35()
     tbl17.aE()
     tbl17.hN()
-    local W, N, P = tbl17.ir(), tbl17.is(), tbl17.it()
+    local W, P = tbl17.ir(), tbl17.it()
     return function(_, c)
-        local E = c:AddTab({ Label = "Player", Description = "Movement, character appearance, and identity." })
-        P(E:AddTab({ Label = "Movement", Description = "Ground and air movement." }):Grid({ Columns = 2 }))
-        local charGrid = E:AddTab({ Label = "Character", Description = "Character appearance." }):Grid({ Columns = 2 })
-        W(charGrid)
-        local idGrid = E:AddTab({ Label = "Identity", Description = "Presented device and player identity." }):Grid({ Columns = 2 })
-        N(idGrid)
-        tbl17.iv()(idGrid)
+        local E = c:AddTab({ Label = "Player", Description = "Movement and character appearance." })
+        local playerGrid = E:AddTab({ Label = "Movement", Description = "Movement and character appearance." }):Grid({ Columns = 2 })
+        P(playerGrid)
+        W(playerGrid)
     end
 end
 
@@ -76275,23 +76370,10 @@ v127:ClearLiveOverride(arg2)
 end,
 }))
 
-local armAvatarSpoofer = arg.ArmAvatarSpoofer
-
-if armAvatarSpoofer ~= nil then
-armAvatarSpoofer()
-end
-
 local v190 = v147:Add(v144.new())
 local v191 = v147:Add(v135.new())
 local v192 = v147:Add(v168.new())
 local v193 = v147:Add(v132.new())
-local v194 = tbl17.jh()
-local v195 = tbl17.jp()
-local v196 = v147:Add(v194.new())
-v147:Add(v195.new(playerRegistry, v192:Reserve(), v193, v196))
-v147:Add(tbl17.jr().new())
-v147:Add(tbl17.js().new(v193))
-v147:Add(tbl17.jt().new(v193))
 local v197 = v147:Add(v124.new(v190, decoratorFactory))
 local v198 = v147:Add(v148.new(v190, playerTags))
 local v199 = v147:Add(v164.new(v190))
@@ -76300,21 +76382,14 @@ local v200 = v147:Add(v138.new(v190, v199))
 local v201 = v147:Add(v183.new(v199, v200))
 local v202 = v147:Add(v130.new(v199))
 local v203 = v147:Add(v176.new(v134.TextIndicatorList))
-local v204 = v147:Add(v172.new())
-v204:Initialize()
-local v205 = v147:Add(v184.new(v204))
-v147:Add(v133.new(v199))
 local v206 = v147:Add(v173.new(v190))
 local v207 = v147:Add(v143.new(v199))
 local v208 = v147:Add(v150.new())
-local v209 = v147:Add(v167.new())
 local v210 = v147:Add(v161.new())
 local v211 = v147:Add(v170.new())
 local v212 = v147:Add(v149.new())
 v188:ReportResult(v153.MigrateSounds(v211))
 v188:ReportResult(v153.MigrateImages(v212))
-local v213 = v147:Add(v166.new(v209, v199, v211))
-local v214 = v147:Add(v165.new(v209, v199, v200, v211))
 v147:Add(v142.new(v199, v190, v208:Reserve()))
 local v215 = v147:Add(v178.new())
 local v216 = v147:Add(v155.new(v199, v197))
@@ -76347,8 +76422,6 @@ local v231 = v147:Add(v162.new(v199))
 local v232 = v147:Add(v175.new(v199, v191))
 local v233 = nil
 v147:Add(v151.new(v199, v207, v208))
-v147:Add(v137.new(v199, v209, v221))
-local v234 = v147:Add(v123.new(v209, v199))
 local v236 = nil
 local v237 = v147:Add(v128.new(v199, v190, v197, v193, v192:Reserve(), v215))
 local v238 = v147:Add(v129.new(v237))
@@ -76362,15 +76435,11 @@ v231:PreCameraRenderUpdate()
 end)
 
 v239:SetPreRender(function(arg2)
-v205:PreRender(arg2)
 v206:PreRender(arg2)
 v237:PreRender()
-v213:PreRender(arg2)
-v214:PreRender(arg2)
 v230:Update(arg2)
 v216:Update()
 v224:Update()
-v234:Update(arg2)
 v189:Update()
 
 if v236 then
@@ -76414,7 +76483,7 @@ CosmeticsConfig = v238,
 SfxSoundStorage = v211,
 ImageStorage = v212,
 MovementRecorder = v236,
-Skyboxes = v204,
+Skyboxes = nil,
 ReactiveStoreAdapter = v147:Add(v136.new(storeProfiles, v127, "rbxassetid://84152083728286")),
 ColorAnimation = tbl17.j0().new(v189),
 StoreProfiles = storeProfiles,
@@ -76606,16 +76675,14 @@ local boot = (function()
     local identities = GlobalTrove:Add(tbl17.bL().new(registry))
     local tags = GlobalTrove:Add(tbl17.bM().new(registry))
     GlobalTrove:Add(tbl17.bR().new(tags, registry))
-    GlobalTrove:Add(tbl17.bZ().new(identities))
-    local avatar = GlobalTrove:Add(tbl17.b6().new(registry))
 
     return {
         StoreProfiles = profiles,
         PlayerRegistry = registry,
         PlayerIdentities = identities,
         PlayerTags = tags,
-        DecoratorFactory = avatar ~= nil and avatar:GetDecoratorFactory() or nil,
-        ArmAvatarSpoofer = function() avatar:Arm() end,
+        DecoratorFactory = nil,
+        ArmAvatarSpoofer = nil,
         GeneralState = state,
         GeneralStateData = stateData,
     }
