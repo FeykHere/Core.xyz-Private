@@ -2348,7 +2348,7 @@ do
                 return
             end
             if #q == 0 then
-                node.Visible = true
+                node.Visible = (node:GetAttribute("CoreExplicitVisible") ~= false)
             else
                 local matched = nodeMatchesQuery(node, q)
                 node.Visible = matched
@@ -5727,6 +5727,10 @@ do
                     end
                 elseif desc:IsA("Frame") and string.find(tostring(desc.Name or ""), "^SectionBox_") then
                     desc.BackgroundColor3 = Theme.Deep
+                    local badge = desc:FindFirstChild("SectionHeaderBadge")
+                    if badge then badge.BackgroundColor3 = Theme.Deep end
+                elseif desc:IsA("Frame") and desc.Name == "PagesHolder" then
+                    desc.BackgroundColor3 = Theme.Deep
                 end
             end
         end
@@ -7015,6 +7019,8 @@ do -- CoreBridge._WidgetsCore
     local Theme = U.Theme
     local UI = U.UI
     local tween = U.tween
+    local addStroke = U.addStroke
+    local registerAccentObject = U.registerAccentObject
     local FastTween = U.FastTween
 
     local function formatStep(val, step)
@@ -7025,14 +7031,16 @@ do -- CoreBridge._WidgetsCore
         end
         local dec = 2
         if step > 0 then
-            dec = math.clamp(math.ceil(-math.log10(step) - 1e-6), 1, 5)
+            dec = math.clamp(math.ceil(-math.log10(step) - 1e-6), 1, 4)
         end
-        return string.format("%." .. dec .. "f", val)
+        local s = string.format("%." .. dec .. "f", val)
+        s = s:gsub("(%..-)0+$", "%1"):gsub("%.$", "")
+        return s
     end
 
     local function snapStep(val, minV, maxV, step)
         step = (type(step) == "number" and step > 0) and step or 1
-        local snapped = minV + math.round((val - minV) / step) * step
+        local snapped = math.floor((val / step) + 0.5) * step
         return math.clamp(snapped, minV, maxV)
     end
 
@@ -7042,12 +7050,12 @@ do -- CoreBridge._WidgetsCore
         local bar = realRow:FindFirstChild("AccessoryBar")
         if not bar then
             local isTall = realRow.Size and realRow.Size.Y and realRow.Size.Y.Offset > 22
-            local xOff = (realRow.Name:match("^Slider_") or realRow.Name:match("^RangeSlider_")) and -68 or -2
+            local xOff = (realRow.Name:match("^SliderCard_") or realRow.Name:match("^RangeSlider_")) and -76 or -2
             bar = Instance.new("Frame")
             bar.Name = "AccessoryBar"
             bar.AnchorPoint = Vector2.new(1, 0.5)
             bar.Position = isTall and UDim2.new(1, xOff, 0, 7) or UDim2.new(1, -2, 0.5, 0)
-            bar.Size = UDim2.fromOffset(0, 18)
+            bar.Size = UDim2.fromOffset(0, 16)
             bar.AutomaticSize = Enum.AutomaticSize.X
             bar.BackgroundTransparency = 1
             bar.ZIndex = (zBase or 15) + 2
@@ -7075,22 +7083,19 @@ do -- CoreBridge._WidgetsCore
         btn.Name = "PinBadge"
         btn.LayoutOrder = 1
         btn.Size = UDim2.fromOffset(18, 14)
-        btn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        btn.BackgroundTransparency = 1
         btn.AutoButtonColor = false
         btn.Font = Enum.Font.Code
-        btn.Text = "P"
-        btn.TextSize = 9
+        btn.Text = "[P]"
+        btn.TextStrokeTransparency = 0.5
+        btn.TextSize = 10
         btn.ZIndex = (zBase or 15) + 3
         btn.Parent = bar
-        U.addCorner(btn, 3)
-        local st = U.addStroke(btn, Color3.fromRGB(52, 52, 52), 1, 0)
 
         local function syncPin()
             local ok, pinned = pcall(config.Pins.IsPinned, path)
             local active = ok and pinned == true
-            btn.BackgroundColor3 = active and Color3.fromRGB(32, 32, 32) or Color3.fromRGB(16, 16, 16)
-            btn.TextColor3 = active and Theme.Accent or Color3.fromRGB(130, 130, 130)
-            st.Color = active and Theme.Accent or Color3.fromRGB(52, 52, 52)
+            btn.TextColor3 = active and Theme.Accent or Color3.fromRGB(115, 115, 115)
         end
 
         btn.MouseButton1Click:Connect(function()
@@ -7119,7 +7124,11 @@ do -- CoreBridge._WidgetsCore
         return setmetatable({
             _frame = rowFrame,
             _titleLbl = titleLbl,
-            SetVisible = function(s, v) rowFrame.Visible = (v == true) end,
+            SetVisible = function(s, v)
+                local b = (v == true)
+                pcall(function() rowFrame:SetAttribute("CoreExplicitVisible", b) end)
+                rowFrame.Visible = b
+            end,
             SetLabel = function(s, txt)
                 if s._titleLbl then s._titleLbl.Text = tostring(txt or "") end
             end,
@@ -7137,7 +7146,11 @@ do -- CoreBridge._WidgetsCore
             return self
         end
         function obj:SetVisible(v)
-            if rowFrame then rowFrame.Visible = (v == true) end
+            if rowFrame then
+                local b = (v == true)
+                pcall(function() rowFrame:SetAttribute("CoreExplicitVisible", b) end)
+                rowFrame.Visible = b
+            end
             return self
         end
         function obj:SetLabel(txt)
@@ -7152,38 +7165,59 @@ do -- CoreBridge._WidgetsCore
         return obj
     end
 
+    -- Exact Core.xyz Toggle (Matches BikeForEgg / One-shot createToggle L3763)
     local function createToggle(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local initVal = opts.Default == true
 
         local row = Instance.new("TextButton")
         row.Name = "Toggle_" .. tostring(opts.Label or "Item")
         row.Size = UDim2.new(1, 0, 0, 20)
+        row.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
         row.BackgroundTransparency = 1
         row.AutoButtonColor = false
         row.Text = ""
+        row.ClipsDescendants = false
         row.ZIndex = z
         row.Parent = sec._container
+        addStroke(row, Theme.Border, 1, 1)
 
-        local box = Instance.new("Frame")
-        box.AnchorPoint = Vector2.new(0, 0.5)
-        box.Position = UDim2.new(0, 2, 0.5, 0)
-        box.Size = UDim2.fromOffset(11, 11)
-        box.BackgroundColor3 = Color3.fromRGB(4, 4, 4)
-        box.BorderSizePixel = 0
-        box.ZIndex = z + 1
-        box.Parent = row
+        local pill = Instance.new("Frame")
+        pill.Name = "VaderToggleOutline"
+        pill.AnchorPoint = Vector2.new(0, 0.5)
+        pill.Position = UDim2.new(0, 2, 0.5, 0)
+        pill.Size = UDim2.fromOffset(11, 11)
+        pill.BackgroundColor3 = Color3.fromRGB(4, 4, 4)
+        pill.BorderSizePixel = 0
+        pill.ZIndex = z + 1
+        pill.Parent = row
 
-        local fill = Instance.new("Frame")
-        fill.Position = UDim2.fromOffset(1, 1)
-        fill.Size = UDim2.new(1, -2, 1, -2)
-        fill.BackgroundColor3 = initVal and Theme.Accent or Color3.fromRGB(18, 18, 18)
-        fill.BorderColor3 = Color3.fromRGB(52, 52, 52)
-        fill.BorderSizePixel = 1
-        fill.ZIndex = z + 2
-        fill.Parent = box
+        local dot = Instance.new("Frame")
+        dot.Name = "VaderToggleFill"
+        dot.Position = UDim2.new(0, 1, 0, 1)
+        dot.Size = UDim2.new(1, -2, 1, -2)
+        dot.BackgroundColor3 = initVal and Theme.Accent or Color3.fromRGB(18, 18, 18)
+        dot.BorderColor3 = Color3.fromRGB(52, 52, 52)
+        dot.BorderSizePixel = 1
+        dot.ZIndex = z + 2
+        dot.Parent = pill
+
+        local toggleGlow = Instance.new("ImageLabel")
+        toggleGlow.Name = "VaderToggleGlow"
+        toggleGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+        toggleGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+        toggleGlow.Size = UDim2.new(1, 12, 1, 12)
+        toggleGlow.BackgroundTransparency = 1
+        toggleGlow.Image = "http://www.roblox.com/asset/?id=18245826428"
+        toggleGlow.ImageColor3 = Theme.Accent
+        toggleGlow.ImageTransparency = initVal and 0.80 or 1
+        toggleGlow.ScaleType = Enum.ScaleType.Slice
+        pcall(function() toggleGlow.SliceCenter = Rect.new(Vector2.new(21, 21), Vector2.new(79, 79)) end)
+        toggleGlow.ZIndex = z + 1
+        toggleGlow.Parent = dot
+        registerAccentObject(toggleGlow, "ImageColor3")
 
         local lbl = Instance.new("TextLabel")
         lbl.Position = UDim2.fromOffset(18, 0)
@@ -7208,12 +7242,20 @@ do -- CoreBridge._WidgetsCore
             ValueChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        addCommonMethods(obj, row, lbl)
 
         function obj:Set(val, silent)
             local b = (val == true)
             self.Value = b
-            tween(fill, FastTween, { BackgroundColor3 = b and Theme.Accent or Color3.fromRGB(18, 18, 18) })
-            tween(lbl, FastTween, { TextColor3 = b and Color3.fromRGB(240, 240, 240) or Color3.fromRGB(185, 185, 185) })
+            tween(lbl, FastTween, {
+                TextColor3 = b and Color3.fromRGB(240, 240, 240) or Color3.fromRGB(185, 185, 185),
+            })
+            tween(dot, FastTween, {
+                BackgroundColor3 = b and Theme.Accent or Color3.fromRGB(18, 18, 18),
+            })
+            tween(toggleGlow, FastTween, {
+                ImageTransparency = b and 0.80 or 1,
+            })
             self.ValueChanged:Fire(b)
             if not silent then
                 if self._onChanged then self._onChanged(b) end
@@ -7221,18 +7263,28 @@ do -- CoreBridge._WidgetsCore
             end
         end
 
+        row.MouseEnter:Connect(function()
+            if not obj.Value then
+                tween(lbl, FastTween, { TextColor3 = Color3.fromRGB(220, 220, 220) })
+            end
+        end)
+        row.MouseLeave:Connect(function()
+            if not obj.Value then
+                tween(lbl, FastTween, { TextColor3 = Color3.fromRGB(185, 185, 185) })
+            end
+        end)
         row.MouseButton1Click:Connect(function()
             obj:Set(not obj.Value, false)
         end)
 
-        addCommonMethods(obj, row, lbl)
         bindControl(sec, trove, obj, opts, false)
         return obj
     end
 
+    -- Exact Core.xyz Label (Matches BikeForEgg / One-shot createLabel)
     local function createLabel(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
 
         local row = Instance.new("Frame")
@@ -7243,16 +7295,26 @@ do -- CoreBridge._WidgetsCore
         row.ZIndex = z
         row.Parent = sec._container
 
+        local dot = Instance.new("Frame")
+        dot.AnchorPoint = Vector2.new(0, 0.5)
+        dot.Position = UDim2.new(0, 2, 0, 9)
+        dot.Size = UDim2.fromOffset(2, 10)
+        dot.BackgroundColor3 = Theme.Accent
+        dot.BorderSizePixel = 0
+        dot.ZIndex = z
+        dot.Parent = row
+        registerAccentObject(dot, "BackgroundColor3")
+
         local lbl = Instance.new("TextLabel")
-        lbl.Position = UDim2.fromOffset(2, 0)
-        lbl.Size = UDim2.new(1, -8, 0, 16)
+        lbl.Position = UDim2.fromOffset(8, 0)
+        lbl.Size = UDim2.new(1, -10, 0, 18)
         lbl.AutomaticSize = Enum.AutomaticSize.Y
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Code
         lbl.Text = tostring(opts.Label or "")
-        lbl.TextColor3 = opts.TextColor or Theme.Silver
+        lbl.TextColor3 = opts.TextColor or Color3.fromRGB(225, 225, 225)
         lbl.TextStrokeTransparency = 0.5
-        lbl.TextSize = 11
+        lbl.TextSize = 12
         lbl.TextWrapped = true
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = z + 1
@@ -7271,7 +7333,7 @@ do -- CoreBridge._WidgetsCore
 
     local function createDivider(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
 
         local row = Instance.new("Frame")
@@ -7300,8 +7362,9 @@ do -- CoreBridge._WidgetsCore
             lbl.BorderSizePixel = 0
             lbl.Font = Enum.Font.Code
             lbl.Text = " " .. tostring(opts.Label) .. " "
-            lbl.TextColor3 = Theme.Muted
-            lbl.TextSize = 10
+            lbl.TextColor3 = Color3.fromRGB(185, 185, 185)
+            lbl.TextStrokeTransparency = 0.5
+            lbl.TextSize = 11
             lbl.ZIndex = z + 1
             lbl.Parent = row
         end
@@ -7311,26 +7374,28 @@ do -- CoreBridge._WidgetsCore
         return obj
     end
 
+    -- Exact Core.xyz Button (Matches BikeForEgg / One-shot createButton L2788)
     local function createButton(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
-        local isPrimary = opts.Variant == "primary"
 
         local btn = Instance.new("TextButton")
         btn.Name = "Btn_" .. tostring(opts.Label or "Button")
         btn.Size = UDim2.new(1, 0, 0, 22)
-        btn.BackgroundColor3 = isPrimary and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(16, 16, 16)
-        btn.BorderColor3 = isPrimary and Color3.fromRGB(110, 110, 110) or Color3.fromRGB(52, 52, 52)
+        btn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        btn.BorderColor3 = Color3.fromRGB(4, 4, 4)
         btn.BorderSizePixel = 1
         btn.AutoButtonColor = false
         btn.Font = Enum.Font.Code
         btn.Text = tostring(opts.Label or "Action")
-        btn.TextColor3 = Theme.White
-        btn.TextSize = 11
+        btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+        btn.TextStrokeTransparency = 0.5
+        btn.TextSize = 12
+        btn.ClipsDescendants = true
         btn.ZIndex = z
         btn.Parent = sec._container
-        local st = U.addStroke(btn, Color3.fromRGB(4, 4, 4), 1, 0)
+        local st = addStroke(btn, Color3.fromRGB(48, 48, 48), 1, 0)
 
         local obj = {
             _trove = trove,
@@ -7354,12 +7419,12 @@ do -- CoreBridge._WidgetsCore
         end
 
         btn.MouseEnter:Connect(function()
-            tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(28, 28, 28) })
-            st.Color = Theme.Accent
+            tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(24, 24, 24), TextColor3 = Theme.White })
+            tween(st, FastTween, { Color = Theme.Accent, Transparency = 0.1 })
         end)
         btn.MouseLeave:Connect(function()
-            tween(btn, FastTween, { BackgroundColor3 = isPrimary and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(16, 16, 16) })
-            st.Color = Color3.fromRGB(4, 4, 4)
+            tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(16, 16, 16), TextColor3 = Color3.fromRGB(220, 220, 220) })
+            tween(st, FastTween, { Color = Color3.fromRGB(48, 48, 48), Transparency = 0 })
         end)
         btn.MouseButton1Click:Connect(function()
             if opts.Confirm then
@@ -7371,24 +7436,30 @@ do -- CoreBridge._WidgetsCore
                         if obj._confirmArmed and btn and btn.Parent then
                             obj._confirmArmed = false
                             btn.Text = obj._label
-                            btn.TextColor3 = Theme.White
+                            btn.TextColor3 = Color3.fromRGB(220, 220, 220)
                         end
                     end)
                     return
                 end
                 obj._confirmArmed = false
                 btn.Text = obj._label
-                btn.TextColor3 = Theme.White
             end
+            tween(btn, TweenInfo.new(0.08), { BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Black })
+            task.delay(0.12, function()
+                if btn and btn.Parent then
+                    tween(btn, FastTween, { BackgroundColor3 = Color3.fromRGB(16, 16, 16), TextColor3 = Color3.fromRGB(220, 220, 220) })
+                end
+            end)
             obj.Clicked:Fire()
         end)
 
         return obj
     end
 
+    -- Exact Core.xyz Slider (Matches BikeForEgg / One-shot createSlider L3965: 30px height, - / + buttons, 6px double-bordered track, glow, 2x10 knob)
     local function createSlider(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local minV = tonumber(opts.Min) or 0
         local maxV = tonumber(opts.Max) or 100
@@ -7396,79 +7467,134 @@ do -- CoreBridge._WidgetsCore
         local suffix = tostring(opts.Suffix or "")
         local initVal = snapStep(tonumber(opts.Default) or minV, minV, maxV, step)
 
-        local container = Instance.new("Frame")
-        container.Name = "Slider_" .. tostring(opts.Label or "Slider")
-        container.Size = UDim2.new(1, 0, 0, 29)
-        container.BackgroundTransparency = 1
-        container.ZIndex = z
-        container.Parent = sec._container
+        local card = Instance.new("Frame")
+        card.Name = "SliderCard_" .. tostring(opts.Label or "Slider")
+        card.Size = UDim2.new(1, 0, 0, 30)
+        card.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
+        card.BackgroundTransparency = 1
+        card.ZIndex = z
+        card.Parent = sec._container
+        addStroke(card, Theme.Border, 1, 1)
 
         local lbl = Instance.new("TextLabel")
-        lbl.Position = UDim2.fromOffset(2, 0)
-        lbl.Size = UDim2.new(1, -68, 0, 14)
+        lbl.Position = UDim2.fromOffset(18, 0)
+        lbl.Size = UDim2.new(0.62, -18, 0, 14)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Code
         lbl.Text = tostring(opts.Label or "Slider")
-        lbl.TextColor3 = Color3.fromRGB(205, 205, 205)
+        lbl.TextColor3 = Color3.fromRGB(185, 185, 185)
         lbl.TextStrokeTransparency = 0.5
-        lbl.TextSize = 11
+        lbl.TextSize = 12
         lbl.TextTruncate = Enum.TextTruncate.AtEnd
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = z + 1
-        lbl.Parent = container
+        lbl.Parent = card
 
-        local valBox = Instance.new("TextBox")
-        valBox.AnchorPoint = Vector2.new(1, 0)
-        valBox.Position = UDim2.new(1, -2, 0, 0)
-        valBox.Size = UDim2.fromOffset(64, 14)
-        valBox.BackgroundTransparency = 1
-        valBox.ClearTextOnFocus = false
-        valBox.Font = Enum.Font.Code
-        valBox.Text = formatStep(initVal, step) .. suffix
-        valBox.TextColor3 = Theme.Silver
-        valBox.TextSize = 11
-        valBox.TextXAlignment = Enum.TextXAlignment.Right
-        valBox.ZIndex = z + 2
-        valBox.Parent = container
+        local valBadge = Instance.new("TextLabel")
+        valBadge.Name = "SliderValueLabel"
+        valBadge.AnchorPoint = Vector2.new(1, 0)
+        valBadge.Position = UDim2.new(1, -14, 0, 0)
+        valBadge.Size = UDim2.fromOffset(86, 14)
+        valBadge.BackgroundTransparency = 1
+        valBadge.Font = Enum.Font.Code
+        valBadge.Text = formatStep(initVal, step) .. suffix
+        valBadge.TextColor3 = Color3.fromRGB(185, 185, 185)
+        valBadge.TextStrokeTransparency = 0.5
+        valBadge.TextSize = 12
+        valBadge.TextXAlignment = Enum.TextXAlignment.Right
+        valBadge.ZIndex = z + 1
+        valBadge.Parent = card
 
-        local track = Instance.new("TextButton")
-        track.Position = UDim2.fromOffset(2, 16)
-        track.Size = UDim2.new(1, -4, 0, 9)
-        track.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        local minusBtn = Instance.new("TextButton")
+        minusBtn.Name = "SliderMinusBtn"
+        minusBtn.Position = UDim2.fromOffset(2, 15)
+        minusBtn.Size = UDim2.fromOffset(12, 12)
+        minusBtn.BackgroundTransparency = 1
+        minusBtn.AutoButtonColor = false
+        minusBtn.Font = Enum.Font.Code
+        minusBtn.Text = "-"
+        minusBtn.TextColor3 = Color3.fromRGB(145, 145, 145)
+        minusBtn.TextStrokeTransparency = 0.5
+        minusBtn.TextSize = 12
+        minusBtn.ZIndex = z + 2
+        minusBtn.Parent = card
+
+        local plusBtn = Instance.new("TextButton")
+        plusBtn.Name = "SliderPlusBtn"
+        plusBtn.AnchorPoint = Vector2.new(1, 0)
+        plusBtn.Position = UDim2.new(1, -2, 0, 15)
+        plusBtn.Size = UDim2.fromOffset(12, 12)
+        plusBtn.BackgroundTransparency = 1
+        plusBtn.AutoButtonColor = false
+        plusBtn.Font = Enum.Font.Code
+        plusBtn.Text = "+"
+        plusBtn.TextColor3 = Color3.fromRGB(145, 145, 145)
+        plusBtn.TextStrokeTransparency = 0.5
+        plusBtn.TextSize = 12
+        plusBtn.ZIndex = z + 2
+        plusBtn.Parent = card
+
+        local track = Instance.new("Frame")
+        track.Position = UDim2.fromOffset(18, 18)
+        track.Size = UDim2.new(1, -34, 0, 6)
+        track.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
         track.BorderColor3 = Color3.fromRGB(48, 48, 48)
         track.BorderSizePixel = 1
-        track.AutoButtonColor = false
-        track.Text = ""
         track.ZIndex = z + 1
-        track.Parent = container
-        U.addStroke(track, Color3.fromRGB(4, 4, 4), 1, 0)
+        track.Parent = card
+        addStroke(track, Color3.fromRGB(4, 4, 4), 1, 0)
 
+        local initPct = math.clamp((initVal - minV) / math.max(maxV - minV, 0.0001), 0, 1)
         local fill = Instance.new("Frame")
-        fill.Size = UDim2.fromScale(math.clamp((initVal - minV) / math.max(maxV - minV, 1e-6), 0, 1), 1)
+        fill.Size = UDim2.fromScale(initPct, 1)
         fill.BackgroundColor3 = Theme.Accent
         fill.BorderSizePixel = 0
         fill.ZIndex = z + 2
         fill.Parent = track
-        U.registerAccentObject(fill, "BackgroundColor3")
+        registerAccentObject(fill, "BackgroundColor3")
+
+        local fillGlow = Instance.new("ImageLabel")
+        fillGlow.Name = "VaderSliderGlow"
+        fillGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+        fillGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+        fillGlow.Size = UDim2.new(1, 14, 1, 14)
+        fillGlow.BackgroundTransparency = 1
+        fillGlow.Image = "http://www.roblox.com/asset/?id=18245826428"
+        fillGlow.ImageColor3 = Theme.Accent
+        fillGlow.ImageTransparency = 0.89
+        fillGlow.ScaleType = Enum.ScaleType.Slice
+        pcall(function() fillGlow.SliceCenter = Rect.new(Vector2.new(21, 21), Vector2.new(79, 79)) end)
+        fillGlow.ZIndex = z + 1
+        fillGlow.Parent = fill
+        registerAccentObject(fillGlow, "ImageColor3")
+
+        local knob = Instance.new("Frame")
+        knob.AnchorPoint = Vector2.new(0.5, 0.5)
+        knob.Position = UDim2.fromScale(initPct, 0.5)
+        knob.Size = UDim2.fromOffset(2, 10)
+        knob.BackgroundColor3 = Theme.White
+        knob.BorderSizePixel = 0
+        knob.ZIndex = z + 3
+        knob.Parent = track
 
         local obj = {
             _trove = trove,
             Kind = "Slider",
             Value = initVal,
-            Row = wrapRowObject(container, lbl),
+            Row = wrapRowObject(card, lbl),
             Changed = trove:Add(Signal.new()),
             ValueChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        addCommonMethods(obj, card, lbl)
 
         function obj:Set(val, silent)
             local n = snapStep(tonumber(val) or self.Value, minV, maxV, step)
             self.Value = n
-            local pct = math.clamp((n - minV) / math.max(maxV - minV, 1e-6), 0, 1)
-            fill.Size = UDim2.fromScale(pct, 1)
-            if not valBox:IsFocused() then
-                valBox.Text = formatStep(n, step) .. suffix
-            end
+            local pct = math.clamp((n - minV) / math.max(maxV - minV, 0.0001), 0, 1)
+            tween(fill, TweenInfo.new(0.08), { Size = UDim2.fromScale(pct, 1) })
+            tween(knob, TweenInfo.new(0.08), { Position = UDim2.fromScale(pct, 0.5) })
+            valBadge.Text = formatStep(n, step) .. suffix
             self.ValueChanged:Fire(n)
             if not silent then
                 if self._onChanged then self._onChanged(n) end
@@ -7476,43 +7602,49 @@ do -- CoreBridge._WidgetsCore
             end
         end
 
+        minusBtn.MouseButton1Click:Connect(function()
+            obj:Set(obj.Value - step, false)
+        end)
+        plusBtn.MouseButton1Click:Connect(function()
+            obj:Set(obj.Value + step, false)
+        end)
+
         local dragging = false
-        local function updateAt(xPos)
-            local width = (track.AbsoluteSize and track.AbsoluteSize.X > 0) and track.AbsoluteSize.X or 160
-            local pct = math.clamp((xPos - (track.AbsolutePosition and track.AbsolutePosition.X or 0)) / width, 0, 1)
+        local function updateFromInput(inp)
+            local width = math.max(track.AbsoluteSize.X, 1)
+            local pct = math.clamp((inp.Position.X - track.AbsolutePosition.X) / width, 0, 1)
             obj:Set(minV + (maxV - minV) * pct, false)
         end
 
         track.InputBegan:Connect(function(inp)
             if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
                 dragging = true
-                updateAt(inp.Position.X)
+                track.BorderColor3 = Theme.Accent
+                updateFromInput(inp)
             end
         end)
         trove:Connect(UserInputService.InputChanged, function(inp)
             if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
-                updateAt(inp.Position.X)
+                updateFromInput(inp)
             end
         end)
         trove:Connect(UserInputService.InputEnded, function(inp)
             if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                dragging = false
+                if dragging then
+                    dragging = false
+                    track.BorderColor3 = Color3.fromRGB(56, 56, 56)
+                end
             end
         end)
 
-        valBox.FocusLost:Connect(function()
-            local n = tonumber((valBox.Text or ""):match("[%-%d%.]+"))
-            if n then obj:Set(n, false) else valBox.Text = formatStep(obj.Value, step) .. suffix end
-        end)
-
-        addCommonMethods(obj, container, lbl)
         bindControl(sec, trove, obj, opts, true)
         return obj
     end
 
+    -- Exact Core.xyz RangeSlider (30px height, - / + buttons, 6px double-bordered track, glow, two 2x10 knobs)
     local function createRangeSlider(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local minV = tonumber(opts.Min) or 0
         local maxV = tonumber(opts.Max) or 100
@@ -7521,65 +7653,130 @@ do -- CoreBridge._WidgetsCore
         local lo = snapStep(tonumber(def.Min) or minV, minV, maxV, step)
         local hi = math.max(lo, snapStep(tonumber(def.Max) or maxV, minV, maxV, step))
 
-        local container = Instance.new("Frame")
-        container.Name = "RangeSlider_" .. tostring(opts.Label or "Range")
-        container.Size = UDim2.new(1, 0, 0, 29)
-        container.BackgroundTransparency = 1
-        container.ZIndex = z
-        container.Parent = sec._container
+        local card = Instance.new("Frame")
+        card.Name = "RangeSlider_" .. tostring(opts.Label or "Range")
+        card.Size = UDim2.new(1, 0, 0, 30)
+        card.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
+        card.BackgroundTransparency = 1
+        card.ZIndex = z
+        card.Parent = sec._container
+        addStroke(card, Theme.Border, 1, 1)
 
         local lbl = Instance.new("TextLabel")
-        lbl.Position = UDim2.fromOffset(2, 0)
-        lbl.Size = UDim2.new(1, -88, 0, 14)
+        lbl.Position = UDim2.fromOffset(18, 0)
+        lbl.Size = UDim2.new(0.62, -18, 0, 14)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Code
         lbl.Text = tostring(opts.Label or "Range")
-        lbl.TextColor3 = Color3.fromRGB(205, 205, 205)
-        lbl.TextSize = 11
+        lbl.TextColor3 = Color3.fromRGB(185, 185, 185)
+        lbl.TextStrokeTransparency = 0.5
+        lbl.TextSize = 12
         lbl.TextTruncate = Enum.TextTruncate.AtEnd
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = z + 1
-        lbl.Parent = container
+        lbl.Parent = card
 
-        local valLbl = Instance.new("TextLabel")
-        valLbl.AnchorPoint = Vector2.new(1, 0)
-        valLbl.Position = UDim2.new(1, -2, 0, 0)
-        valLbl.Size = UDim2.fromOffset(86, 14)
-        valLbl.BackgroundTransparency = 1
-        valLbl.Font = Enum.Font.Code
-        valLbl.Text = formatStep(lo, step) .. "–" .. formatStep(hi, step)
-        valLbl.TextColor3 = Theme.Silver
-        valLbl.TextSize = 10
-        valLbl.TextXAlignment = Enum.TextXAlignment.Right
-        valLbl.ZIndex = z + 1
-        valLbl.Parent = container
+        local valBadge = Instance.new("TextLabel")
+        valBadge.Name = "SliderValueLabel"
+        valBadge.AnchorPoint = Vector2.new(1, 0)
+        valBadge.Position = UDim2.new(1, -14, 0, 0)
+        valBadge.Size = UDim2.fromOffset(86, 14)
+        valBadge.BackgroundTransparency = 1
+        valBadge.Font = Enum.Font.Code
+        valBadge.Text = formatStep(lo, step) .. "–" .. formatStep(hi, step)
+        valBadge.TextColor3 = Color3.fromRGB(185, 185, 185)
+        valBadge.TextStrokeTransparency = 0.5
+        valBadge.TextSize = 12
+        valBadge.TextXAlignment = Enum.TextXAlignment.Right
+        valBadge.ZIndex = z + 1
+        valBadge.Parent = card
 
-        local track = Instance.new("TextButton")
-        track.Position = UDim2.fromOffset(2, 16)
-        track.Size = UDim2.new(1, -4, 0, 9)
-        track.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        local minusBtn = Instance.new("TextButton")
+        minusBtn.Position = UDim2.fromOffset(2, 15)
+        minusBtn.Size = UDim2.fromOffset(12, 12)
+        minusBtn.BackgroundTransparency = 1
+        minusBtn.AutoButtonColor = false
+        minusBtn.Font = Enum.Font.Code
+        minusBtn.Text = "-"
+        minusBtn.TextColor3 = Color3.fromRGB(145, 145, 145)
+        minusBtn.TextStrokeTransparency = 0.5
+        minusBtn.TextSize = 12
+        minusBtn.ZIndex = z + 2
+        minusBtn.Parent = card
+
+        local plusBtn = Instance.new("TextButton")
+        plusBtn.AnchorPoint = Vector2.new(1, 0)
+        plusBtn.Position = UDim2.new(1, -2, 0, 15)
+        plusBtn.Size = UDim2.fromOffset(12, 12)
+        plusBtn.BackgroundTransparency = 1
+        plusBtn.AutoButtonColor = false
+        plusBtn.Font = Enum.Font.Code
+        plusBtn.Text = "+"
+        plusBtn.TextColor3 = Color3.fromRGB(145, 145, 145)
+        plusBtn.TextStrokeTransparency = 0.5
+        plusBtn.TextSize = 12
+        plusBtn.ZIndex = z + 2
+        plusBtn.Parent = card
+
+        local track = Instance.new("Frame")
+        track.Position = UDim2.fromOffset(18, 18)
+        track.Size = UDim2.new(1, -34, 0, 6)
+        track.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
         track.BorderColor3 = Color3.fromRGB(48, 48, 48)
         track.BorderSizePixel = 1
-        track.AutoButtonColor = false
-        track.Text = ""
         track.ZIndex = z + 1
-        track.Parent = container
-        U.addStroke(track, Color3.fromRGB(4, 4, 4), 1, 0)
+        track.Parent = card
+        addStroke(track, Color3.fromRGB(4, 4, 4), 1, 0)
 
         local fill = Instance.new("Frame")
         fill.BackgroundColor3 = Theme.Accent
         fill.BorderSizePixel = 0
         fill.ZIndex = z + 2
         fill.Parent = track
-        U.registerAccentObject(fill, "BackgroundColor3")
+        registerAccentObject(fill, "BackgroundColor3")
+
+        local fillGlow = Instance.new("ImageLabel")
+        fillGlow.Name = "VaderSliderGlow"
+        fillGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+        fillGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+        fillGlow.Size = UDim2.new(1, 14, 1, 14)
+        fillGlow.BackgroundTransparency = 1
+        fillGlow.Image = "http://www.roblox.com/asset/?id=18245826428"
+        fillGlow.ImageColor3 = Theme.Accent
+        fillGlow.ImageTransparency = 0.89
+        fillGlow.ScaleType = Enum.ScaleType.Slice
+        pcall(function() fillGlow.SliceCenter = Rect.new(Vector2.new(21, 21), Vector2.new(79, 79)) end)
+        fillGlow.ZIndex = z + 1
+        fillGlow.Parent = fill
+        registerAccentObject(fillGlow, "ImageColor3")
+
+        local knobMin = Instance.new("Frame")
+        knobMin.AnchorPoint = Vector2.new(0.5, 0.5)
+        knobMin.Size = UDim2.fromOffset(2, 10)
+        knobMin.BackgroundColor3 = Theme.White
+        knobMin.BorderSizePixel = 0
+        knobMin.ZIndex = z + 3
+        knobMin.Parent = track
+
+        local knobMax = Instance.new("Frame")
+        knobMax.AnchorPoint = Vector2.new(0.5, 0.5)
+        knobMax.Size = UDim2.fromOffset(2, 10)
+        knobMax.BackgroundColor3 = Theme.White
+        knobMax.BorderSizePixel = 0
+        knobMax.ZIndex = z + 3
+        knobMax.Parent = track
 
         local function syncVisuals(a, b)
-            local span = math.max(maxV - minV, 1e-6)
+            local span = math.max(maxV - minV, 0.0001)
             local p1 = math.clamp((a - minV) / span, 0, 1)
             local p2 = math.clamp((b - minV) / span, 0, 1)
-            fill.Position = UDim2.fromScale(p1, 0)
-            fill.Size = UDim2.fromScale(math.max(0.02, p2 - p1), 1)
-            valLbl.Text = formatStep(a, step) .. "–" .. formatStep(b, step)
+            tween(fill, TweenInfo.new(0.08), {
+                Position = UDim2.fromScale(p1, 0),
+                Size = UDim2.fromScale(math.max(0.01, p2 - p1), 1),
+            })
+            tween(knobMin, TweenInfo.new(0.08), { Position = UDim2.fromScale(p1, 0.5) })
+            tween(knobMax, TweenInfo.new(0.08), { Position = UDim2.fromScale(p2, 0.5) })
+            valBadge.Text = formatStep(a, step) .. "–" .. formatStep(b, step)
         end
         syncVisuals(lo, hi)
 
@@ -7587,11 +7784,12 @@ do -- CoreBridge._WidgetsCore
             _trove = trove,
             Kind = "RangeSlider",
             Value = { Min = lo, Max = hi },
-            Row = wrapRowObject(container, lbl),
+            Row = wrapRowObject(card, lbl),
             Changed = trove:Add(Signal.new()),
             ValueChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        addCommonMethods(obj, card, lbl)
 
         function obj:Set(val, silent)
             if type(val) ~= "table" then return end
@@ -7607,10 +7805,17 @@ do -- CoreBridge._WidgetsCore
             end
         end
 
+        minusBtn.MouseButton1Click:Connect(function()
+            obj:Set({ Min = obj.Value.Min - step, Max = obj.Value.Max }, false)
+        end)
+        plusBtn.MouseButton1Click:Connect(function()
+            obj:Set({ Min = obj.Value.Min, Max = obj.Value.Max + step }, false)
+        end)
+
         local activeHandle = nil
         local function updateAt(xPos)
-            local width = (track.AbsoluteSize and track.AbsoluteSize.X > 0) and track.AbsoluteSize.X or 160
-            local pct = math.clamp((xPos - (track.AbsolutePosition and track.AbsolutePosition.X or 0)) / width, 0, 1)
+            local width = math.max(track.AbsoluteSize.X, 1)
+            local pct = math.clamp((xPos - track.AbsolutePosition.X) / width, 0, 1)
             local v = snapStep(minV + (maxV - minV) * pct, minV, maxV, step)
             if activeHandle == "min" then
                 obj:Set({ Min = math.min(v, obj.Value.Max), Max = obj.Value.Max }, false)
@@ -7621,10 +7826,11 @@ do -- CoreBridge._WidgetsCore
 
         track.InputBegan:Connect(function(inp)
             if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                local width = (track.AbsoluteSize and track.AbsoluteSize.X > 0) and track.AbsoluteSize.X or 160
-                local pct = math.clamp((inp.Position.X - (track.AbsolutePosition and track.AbsolutePosition.X or 0)) / width, 0, 1)
+                local width = math.max(track.AbsoluteSize.X, 1)
+                local pct = math.clamp((inp.Position.X - track.AbsolutePosition.X) / width, 0, 1)
                 local v = minV + (maxV - minV) * pct
                 activeHandle = (math.abs(v - obj.Value.Min) <= math.abs(v - obj.Value.Max)) and "min" or "max"
+                track.BorderColor3 = Theme.Accent
                 updateAt(inp.Position.X)
             end
         end)
@@ -7635,61 +7841,70 @@ do -- CoreBridge._WidgetsCore
         end)
         trove:Connect(UserInputService.InputEnded, function(inp)
             if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                activeHandle = nil
+                if activeHandle then
+                    activeHandle = nil
+                    track.BorderColor3 = Color3.fromRGB(56, 56, 56)
+                end
             end
         end)
 
-        addCommonMethods(obj, container, lbl)
         bindControl(sec, trove, obj, opts, true)
         return obj
     end
 
+    -- Exact Core.xyz TextBox (Matches BikeForEgg / One-shot createTextInputRow L4135)
     local function createTextBox(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local initText = tostring(opts.Default or "")
 
         local row = Instance.new("Frame")
         row.Name = "TextBox_" .. tostring(opts.Label or "Input")
         row.Size = UDim2.new(1, 0, 0, 38)
+        row.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
         row.BackgroundTransparency = 1
         row.ZIndex = z
         row.Parent = sec._container
 
         local lbl = Instance.new("TextLabel")
-        lbl.Position = UDim2.fromOffset(2, 0)
-        lbl.Size = UDim2.new(1, -4, 0, 14)
+        lbl.Position = UDim2.fromOffset(18, 0)
+        lbl.Size = UDim2.new(1, -20, 0, 15)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Code
         lbl.Text = tostring(opts.Label or "Text")
-        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
-        lbl.TextSize = 11
+        lbl.TextColor3 = Color3.fromRGB(185, 185, 185)
+        lbl.TextStrokeTransparency = 0.5
+        lbl.TextSize = 12
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = z + 1
         lbl.Parent = row
 
+        local boxHolder = Instance.new("Frame")
+        boxHolder.Position = UDim2.fromOffset(18, 17)
+        boxHolder.Size = UDim2.new(1, -20, 0, 19)
+        boxHolder.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+        boxHolder.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        boxHolder.BorderSizePixel = 1
+        boxHolder.ZIndex = z + 1
+        boxHolder.Parent = row
+        local boxStroke = addStroke(boxHolder, Color3.fromRGB(4, 4, 4), 1, 0)
+
         local box = Instance.new("TextBox")
-        box.Position = UDim2.fromOffset(0, 16)
-        box.Size = UDim2.new(1, 0, 0, 20)
-        box.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        box.BorderColor3 = Color3.fromRGB(48, 48, 48)
-        box.BorderSizePixel = 1
-        box.ClearTextOnFocus = false
+        box.Position = UDim2.fromOffset(6, 0)
+        box.Size = UDim2.new(1, -12, 1, 0)
+        box.BackgroundTransparency = 1
         box.Font = Enum.Font.Code
-        box.PlaceholderText = tostring(opts.Placeholder or "...")
-        box.PlaceholderColor3 = Theme.Muted
+        box.PlaceholderText = tostring(opts.Placeholder or "")
+        box.PlaceholderColor3 = Color3.fromRGB(95, 95, 95)
         box.Text = initText
-        box.TextColor3 = Theme.White
-        box.TextSize = 11
+        box.TextColor3 = Color3.fromRGB(220, 220, 220)
+        box.TextStrokeTransparency = 0.5
+        box.TextSize = 12
+        box.ClearTextOnFocus = false
         box.TextXAlignment = Enum.TextXAlignment.Left
-        box.ZIndex = z + 1
-        box.Parent = row
-        U.addStroke(box, Color3.fromRGB(4, 4, 4), 1, 0)
-        local pad = Instance.new("UIPadding")
-        pad.PaddingLeft = UDim.new(0, 6)
-        pad.PaddingRight = UDim.new(0, 6)
-        pad.Parent = box
+        box.ZIndex = z + 2
+        box.Parent = boxHolder
 
         local silentGuard = false
         local obj = {
@@ -7701,6 +7916,7 @@ do -- CoreBridge._WidgetsCore
             ValueChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        addCommonMethods(obj, row, lbl)
 
         function obj:Set(val, silent)
             local str = tostring(val or "")
@@ -7717,6 +7933,15 @@ do -- CoreBridge._WidgetsCore
             end
         end
 
+        box.Focused:Connect(function()
+            boxHolder.BorderColor3 = Theme.Accent
+            tween(boxStroke, FastTween, { Color = Theme.Accent })
+        end)
+        box.FocusLost:Connect(function()
+            boxHolder.BorderColor3 = Color3.fromRGB(48, 48, 48)
+            tween(boxStroke, FastTween, { Color = Color3.fromRGB(4, 4, 4) })
+            if not silentGuard then obj:Set(box.Text, false) end
+        end)
         if not opts.FocusLostOnly and box.GetPropertyChangedSignal then
             pcall(function()
                 box:GetPropertyChangedSignal("Text"):Connect(function()
@@ -7724,18 +7949,14 @@ do -- CoreBridge._WidgetsCore
                 end)
             end)
         end
-        box.FocusLost:Connect(function()
-            if not silentGuard then obj:Set(box.Text, false) end
-        end)
 
-        addCommonMethods(obj, row, lbl)
         bindControl(sec, trove, obj, opts, false)
         return obj
     end
 
     local function createOrderedList(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local items = table.clone(opts.Default or opts.Items or {})
 
@@ -7747,26 +7968,22 @@ do -- CoreBridge._WidgetsCore
         row.ZIndex = z
         row.Parent = sec._container
 
-        local lay = Instance.new("UIListLayout")
-        lay.Padding = UDim.new(0, 3)
-        lay.SortOrder = Enum.SortOrder.LayoutOrder
-        lay.Parent = row
-
         local lbl = Instance.new("TextLabel")
-        lbl.LayoutOrder = 0
-        lbl.Size = UDim2.new(1, 0, 0, 14)
+        lbl.Position = UDim2.fromOffset(18, 0)
+        lbl.Size = UDim2.new(1, -20, 0, 15)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Code
         lbl.Text = tostring(opts.Label or "Priority")
-        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
-        lbl.TextSize = 11
+        lbl.TextColor3 = Color3.fromRGB(185, 185, 185)
+        lbl.TextStrokeTransparency = 0.5
+        lbl.TextSize = 12
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = z + 1
         lbl.Parent = row
 
         local itemHolder = Instance.new("Frame")
-        itemHolder.LayoutOrder = 1
-        itemHolder.Size = UDim2.new(1, 0, 0, 20)
+        itemHolder.Position = UDim2.fromOffset(18, 17)
+        itemHolder.Size = UDim2.new(1, -20, 0, 20)
         itemHolder.AutomaticSize = Enum.AutomaticSize.Y
         itemHolder.BackgroundTransparency = 1
         itemHolder.ZIndex = z
@@ -7785,6 +8002,7 @@ do -- CoreBridge._WidgetsCore
             ValueChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        addCommonMethods(obj, row, lbl)
 
         local function rebuild(silent)
             for _, ch in ipairs(itemHolder:GetChildren()) do
@@ -7793,12 +8011,13 @@ do -- CoreBridge._WidgetsCore
             for idx, name in ipairs(obj.Value) do
                 local ir = Instance.new("Frame")
                 ir.LayoutOrder = idx
-                ir.Size = UDim2.new(1, 0, 0, 18)
-                ir.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+                ir.Size = UDim2.new(1, 0, 0, 19)
+                ir.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
                 ir.BorderColor3 = Color3.fromRGB(48, 48, 48)
                 ir.BorderSizePixel = 1
                 ir.ZIndex = z + 1
                 ir.Parent = itemHolder
+                addStroke(ir, Color3.fromRGB(4, 4, 4), 1, 0)
 
                 local t = Instance.new("TextLabel")
                 t.Position = UDim2.fromOffset(6, 0)
@@ -7806,8 +8025,9 @@ do -- CoreBridge._WidgetsCore
                 t.BackgroundTransparency = 1
                 t.Font = Enum.Font.Code
                 t.Text = string.format("%d. %s", idx, tostring(name))
-                t.TextColor3 = Theme.Silver
-                t.TextSize = 10
+                t.TextColor3 = Color3.fromRGB(220, 220, 220)
+                t.TextStrokeTransparency = 0.5
+                t.TextSize = 11
                 t.TextXAlignment = Enum.TextXAlignment.Left
                 t.ZIndex = z + 2
                 t.Parent = ir
@@ -7815,8 +8035,10 @@ do -- CoreBridge._WidgetsCore
                 local up = Instance.new("TextButton")
                 up.AnchorPoint = Vector2.new(1, 0.5)
                 up.Position = UDim2.new(1, -20, 0.5, 0)
-                up.Size = UDim2.fromOffset(16, 14)
-                up.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+                up.Size = UDim2.fromOffset(16, 15)
+                up.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                up.BorderColor3 = Color3.fromRGB(48, 48, 48)
+                up.BorderSizePixel = 1
                 up.AutoButtonColor = false
                 up.Font = Enum.Font.Code
                 up.Text = "▲"
@@ -7834,8 +8056,10 @@ do -- CoreBridge._WidgetsCore
                 local dn = Instance.new("TextButton")
                 dn.AnchorPoint = Vector2.new(1, 0.5)
                 dn.Position = UDim2.new(1, -2, 0.5, 0)
-                dn.Size = UDim2.fromOffset(16, 14)
-                dn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+                dn.Size = UDim2.fromOffset(16, 15)
+                dn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+                dn.BorderColor3 = Color3.fromRGB(48, 48, 48)
+                dn.BorderSizePixel = 1
                 dn.AutoButtonColor = false
                 dn.Font = Enum.Font.Code
                 dn.Text = "▼"
@@ -7865,14 +8089,13 @@ do -- CoreBridge._WidgetsCore
         function obj:SetItems(arr) self:Set(arr, true) end
 
         rebuild(true)
-        addCommonMethods(obj, row, lbl)
         bindControl(sec, trove, obj, opts, false)
         return obj
     end
 
     local function createGroup(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local source = opts.Source
         local option = opts.Option
@@ -7890,54 +8113,43 @@ do -- CoreBridge._WidgetsCore
 
         local groupFrame = Instance.new("Frame")
         groupFrame.Name = "Group"
-        groupFrame.Size = UDim2.new(1, 0, 0, 4)
+        groupFrame.Size = UDim2.new(1, 0, 0, 2)
         groupFrame.AutomaticSize = Enum.AutomaticSize.Y
         groupFrame.BackgroundTransparency = 1
         groupFrame.ZIndex = z
         groupFrame.Parent = sec._container
 
-        local bar = Instance.new("Frame")
-        bar.Position = UDim2.fromOffset(2, 2)
-        bar.Size = UDim2.new(0, 2, 1, -4)
-        bar.BackgroundColor3 = Color3.fromRGB(64, 64, 64)
-        bar.BorderSizePixel = 0
-        bar.ZIndex = z + 1
-        bar.Parent = groupFrame
-
-        local inner = Instance.new("Frame")
-        inner.Name = "GroupContent"
-        inner.Position = UDim2.fromOffset(8, 0)
-        inner.Size = UDim2.new(1, -8, 0, 4)
-        inner.AutomaticSize = Enum.AutomaticSize.Y
-        inner.BackgroundTransparency = 1
-        inner.ZIndex = z
-        inner.Parent = groupFrame
-
         local lay = Instance.new("UIListLayout")
         lay.Padding = UDim.new(0, 4)
         lay.SortOrder = Enum.SortOrder.LayoutOrder
-        lay.Parent = inner
+        lay.Parent = groupFrame
 
         local explicitVis = opts.Visible ~= false
         local sourceMatch = source and matches(source.Value) or true
-        groupFrame.Visible = explicitVis and sourceMatch
+        local initVis = explicitVis and sourceMatch
+        pcall(function() groupFrame:SetAttribute("CoreExplicitVisible", initVis) end)
+        groupFrame.Visible = initVis
 
         local childAdapter = CoreBridge._MakeSectionAdapter({
             _menu = sec._menu,
             _trove = trove,
-            _container = inner,
+            _container = groupFrame,
             _zBase = z,
         })
 
         function childAdapter:SetVisible(v)
             explicitVis = (v == true)
-            groupFrame.Visible = explicitVis and sourceMatch
+            local show = explicitVis and sourceMatch
+            pcall(function() groupFrame:SetAttribute("CoreExplicitVisible", show) end)
+            groupFrame.Visible = show
         end
 
         if source and source.ValueChanged then
             trove:Connect(source.ValueChanged, function(val)
                 sourceMatch = matches(val)
-                groupFrame.Visible = explicitVis and sourceMatch
+                local show = explicitVis and sourceMatch
+                pcall(function() groupFrame:SetAttribute("CoreExplicitVisible", show) end)
+                groupFrame.Visible = show
             end)
         end
 
@@ -7968,7 +8180,10 @@ do -- CoreBridge._WidgetsPickers
     local Theme = U.Theme
     local UI = U.UI
     local tween = U.tween
+    local addStroke = U.addStroke
+    local registerAccentObject = U.registerAccentObject
     local FastTween = U.FastTween
+    local SmoothTween = U.SmoothTween
     local WC = CoreBridge._WidgetsCore
 
     local function toSet(val)
@@ -7991,9 +8206,10 @@ do -- CoreBridge._WidgetsPickers
         return true
     end
 
+    -- Exact Core.xyz Dropdown & MultiDropdown (Matches BikeForEgg / One-shot createDropdown L4198 & createMultiDropdown L4476)
     local function createDropdown(sec, opts, isMulti)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local labels = opts.Labels or {}
         local rawOptions = table.clone(opts.Options or {})
@@ -8013,47 +8229,51 @@ do -- CoreBridge._WidgetsPickers
         local container = Instance.new("Frame")
         container.Name = (isMulti and "MultiDropdown_" or "Dropdown_") .. tostring(opts.Label or "Select")
         container.Size = UDim2.new(1, 0, 0, 38)
+        container.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
         container.BackgroundTransparency = 1
         container.ClipsDescendants = true
         container.ZIndex = z
         container.Parent = sec._container
+        local st = addStroke(container, Theme.Border, 1, 1)
 
-        local lbl = Instance.new("TextLabel")
-        lbl.Position = UDim2.fromOffset(2, 0)
-        lbl.Size = UDim2.new(1, -4, 0, 14)
-        lbl.BackgroundTransparency = 1
-        lbl.Font = Enum.Font.Code
-        lbl.Text = tostring(opts.Label or "Select")
-        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
-        lbl.TextSize = 11
-        lbl.TextTruncate = Enum.TextTruncate.AtEnd
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.ZIndex = z + 1
-        lbl.Parent = container
+        local titleLbl = Instance.new("TextLabel")
+        titleLbl.Position = UDim2.fromOffset(18, 0)
+        titleLbl.Size = UDim2.new(1, -20, 0, 15)
+        titleLbl.BackgroundTransparency = 1
+        titleLbl.Font = Enum.Font.Code
+        titleLbl.Text = tostring(opts.Label or "Select")
+        titleLbl.TextColor3 = Color3.fromRGB(185, 185, 185)
+        titleLbl.TextStrokeTransparency = 0.5
+        titleLbl.TextSize = 12
+        titleLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+        titleLbl.ZIndex = z + 1
+        titleLbl.Parent = container
 
-        local hdrBtn = Instance.new("TextButton")
-        hdrBtn.Position = UDim2.fromOffset(0, 16)
-        hdrBtn.Size = UDim2.new(1, 0, 0, 20)
-        hdrBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        hdrBtn.BorderColor3 = Color3.fromRGB(48, 48, 48)
-        hdrBtn.BorderSizePixel = 1
-        hdrBtn.AutoButtonColor = false
-        hdrBtn.Text = ""
-        hdrBtn.ZIndex = z + 1
-        hdrBtn.Parent = container
-        local hStroke = U.addStroke(hdrBtn, Color3.fromRGB(4, 4, 4), 1, 0)
+        local headerBtn = Instance.new("TextButton")
+        headerBtn.Position = UDim2.fromOffset(18, 17)
+        headerBtn.Size = UDim2.new(1, -20, 0, 19)
+        headerBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+        headerBtn.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        headerBtn.BorderSizePixel = 1
+        headerBtn.AutoButtonColor = false
+        headerBtn.Text = ""
+        headerBtn.ZIndex = z + 1
+        headerBtn.Parent = container
+        addStroke(headerBtn, Color3.fromRGB(4, 4, 4), 1, 0)
 
-        local valText = Instance.new("TextLabel")
-        valText.Position = UDim2.fromOffset(6, 0)
-        valText.Size = UDim2.new(1, -24, 1, 0)
-        valText.BackgroundTransparency = 1
-        valText.Font = Enum.Font.Code
-        valText.TextColor3 = Theme.White
-        valText.TextSize = 11
-        valText.TextTruncate = Enum.TextTruncate.AtEnd
-        valText.TextXAlignment = Enum.TextXAlignment.Left
-        valText.ZIndex = z + 2
-        valText.Parent = hdrBtn
+        local optLbl = Instance.new("TextLabel")
+        optLbl.Position = UDim2.fromOffset(6, 0)
+        optLbl.Size = UDim2.new(1, -24, 1, 0)
+        optLbl.BackgroundTransparency = 1
+        optLbl.Font = Enum.Font.Code
+        optLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+        optLbl.TextStrokeTransparency = 0.5
+        optLbl.TextSize = 12
+        optLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        optLbl.TextXAlignment = Enum.TextXAlignment.Left
+        optLbl.ZIndex = z + 2
+        optLbl.Parent = headerBtn
 
         local arrow = Instance.new("TextLabel")
         arrow.AnchorPoint = Vector2.new(1, 0.5)
@@ -8062,52 +8282,62 @@ do -- CoreBridge._WidgetsPickers
         arrow.BackgroundTransparency = 1
         arrow.Font = Enum.Font.Code
         arrow.Text = "+"
-        arrow.TextColor3 = Theme.Muted
+        arrow.TextColor3 = Color3.fromRGB(185, 185, 185)
+        arrow.TextStrokeTransparency = 0.5
         arrow.TextSize = 12
         arrow.ZIndex = z + 2
-        arrow.Parent = hdrBtn
+        arrow.Parent = headerBtn
 
-        local drawer = Instance.new("Frame")
-        drawer.Position = UDim2.fromOffset(0, 38)
-        drawer.Size = UDim2.new(1, 0, 0, 0)
-        drawer.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
-        drawer.BorderColor3 = Color3.fromRGB(48, 48, 48)
-        drawer.BorderSizePixel = 1
-        drawer.ZIndex = z + 2
-        drawer.Parent = container
+        local wantSearch = (opts.Search == true) or (#rawOptions > 8)
+        local listHolder = Instance.new("Frame")
+        listHolder.Position = UDim2.fromOffset(18, 38)
+        listHolder.Size = UDim2.new(1, -20, 0, 0)
+        listHolder.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+        listHolder.BorderColor3 = Color3.fromRGB(48, 48, 48)
+        listHolder.BorderSizePixel = 1
+        listHolder.ClipsDescendants = true
+        listHolder.ZIndex = z + 1
+        listHolder.Parent = container
 
-        local searchBox
-        if opts.Search == true then
-            searchBox = Instance.new("TextBox")
-            searchBox.Position = UDim2.fromOffset(4, 3)
-            searchBox.Size = UDim2.new(1, -8, 0, 18)
-            searchBox.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-            searchBox.BorderColor3 = Color3.fromRGB(52, 52, 52)
-            searchBox.BorderSizePixel = 1
-            searchBox.ClearTextOnFocus = false
-            searchBox.Font = Enum.Font.Code
-            searchBox.PlaceholderText = "filter..."
-            searchBox.PlaceholderColor3 = Theme.Muted
-            searchBox.Text = ""
-            searchBox.TextColor3 = Theme.White
-            searchBox.TextSize = 10
-            searchBox.TextXAlignment = Enum.TextXAlignment.Left
-            searchBox.ZIndex = z + 3
-            searchBox.Parent = drawer
-        end
+        local searchFrame = Instance.new("Frame")
+        searchFrame.Name = "DropdownSearchFrame"
+        searchFrame.Size = UDim2.new(1, 0, 0, 21)
+        searchFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
+        searchFrame.BorderColor3 = Color3.fromRGB(42, 42, 48)
+        searchFrame.BorderSizePixel = 1
+        searchFrame.Visible = wantSearch
+        searchFrame.ZIndex = z + 2
+        searchFrame.Parent = listHolder
 
-        local listY = searchBox and 24 or 2
+        local searchBox = Instance.new("TextBox")
+        searchBox.Name = "DropdownSearchBox"
+        searchBox.Position = UDim2.fromOffset(6, 0)
+        searchBox.Size = UDim2.new(1, -12, 1, 0)
+        searchBox.BackgroundTransparency = 1
+        searchBox.ClearTextOnFocus = false
+        searchBox.Font = Enum.Font.Code
+        searchBox.PlaceholderText = "Search (" .. tostring(#rawOptions) .. ")..."
+        searchBox.PlaceholderColor3 = Color3.fromRGB(105, 105, 115)
+        searchBox.Text = ""
+        searchBox.TextColor3 = Color3.fromRGB(235, 235, 235)
+        searchBox.TextSize = 11
+        searchBox.TextXAlignment = Enum.TextXAlignment.Left
+        searchBox.ZIndex = z + 3
+        searchBox.Parent = searchFrame
+
         local optScroll = Instance.new("ScrollingFrame")
-        optScroll.Position = UDim2.fromOffset(2, listY)
-        optScroll.Size = UDim2.new(1, -4, 1, -listY - 2)
+        optScroll.Name = "DropdownScroll"
+        optScroll.Position = UDim2.fromOffset(0, wantSearch and 22 or 0)
+        optScroll.Size = UDim2.new(1, 0, 1, wantSearch and -22 or 0)
         optScroll.BackgroundTransparency = 1
         optScroll.BorderSizePixel = 0
         optScroll.ScrollBarThickness = 2
-        optScroll.ScrollBarImageColor3 = Theme.Silver
+        optScroll.ScrollBarImageColor3 = Theme.Accent
         optScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
         optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-        optScroll.ZIndex = z + 3
-        optScroll.Parent = drawer
+        optScroll.ZIndex = z + 2
+        optScroll.Parent = listHolder
+        registerAccentObject(optScroll, "ScrollBarImageColor3")
 
         local optLayout = Instance.new("UIListLayout")
         optLayout.Padding = UDim.new(0, 1)
@@ -8123,11 +8353,12 @@ do -- CoreBridge._WidgetsPickers
             Multi = isMulti,
             Options = rawOptions,
             Value = initVal,
-            Row = WC.wrapRowObject(container, lbl),
+            Row = WC.wrapRowObject(container, titleLbl),
             Changed = trove:Add(Signal.new()),
             ValueChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        WC.addCommonMethods(obj, container, titleLbl)
 
         local function dispLabel(k)
             return tostring(labels[k] or k)
@@ -8144,15 +8375,15 @@ do -- CoreBridge._WidgetsPickers
                         table.insert(chosen, dispLabel(k))
                     end
                 end
-                valText.Text = #chosen > 0 and table.concat(chosen, ", ") or "None"
-                valText.TextColor3 = #chosen > 0 and Theme.White or Theme.Muted
+                optLbl.Text = #chosen > 0 and table.concat(chosen, ", ") or "None"
+                optLbl.TextColor3 = #chosen > 0 and Color3.fromRGB(220, 220, 220) or Color3.fromRGB(170, 170, 170)
             else
                 if obj.Value == nil then
-                    valText.Text = "None"
-                    valText.TextColor3 = Theme.Muted
+                    optLbl.Text = "None"
+                    optLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
                 else
-                    valText.Text = dispLabel(obj.Value)
-                    valText.TextColor3 = Theme.White
+                    optLbl.Text = dispLabel(obj.Value)
+                    optLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
                 end
             end
         end
@@ -8160,33 +8391,42 @@ do -- CoreBridge._WidgetsPickers
         local function syncButtonHighlights()
             for _, item in ipairs(optButtons) do
                 local active = isMulti and (obj.Value[item.Key] == true) or (obj.Value == item.Key)
-                item.Btn.BackgroundColor3 = active and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(16, 16, 16)
-                item.Btn.TextColor3 = active and Theme.Accent or Color3.fromRGB(185, 185, 185)
+                tween(item.Btn, FastTween, {
+                    BackgroundColor3 = active and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(18, 18, 18),
+                    TextColor3 = active and Theme.Accent or Color3.fromRGB(185, 185, 185),
+                })
             end
         end
 
         local function getDrawerHeight()
-            local q = searchBox and string.lower(searchBox.Text or "") or ""
+            local showSearch = (opts.Search == true) or (#obj.Options > 8)
+            searchFrame.Visible = showSearch
+            optScroll.Position = UDim2.fromOffset(0, showSearch and 22 or 0)
+            optScroll.Size = UDim2.new(1, 0, 1, showSearch and -22 or 0)
+            local q = showSearch and string.lower(string.gsub(tostring(searchBox.Text or ""), "^%s*(.-)%s*$", "%1")) or ""
             local visCount = 0
             for _, item in ipairs(optButtons) do
                 local show = (q == "") or (string.find(string.lower(item.Display), q, 1, true) ~= nil) or (string.find(string.lower(item.Key), q, 1, true) ~= nil)
                 item.Btn.Visible = show
                 if show then visCount = visCount + 1 end
             end
-            local rowsH = math.min(math.max(visCount, 1), 6) * 20
-            return rowsH + (searchBox and 28 or 6)
+            optScroll.CanvasSize = UDim2.new(0, 0, 0, visCount * 20)
+            local rowsH = math.min(math.max(visCount, 1), 8) * 20
+            return rowsH + (showSearch and 22 or 0)
         end
 
-        local function syncSize()
-            if isOpen then
-                local dh = getDrawerHeight()
-                drawer.Size = UDim2.new(1, 0, 0, dh)
-                container.Size = UDim2.new(1, 0, 0, 40 + dh)
+        local function syncSize(animated)
+            local dh = getDrawerHeight()
+            listHolder.Size = UDim2.new(1, -20, 0, dh)
+            local targetSize = UDim2.new(1, 0, 0, isOpen and (40 + dh) or 38)
+            if animated then
+                tween(container, SmoothTween, { Size = targetSize })
             else
-                container.Size = UDim2.new(1, 0, 0, 38)
+                container.Size = targetSize
             end
             arrow.Text = isOpen and "-" or "+"
-            hStroke.Color = isOpen and Theme.Accent or Color3.fromRGB(4, 4, 4)
+            headerBtn.BorderColor3 = isOpen and Theme.Accent or Color3.fromRGB(48, 48, 48)
+            tween(st, FastTween, { Color = isOpen and Theme.Accent or Theme.Border })
         end
 
         local function rebuildList()
@@ -8194,28 +8434,43 @@ do -- CoreBridge._WidgetsPickers
                 if it.Btn and it.Btn.Parent then it.Btn:Destroy() end
             end
             table.clear(optButtons)
+            searchBox.PlaceholderText = "Search (" .. tostring(#obj.Options) .. ")..."
 
             for i, key in ipairs(obj.Options) do
                 local dStr = dispLabel(key)
+                local active = isMulti and (obj.Value[key] == true) or (obj.Value == key)
                 local b = Instance.new("TextButton")
                 b.LayoutOrder = i
                 b.Size = UDim2.new(1, 0, 0, 19)
-                b.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+                b.BackgroundColor3 = active and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(18, 18, 18)
                 b.BorderSizePixel = 0
                 b.AutoButtonColor = false
                 b.Font = Enum.Font.Code
                 b.Text = dStr
-                b.TextColor3 = Color3.fromRGB(185, 185, 185)
-                b.TextSize = 11
+                b.TextColor3 = active and Theme.Accent or Color3.fromRGB(185, 185, 185)
+                b.TextStrokeTransparency = 0.5
+                b.TextSize = 12
                 b.TextTruncate = Enum.TextTruncate.AtEnd
                 b.TextXAlignment = Enum.TextXAlignment.Left
-                b.ZIndex = z + 4
+                b.ZIndex = z + 3
                 b.Parent = optScroll
                 local p = Instance.new("UIPadding")
                 p.PaddingLeft = UDim.new(0, 6)
                 p.Parent = b
 
-                table.insert(optButtons, { Btn = b, Key = tostring(key), Display = dStr })
+                table.insert(optButtons, { Btn = b, Key = key, Display = dStr })
+                b.MouseEnter:Connect(function()
+                    local isSel = isMulti and (obj.Value[key] == true) or (obj.Value == key)
+                    if not isSel then
+                        tween(b, FastTween, { BackgroundColor3 = Color3.fromRGB(26, 26, 26), TextColor3 = Theme.White })
+                    end
+                end)
+                b.MouseLeave:Connect(function()
+                    local isSel = isMulti and (obj.Value[key] == true) or (obj.Value == key)
+                    if not isSel then
+                        tween(b, FastTween, { BackgroundColor3 = Color3.fromRGB(18, 18, 18), TextColor3 = Color3.fromRGB(185, 185, 185) })
+                    end
+                end)
                 b.MouseButton1Click:Connect(function()
                     if isMulti then
                         local copy = table.clone(obj.Value)
@@ -8225,14 +8480,14 @@ do -- CoreBridge._WidgetsPickers
                         obj:Set(key, false)
                         if closeOnSel then
                             isOpen = false
-                            syncSize()
+                            syncSize(true)
                         end
                     end
                 end)
             end
             syncButtonHighlights()
             refreshSummary()
-            if isOpen then syncSize() end
+            if isOpen then syncSize(false) end
         end
 
         function obj:Set(val, silent)
@@ -8283,29 +8538,28 @@ do -- CoreBridge._WidgetsPickers
                 local ok, latest = pcall(getOpts)
                 if ok and type(latest) == "table" then self:SetOptions(latest) end
             end
-            syncSize()
+            syncSize(true)
         end
 
-        hdrBtn.MouseButton1Click:Connect(function()
+        headerBtn.MouseButton1Click:Connect(function()
             obj:SetOpen(not isOpen)
         end)
-        if searchBox and searchBox.GetPropertyChangedSignal then
+        if searchBox.GetPropertyChangedSignal then
             pcall(function()
                 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-                    if isOpen then syncSize() end
+                    if isOpen then syncSize(false) end
                 end)
             end)
         end
 
         rebuildList()
-        WC.addCommonMethods(obj, container, lbl)
         WC.bindControl(sec, trove, obj, opts, false)
         return obj
     end
 
     local function createList(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local rawOpts = table.clone(opts.Options or {})
         local h = tonumber(opts.Height) or 140
@@ -8322,58 +8576,68 @@ do -- CoreBridge._WidgetsPickers
         container.Parent = sec._container
 
         local lbl = Instance.new("TextLabel")
-        lbl.Position = UDim2.fromOffset(2, 0)
-        lbl.Size = UDim2.new(1, -4, 0, 14)
+        lbl.Position = UDim2.fromOffset(18, 0)
+        lbl.Size = UDim2.new(1, -20, 0, 15)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Code
         lbl.Text = tostring(opts.Label or "List")
-        lbl.TextColor3 = Color3.fromRGB(195, 195, 195)
-        lbl.TextSize = 11
+        lbl.TextColor3 = Color3.fromRGB(185, 185, 185)
+        lbl.TextStrokeTransparency = 0.5
+        lbl.TextSize = 12
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.ZIndex = z + 1
         lbl.Parent = container
 
         local box = Instance.new("Frame")
-        box.Position = UDim2.fromOffset(0, 16)
-        box.Size = UDim2.new(1, 0, 0, h)
-        box.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+        box.Position = UDim2.fromOffset(18, 17)
+        box.Size = UDim2.new(1, -20, 0, h)
+        box.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
         box.BorderColor3 = Color3.fromRGB(48, 48, 48)
         box.BorderSizePixel = 1
+        box.ClipsDescendants = true
         box.ZIndex = z + 1
         box.Parent = container
+        addStroke(box, Color3.fromRGB(4, 4, 4), 1, 0)
 
         local searchBox
         if opts.Search == true then
+            local searchFrame = Instance.new("Frame")
+            searchFrame.Size = UDim2.new(1, 0, 0, 21)
+            searchFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
+            searchFrame.BorderColor3 = Color3.fromRGB(42, 42, 48)
+            searchFrame.BorderSizePixel = 1
+            searchFrame.ZIndex = z + 2
+            searchFrame.Parent = box
+
             searchBox = Instance.new("TextBox")
-            searchBox.Position = UDim2.fromOffset(4, 3)
-            searchBox.Size = UDim2.new(1, -8, 0, 18)
-            searchBox.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-            searchBox.BorderColor3 = Color3.fromRGB(52, 52, 52)
-            searchBox.BorderSizePixel = 1
+            searchBox.Position = UDim2.fromOffset(6, 0)
+            searchBox.Size = UDim2.new(1, -12, 1, 0)
+            searchBox.BackgroundTransparency = 1
             searchBox.ClearTextOnFocus = false
             searchBox.Font = Enum.Font.Code
-            searchBox.PlaceholderText = "search..."
-            searchBox.PlaceholderColor3 = Theme.Muted
+            searchBox.PlaceholderText = "Search..."
+            searchBox.PlaceholderColor3 = Color3.fromRGB(105, 105, 115)
             searchBox.Text = ""
-            searchBox.TextColor3 = Theme.White
-            searchBox.TextSize = 10
+            searchBox.TextColor3 = Color3.fromRGB(235, 235, 235)
+            searchBox.TextSize = 11
             searchBox.TextXAlignment = Enum.TextXAlignment.Left
-            searchBox.ZIndex = z + 2
-            searchBox.Parent = box
+            searchBox.ZIndex = z + 3
+            searchBox.Parent = searchFrame
         end
 
-        local listY = searchBox and 24 or 2
+        local listY = searchBox and 22 or 0
         local scroll = Instance.new("ScrollingFrame")
-        scroll.Position = UDim2.fromOffset(2, listY)
-        scroll.Size = UDim2.new(1, -4, 1, -listY - 2)
+        scroll.Position = UDim2.fromOffset(0, listY)
+        scroll.Size = UDim2.new(1, 0, 1, -listY)
         scroll.BackgroundTransparency = 1
         scroll.BorderSizePixel = 0
         scroll.ScrollBarThickness = 2
-        scroll.ScrollBarImageColor3 = Theme.Silver
+        scroll.ScrollBarImageColor3 = Theme.Accent
         scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
         scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
         scroll.ZIndex = z + 2
         scroll.Parent = box
+        registerAccentObject(scroll, "ScrollBarImageColor3")
 
         local lay = Instance.new("UIListLayout")
         lay.Padding = UDim.new(0, 1)
@@ -8391,6 +8655,7 @@ do -- CoreBridge._WidgetsPickers
             ValueChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        WC.addCommonMethods(obj, container, lbl)
 
         local function syncFilter()
             local q = searchBox and string.lower(searchBox.Text or "") or ""
@@ -8402,8 +8667,10 @@ do -- CoreBridge._WidgetsPickers
         local function syncSelection()
             for _, r in ipairs(rows) do
                 local act = (obj.Value == r.Key)
-                r.Btn.BackgroundColor3 = act and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(16, 16, 16)
-                r.Btn.TextColor3 = act and Theme.Accent or Color3.fromRGB(185, 185, 185)
+                tween(r.Btn, FastTween, {
+                    BackgroundColor3 = act and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(18, 18, 18),
+                    TextColor3 = act and Theme.Accent or Color3.fromRGB(185, 185, 185),
+                })
             end
         end
 
@@ -8413,16 +8680,18 @@ do -- CoreBridge._WidgetsPickers
             end
             table.clear(rows)
             for i, name in ipairs(obj.Options) do
+                local act = (obj.Value == name)
                 local b = Instance.new("TextButton")
                 b.LayoutOrder = i
                 b.Size = UDim2.new(1, 0, 0, 19)
-                b.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+                b.BackgroundColor3 = act and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(18, 18, 18)
                 b.BorderSizePixel = 0
                 b.AutoButtonColor = false
                 b.Font = Enum.Font.Code
                 b.Text = tostring(name)
-                b.TextColor3 = Color3.fromRGB(185, 185, 185)
-                b.TextSize = 11
+                b.TextColor3 = act and Theme.Accent or Color3.fromRGB(185, 185, 185)
+                b.TextStrokeTransparency = 0.5
+                b.TextSize = 12
                 b.TextTruncate = Enum.TextTruncate.AtEnd
                 b.TextXAlignment = Enum.TextXAlignment.Left
                 b.ZIndex = z + 3
@@ -8465,14 +8734,14 @@ do -- CoreBridge._WidgetsPickers
             pcall(function() searchBox:GetPropertyChangedSignal("Text"):Connect(syncFilter) end)
         end
         rebuild()
-        WC.addCommonMethods(obj, container, lbl)
         WC.bindControl(sec, trove, obj, opts, false)
         return obj
     end
 
+    -- Exact Core.xyz Color Swatch Row (Matches BikeForEgg / One-shot UI.createColorRow L3694: 18x10 double-bordered swatch)
     local function createColor(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
 
         local hostFrame = opts.Row and (opts.Row._frame or opts.Row)
@@ -8481,18 +8750,20 @@ do -- CoreBridge._WidgetsPickers
             hostFrame = Instance.new("Frame")
             hostFrame.Name = "ColorRow_" .. tostring(opts.Label or "Color")
             hostFrame.Size = UDim2.new(1, 0, 0, 20)
+            hostFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
             hostFrame.BackgroundTransparency = 1
             hostFrame.ZIndex = z
             hostFrame.Parent = sec._container
 
             ownLbl = Instance.new("TextLabel")
-            ownLbl.Position = UDim2.fromOffset(2, 0)
-            ownLbl.Size = UDim2.new(1, -60, 1, 0)
+            ownLbl.Position = UDim2.fromOffset(18, 0)
+            ownLbl.Size = UDim2.new(1, -54, 1, 0)
             ownLbl.BackgroundTransparency = 1
             ownLbl.Font = Enum.Font.Code
             ownLbl.Text = tostring(opts.Label or "Color")
             ownLbl.TextColor3 = Color3.fromRGB(205, 205, 205)
-            ownLbl.TextSize = 11
+            ownLbl.TextStrokeTransparency = 0.5
+            ownLbl.TextSize = 12
             ownLbl.TextXAlignment = Enum.TextXAlignment.Left
             ownLbl.ZIndex = z + 1
             ownLbl.Parent = hostFrame
@@ -8500,17 +8771,18 @@ do -- CoreBridge._WidgetsPickers
 
         local bar = WC.getOrMakeAccessoryBar(hostFrame, z)
         local swatch = Instance.new("TextButton")
-        swatch.Name = "ColorSwatch"
+        swatch.Name = "ColorSwatch_" .. tostring(opts.Label or "Color")
         swatch.LayoutOrder = 10
-        swatch.Size = UDim2.fromOffset(20, 12)
+        swatch.Size = UDim2.fromOffset(18, 10)
         swatch.BackgroundColor3 = Color3.new(1, 1, 1)
-        swatch.BorderColor3 = Color3.fromRGB(58, 58, 58)
+        swatch.BorderColor3 = Color3.fromRGB(48, 48, 48)
         swatch.BorderSizePixel = 1
         swatch.AutoButtonColor = false
-        swatch.Text = ""
+        swatch.Text = " "
+        swatch.TextTransparency = 1
         swatch.ZIndex = z + 3
         swatch.Parent = bar
-        U.addCorner(swatch, 2)
+        addStroke(swatch, Color3.fromRGB(4, 4, 4), 1, 0)
 
         local obj = {
             _trove = trove,
@@ -8628,7 +8900,7 @@ do -- CoreBridge._WidgetsPickers
                         end
                         ca:Apply(cfgPath, transPath, st)
                     end
-                    obj:Connect(obj.AnimationChanged, function(m) ca:SetMode(cfgPath, m) end)
+                    obj:Connect(obj.AnimationChanged, function(mMode) ca:SetMode(cfgPath, mMode) end)
                     obj:Connect(obj.AnimationSpeedChanged, function(s) ca:SetSpeed(cfgPath, s) end)
                     obj:Connect(obj.AnimationBreathingRangeChanged, function(r) ca:SetBreathing(cfgPath, 1 - r.Max / 100, 1 - r.Min / 100) end)
                     obj:Connect(ca:Changed(), syncAnim)
@@ -8640,9 +8912,10 @@ do -- CoreBridge._WidgetsPickers
         return obj
     end
 
+    -- Exact Core.xyz Keybind Badge (Matches BikeForEgg / One-shot KeybindBadge L3878)
     local function createKeybind(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local modes = opts.Modes or { "Always", "Toggle", "Hold" }
         local def = type(opts.Default) == "table" and opts.Default or {}
@@ -8661,13 +8934,14 @@ do -- CoreBridge._WidgetsPickers
             hostFrame.Parent = sec._container
 
             ownLbl = Instance.new("TextLabel")
-            ownLbl.Position = UDim2.fromOffset(2, 0)
+            ownLbl.Position = UDim2.fromOffset(18, 0)
             ownLbl.Size = UDim2.new(1, -110, 1, 0)
             ownLbl.BackgroundTransparency = 1
             ownLbl.Font = Enum.Font.Code
             ownLbl.Text = tostring(opts.Label or "Keybind")
             ownLbl.TextColor3 = Color3.fromRGB(205, 205, 205)
-            ownLbl.TextSize = 11
+            ownLbl.TextStrokeTransparency = 0.5
+            ownLbl.TextSize = 12
             ownLbl.TextXAlignment = Enum.TextXAlignment.Left
             ownLbl.ZIndex = z + 1
             ownLbl.Parent = hostFrame
@@ -8678,33 +8952,31 @@ do -- CoreBridge._WidgetsPickers
         local modeBtn = Instance.new("TextButton")
         modeBtn.Name = "KeyModeBadge"
         modeBtn.LayoutOrder = 21
-        modeBtn.Size = UDim2.fromOffset(18, 14)
-        modeBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        modeBtn.Size = UDim2.fromOffset(14, 16)
+        modeBtn.BackgroundTransparency = 1
         modeBtn.AutoButtonColor = false
         modeBtn.Font = Enum.Font.Code
         modeBtn.Text = string.sub(tostring(initMode), 1, 1)
-        modeBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
-        modeBtn.TextSize = 9
+        modeBtn.TextColor3 = Color3.fromRGB(115, 115, 115)
+        modeBtn.TextStrokeTransparency = 0.5
+        modeBtn.TextSize = 10
         modeBtn.ZIndex = z + 3
         modeBtn.Parent = bar
-        U.addCorner(modeBtn, 3)
-        U.addStroke(modeBtn, Color3.fromRGB(48, 48, 48), 1, 0)
 
         local keyBtn = Instance.new("TextButton")
         keyBtn.Name = "KeyBadge"
         keyBtn.LayoutOrder = 22
-        keyBtn.Size = UDim2.fromOffset(44, 14)
+        keyBtn.Size = UDim2.fromOffset(28, 16)
         keyBtn.AutomaticSize = Enum.AutomaticSize.X
-        keyBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        keyBtn.BackgroundTransparency = 1
         keyBtn.AutoButtonColor = false
         keyBtn.Font = Enum.Font.Code
-        keyBtn.Text = "[" .. CoreBridge._KeybindHUD.FormatKey(initKey) .. "]"
+        keyBtn.Text = initKey and ("[" .. CoreBridge._KeybindHUD.FormatKey(initKey) .. "]") or "[...]"
         keyBtn.TextColor3 = initKey and Theme.Accent or Color3.fromRGB(130, 130, 130)
-        keyBtn.TextSize = 9
+        keyBtn.TextStrokeTransparency = 0.5
+        keyBtn.TextSize = 11
         keyBtn.ZIndex = z + 3
         keyBtn.Parent = bar
-        U.addCorner(keyBtn, 3)
-        U.addStroke(keyBtn, Color3.fromRGB(48, 48, 48), 1, 0)
 
         local obj = {
             _trove = trove,
@@ -8726,6 +8998,7 @@ do -- CoreBridge._WidgetsPickers
             _toggleState = false,
             _heldState = false,
         }
+        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
 
         local function syncBadgeText()
             modeBtn.Text = string.sub(tostring(obj.Value.Mode or "T"), 1, 1)
@@ -8734,8 +9007,9 @@ do -- CoreBridge._WidgetsPickers
                 keyBtn.Text = "[...]"
                 keyBtn.TextColor3 = Theme.White
             else
-                keyBtn.Text = "[" .. CoreBridge._KeybindHUD.FormatKey(obj.Value.Key) .. "]"
-                keyBtn.TextColor3 = obj.Value.Key and Theme.Accent or Color3.fromRGB(130, 130, 130)
+                local k = obj.Value.Key
+                keyBtn.Text = k and ("[" .. CoreBridge._KeybindHUD.FormatKey(k) .. "]") or "[...]"
+                keyBtn.TextColor3 = k and Theme.Accent or Color3.fromRGB(130, 130, 130)
             end
         end
 
@@ -8860,8 +9134,6 @@ do -- CoreBridge._WidgetsPickers
             end
         end)
 
-        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
-
         if opts.ConfigMap ~= nil then
             local config = sec._menu and sec._menu:GetConfig()
             local cm = opts.ConfigMap
@@ -8914,30 +9186,32 @@ do -- CoreBridge._WidgetsPickers
 
     local function createSkinChanger(sec, opts)
         opts = opts or {}
-        local z = sec._zBase or 15
+        local z = sec._zBase or 14
         local trove = sec._trove:Extend()
         local h = 232
 
         local root = Instance.new("Frame")
         root.Name = "SkinChangerGrid"
         root.Size = UDim2.new(1, 0, 0, h)
-        root.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+        root.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
         root.BorderColor3 = Color3.fromRGB(48, 48, 48)
         root.BorderSizePixel = 1
         root.ClipsDescendants = true
         root.ZIndex = z
         root.Parent = sec._container
+        addStroke(root, Color3.fromRGB(4, 4, 4), 1, 0)
 
         local scroll = Instance.new("ScrollingFrame")
         scroll.Size = UDim2.fromScale(1, 1)
         scroll.BackgroundTransparency = 1
         scroll.BorderSizePixel = 0
         scroll.ScrollBarThickness = 2
-        scroll.ScrollBarImageColor3 = Theme.Silver
+        scroll.ScrollBarImageColor3 = Theme.Accent
         scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
         scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
         scroll.ZIndex = z + 1
         scroll.Parent = root
+        registerAccentObject(scroll, "ScrollBarImageColor3")
 
         local pad = Instance.new("UIPadding")
         pad.PaddingTop = UDim.new(0, 6)
@@ -8966,8 +9240,9 @@ do -- CoreBridge._WidgetsPickers
         stateLbl.BackgroundTransparency = 1
         stateLbl.Font = Enum.Font.Code
         stateLbl.Text = tostring(opts.State or "Loading...")
-        stateLbl.TextColor3 = Theme.Muted
-        stateLbl.TextSize = 11
+        stateLbl.TextColor3 = Color3.fromRGB(185, 185, 185)
+        stateLbl.TextStrokeTransparency = 0.5
+        stateLbl.TextSize = 12
         stateLbl.TextWrapped = true
         stateLbl.ZIndex = z + 4
         stateLbl.Parent = stateFrame
@@ -8975,17 +9250,20 @@ do -- CoreBridge._WidgetsPickers
         local clearBtn = Instance.new("TextButton")
         clearBtn.AnchorPoint = Vector2.new(0.5, 0.5)
         clearBtn.Position = UDim2.fromScale(0.5, 0.68)
-        clearBtn.Size = UDim2.fromOffset(96, 22)
-        clearBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+        clearBtn.Size = UDim2.fromOffset(102, 22)
+        clearBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+        clearBtn.BorderColor3 = Color3.fromRGB(4, 4, 4)
+        clearBtn.BorderSizePixel = 1
         clearBtn.AutoButtonColor = false
         clearBtn.Font = Enum.Font.Code
         clearBtn.Text = "Clear Search"
-        clearBtn.TextColor3 = Theme.White
-        clearBtn.TextSize = 10
+        clearBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+        clearBtn.TextStrokeTransparency = 0.5
+        clearBtn.TextSize = 11
         clearBtn.Visible = false
         clearBtn.ZIndex = z + 4
         clearBtn.Parent = stateFrame
-        U.addStroke(clearBtn, Color3.fromRGB(64, 64, 64), 1, 0)
+        addStroke(clearBtn, Color3.fromRGB(48, 48, 48), 1, 0)
 
         local obj = {
             _trove = trove,
@@ -9002,6 +9280,7 @@ do -- CoreBridge._WidgetsPickers
             _clearAction = nil,
             _token = 0,
         }
+        WC.addCommonMethods(obj, root, nil)
 
         local stateMessages = {
             Loading = "Loading catalog...",
@@ -9047,9 +9326,8 @@ do -- CoreBridge._WidgetsPickers
             for _, t in ipairs(self._tiles) do
                 local sel = (self.Value == t.Item.Name)
                 t.Stroke.Color = sel and Theme.Accent or Color3.fromRGB(48, 48, 48)
-                t.Stroke.Thickness = sel and 1.5 or 1
-                t.Frame.BackgroundColor3 = sel and Color3.fromRGB(24, 24, 24) or Color3.fromRGB(16, 16, 16)
-                t.Title.TextColor3 = sel and Theme.White or Theme.Silver
+                t.Frame.BackgroundColor3 = sel and Color3.fromRGB(26, 26, 26) or Color3.fromRGB(18, 18, 18)
+                t.Title.TextColor3 = sel and Theme.Accent or Color3.fromRGB(220, 220, 220)
             end
         end
 
@@ -9079,21 +9357,22 @@ do -- CoreBridge._WidgetsPickers
                     if self._token ~= tok then return end
                     local tile = Instance.new("TextButton")
                     tile.LayoutOrder = idx
-                    tile.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
-                    tile.BorderSizePixel = 0
+                    tile.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+                    tile.BorderColor3 = Color3.fromRGB(4, 4, 4)
+                    tile.BorderSizePixel = 1
                     tile.AutoButtonColor = false
                     tile.Text = ""
                     tile.ClipsDescendants = true
                     tile.ZIndex = z + 2
                     tile.Parent = scroll
-                    U.addCorner(tile, 4)
-                    local st = U.addStroke(tile, Color3.fromRGB(48, 48, 48), 1, 0)
+                    local st = addStroke(tile, Color3.fromRGB(48, 48, 48), 1, 0)
 
                     local preview = Instance.new("Frame")
                     preview.Position = UDim2.fromOffset(4, 4)
                     preview.Size = UDim2.new(1, -8, 1, -24)
                     preview.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-                    preview.BorderSizePixel = 0
+                    preview.BorderColor3 = Color3.fromRGB(36, 36, 36)
+                    preview.BorderSizePixel = 1
                     preview.ClipsDescendants = true
                     preview.ZIndex = z + 2
                     preview.Parent = tile
@@ -9122,8 +9401,9 @@ do -- CoreBridge._WidgetsPickers
                     tLbl.BackgroundTransparency = 1
                     tLbl.Font = Enum.Font.Code
                     tLbl.Text = tostring(item.Name)
-                    tLbl.TextColor3 = Theme.Silver
-                    tLbl.TextSize = 9
+                    tLbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+                    tLbl.TextStrokeTransparency = 0.5
+                    tLbl.TextSize = 10
                     tLbl.TextTruncate = Enum.TextTruncate.AtEnd
                     tLbl.ZIndex = z + 3
                     tLbl.Parent = tile
@@ -9157,7 +9437,6 @@ do -- CoreBridge._WidgetsPickers
         end
 
         obj:SetState(obj.State)
-        WC.addCommonMethods(obj, root, nil)
         WC.bindControl(sec, trove, obj, opts, false)
         return obj
     end
@@ -9320,7 +9599,11 @@ do -- CoreBridge.CreateMenuAdapter
         function adapter:AddIconStrip(o) return WP.createDropdown(self, o, false) end
         function adapter:AddViewport() return { SetModel = function() end, OnRealized = function() end, SetDistance = function() end, SetRotation = function() end, SetVisible = function() end, Destroy = function() end } end
         function adapter:SetVisible(v)
-            if sec._wrapper then sec._wrapper.Visible = (v == true) end
+            if sec._wrapper then
+                local vis = (v == true)
+                pcall(function() sec._wrapper:SetAttribute("CoreExplicitVisible", vis) end)
+                sec._wrapper.Visible = vis
+            end
         end
         function adapter:Connect(sig, fn)
             if sig and fn then self._trove:Connect(sig, fn) end
