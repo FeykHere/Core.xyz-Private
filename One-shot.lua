@@ -13097,7 +13097,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 13. MAIN HUB LAUNCHER (KEYLESS DIRECT BOOT)
+-- 13. MAIN HUB LAUNCHER
 --------------------------------------------------------------------------------
 local function launchMainHub()
     State.isAuthorized = true
@@ -13127,7 +13127,19 @@ local function launchMainHub()
         State.loadConfigByName(autoCfg)
     end
 
-    notify("Core.xyz", "Core.xyz loaded (Keyless Mode)! Press RightShift or click the top pill to toggle.", 5)
+    task.spawn(function()
+        local gameName = "One Shot"
+        pcall(function()
+            local mps = safeGetService("MarketplaceService")
+            if mps then
+                local info = mps:GetProductInfo(game.PlaceId)
+                if type(info) == "table" and type(info.Name) == "string" and info.Name ~= "" then
+                    gameName = info.Name
+                end
+            end
+        end)
+        notify("Core.xyz", "Core XYZ | " .. gameName .. " Loaded Successfully!", 5)
+    end)
 end
 
 --------------------------------------------------------------------------------
