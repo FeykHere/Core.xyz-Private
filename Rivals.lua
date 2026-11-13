@@ -7340,6 +7340,7 @@ do -- CoreBridge._WidgetsCore
             _confirmArmed = false,
             _label = tostring(opts.Label or "Action"),
         }
+        addCommonMethods(obj, btn, btn)
         if opts.OnClick then trove:Connect(obj.Clicked, opts.OnClick) end
 
         function obj:OnClick(fn)
@@ -7382,7 +7383,6 @@ do -- CoreBridge._WidgetsCore
             obj.Clicked:Fire()
         end)
 
-        addCommonMethods(obj, btn, btn)
         return obj
     end
 
@@ -8534,6 +8534,7 @@ do -- CoreBridge._WidgetsPickers
             AnimationBreathingRangeChanged = trove:Add(Signal.new()),
             _onChanged = opts.OnChanged,
         }
+        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
 
         function obj:Set(val, silent)
             if type(val) ~= "table" then return end
@@ -8636,7 +8637,6 @@ do -- CoreBridge._WidgetsPickers
             end
         end
 
-        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
         return obj
     end
 
@@ -8860,6 +8860,8 @@ do -- CoreBridge._WidgetsPickers
             end
         end)
 
+        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
+
         if opts.ConfigMap ~= nil then
             local config = sec._menu and sec._menu:GetConfig()
             local cm = opts.ConfigMap
@@ -8907,7 +8909,6 @@ do -- CoreBridge._WidgetsPickers
 
         CoreBridge._KeybindHUD.Register(obj)
         syncBadgeText()
-        WC.addCommonMethods(obj, opts.Row and nil or hostFrame, ownLbl)
         return obj
     end
 
