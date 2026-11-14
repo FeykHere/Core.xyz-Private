@@ -240,10 +240,12 @@ local ConfigState = {
 
     -- Silent Aim
     SilentAim = false,
+    SilentTeamCheck = true,
+    SilentWallCheck = false,
     SilentHitChance = 100,
     SilentHitpart = "Head", -- "Random" | "Head" | "Torso"
     SilentShowFOV = false,
-    SilentFOVRadius = 160,
+    SilentFOVRadius = 135,
     SilentFovVisualMode = "Still", -- "Still" | "Gradient" | "Rainbow" | "Pulse"
     SilentFovColor = Color3.fromRGB(255, 90, 120),
     SilentFovGradientColor = Color3.fromRGB(65, 45, 70),
@@ -921,8 +923,14 @@ do
     ScreenGui.Parent = guiParent
     UI.ScreenGui = ScreenGui
 
-    local OverlayContainer = Instance.new("Folder")
+    local OverlayContainer = Instance.new("Frame")
     OverlayContainer.Name = "Overlays"
+    OverlayContainer.Size = UDim2.fromScale(1, 1)
+    OverlayContainer.Position = UDim2.fromScale(0, 0)
+    OverlayContainer.BackgroundTransparency = 1
+    OverlayContainer.BorderSizePixel = 0
+    OverlayContainer.Active = false
+    OverlayContainer.ZIndex = 2
     OverlayContainer.Parent = ScreenGui
     UI.OverlayContainer = OverlayContainer
 
@@ -931,34 +939,49 @@ do
     HighlightContainer.Parent = ScreenGui
     UI.HighlightContainer = HighlightContainer
 
-    -- Live-Animated Single-Ring FOV Circle (No Tick Markers)
+    -- Circle 1: Aimbot FOV Circle (Parented directly to ScreenGui so it always renders cleanly)
     local FovCircle = Instance.new("Frame")
-    FovCircle.Name = "FOVCircle"
+    FovCircle.Name = "AimbotFOVCircle"
     FovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
     FovCircle.Position = UDim2.fromScale(0.5, 0.5)
-    FovCircle.Size = UDim2.fromOffset(ConfigState.FOVRadius * 2, ConfigState.FOVRadius * 2)
+    FovCircle.Size = UDim2.fromOffset((ConfigState.FOVRadius or 180) * 2, (ConfigState.FOVRadius or 180) * 2)
     FovCircle.BackgroundTransparency = 1
+    FovCircle.Active = false
     FovCircle.Visible = false
-    FovCircle.ZIndex = 5
-    FovCircle.Parent = OverlayContainer
+    FovCircle.ZIndex = 6
+    FovCircle.Parent = ScreenGui
     addCorner(FovCircle, 9999)
     local FovOuterStroke, FovGradient = addLiveBorder(FovCircle, 1.8, 135, 0.05)
+    if FovOuterStroke then
+        FovOuterStroke.Color = ConfigState.FovColor or Color3.fromRGB(255, 255, 255)
+    end
+    if FovGradient then
+        FovGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+    end
 
     UI.FovCircle = FovCircle
     UI.FovOuterStroke = FovOuterStroke
     UI.FovGradient = FovGradient
 
+    -- Circle 2: Silent Aim FOV Circle (Completely independent 2nd FOV Circle on ScreenGui)
     local SilentFovCircle = Instance.new("Frame")
-    SilentFovCircle.Name = "SilentFOVCircle"
+    SilentFovCircle.Name = "SilentAimFOVCircle"
     SilentFovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
     SilentFovCircle.Position = UDim2.fromScale(0.5, 0.5)
-    SilentFovCircle.Size = UDim2.fromOffset((ConfigState.SilentFOVRadius or 160) * 2, (ConfigState.SilentFOVRadius or 160) * 2)
+    SilentFovCircle.Size = UDim2.fromOffset((ConfigState.SilentFOVRadius or 135) * 2, (ConfigState.SilentFOVRadius or 135) * 2)
     SilentFovCircle.BackgroundTransparency = 1
+    SilentFovCircle.Active = false
     SilentFovCircle.Visible = false
-    SilentFovCircle.ZIndex = 5
-    SilentFovCircle.Parent = OverlayContainer
+    SilentFovCircle.ZIndex = 7
+    SilentFovCircle.Parent = ScreenGui
     addCorner(SilentFovCircle, 9999)
-    local SilentFovOuterStroke, SilentFovGradient = addLiveBorder(SilentFovCircle, 1.8, 135, 0.05)
+    local SilentFovOuterStroke, SilentFovGradient = addLiveBorder(SilentFovCircle, 1.8, 225, 0.05)
+    if SilentFovOuterStroke then
+        SilentFovOuterStroke.Color = ConfigState.SilentFovColor or Color3.fromRGB(255, 90, 120)
+    end
+    if SilentFovGradient then
+        SilentFovGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+    end
 
     UI.SilentFovCircle = SilentFovCircle
     UI.SilentFovOuterStroke = SilentFovOuterStroke
@@ -1174,6 +1197,7 @@ do
     LoaderCard.BackgroundColor3 = Theme.Black
     LoaderCard.BackgroundTransparency = 1
     LoaderCard.ClipsDescendants = true
+    LoaderCard.Visible = false
     LoaderCard.ZIndex = 30
     LoaderCard.Parent = UI.ScreenGui
     addCorner(LoaderCard, 12)
@@ -4423,28 +4447,39 @@ local function getPlayerTeamName(player)
     if not player then
         return nil
     end
+    -- Check Knife Duels Player & Character Attributes (@Team, @TeamId, @DuelTeam)
+    local okAttr, attrTeam = pcall(function()
+        local t = player:GetAttribute("Team") or player:GetAttribute("TeamId") or player:GetAttribute("DuelTeam")
+        if (not t or t == "") and player.Character then
+            t = player.Character:GetAttribute("Team") or player.Character:GetAttribute("TeamId")
+        end
+        return t
+    end)
+    if okAttr and type(attrTeam) == "string" and attrTeam ~= "" and attrTeam ~= "None" and attrTeam ~= "FFA" and attrTeam ~= "Lobby" then
+        return attrTeam
+    end
     local t = player.Team
     if not t then
         return nil
     end
     if type(t) == "string" then
-        return t ~= "" and t or nil
+        return (t ~= "" and t ~= "None" and t ~= "FFA" and t ~= "Lobby") and t or nil
     end
     local ok, name = pcall(function()
         return t.Name
     end)
-    if ok and type(name) == "string" and name ~= "" then
+    if ok and type(name) == "string" and name ~= "" and name ~= "None" and name ~= "FFA" and name ~= "Lobby" then
         return name
     end
     local str = tostring(t)
-    return (str ~= "" and str ~= "nil") and str or nil
+    return (str ~= "" and str ~= "nil" and str ~= "None" and str ~= "FFA" and str ~= "Lobby") and str or nil
 end
 
 local function isKnifeDuelsCharacterAlive(char)
     if not char or not char.Parent then
         return false
     end
-    if char:GetAttribute("DuelEliminated") == true or char:GetAttribute("DuelCharacterInvisible") == true or char:GetAttribute("Dead") == true then
+    if char:GetAttribute("DuelEliminated") == true or char:GetAttribute("DuelCharacterInvisible") == true or char:GetAttribute("Dead") == true or char:GetAttribute("Alive") == false then
         return false
     end
     local attrHP = tonumber(char:GetAttribute("HP"))
@@ -4458,14 +4493,17 @@ local function isKnifeDuelsCharacterAlive(char)
     return true
 end
 
-local function passesTeamCheck(player)
+local function passesTeamCheckWithFlag(player, checkTeamEnabled)
+    if not player or player == LocalPlayer then
+        return false
+    end
     if isPlayerWhitelisted(player) then
         return false
     end
-    if player and player.Character and not isKnifeDuelsCharacterAlive(player.Character) then
+    if player.Character and not isKnifeDuelsCharacterAlive(player.Character) then
         return false
     end
-    if not ConfigState.TeamCheck then
+    if not checkTeamEnabled then
         return true
     end
     local myTeam = getPlayerTeamName(LocalPlayer)
@@ -4473,13 +4511,11 @@ local function passesTeamCheck(player)
     if myTeam and plrTeam and myTeam == plrTeam then
         return false
     end
-    if State.selectedTeams["All"] then
-        return true
-    end
-    if not plrTeam then
-        return false
-    end
-    return State.selectedTeams[plrTeam] == true
+    return true
+end
+
+local function passesTeamCheck(player)
+    return passesTeamCheckWithFlag(player, ConfigState.TeamCheck)
 end
 
 local function syncWhitelistArrayFromMap()
@@ -9549,8 +9585,10 @@ end
 --------------------------------------------------------------------------------
 do
     local ReplicatedStorage = safeGetService("ReplicatedStorage")
+
     local KD = {
         remotesResolved = false,
+        hooksInstalled = false,
         cleanCombatNet = {},
         honeypotRemotes = {},
         ThrowKnifeRE = nil,
@@ -9571,24 +9609,46 @@ do
         NetZombiesPlayAgain = nil,
         NetDeviceType = nil,
         KnifeTexturesFolder = nil,
+        KnifeTypesFolder = nil,
+        ViewmodelsFolder = nil,
         KnifeConfigModule = nil,
+        KnifeConfigTable = nil,
+        KnifePresentationModule = nil,
+        KnifePresentationTable = nil,
+        KnifeAssetResolverModule = nil,
+        KnifeAssetResolverTable = nil,
+        KnifeThrowTrajectoryModule = nil,
+        KnifeThrowTrajectoryTable = nil,
+        AimAssistConfigModule = nil,
+        AimAssistConfigTable = nil,
         KnifeUITemplate = nil,
         ZombiesUpgradeTreeModule = nil,
         KnifeController = nil,
+        AimAssistController = nil,
+        CombatNetClient = nil,
+        ViewmodelController = nil,
+        ViewmodelKnifeVisual = nil,
+        InventoryClient = nil,
+        KnifeUIController = nil,
         MovementConfig = nil,
         silentTargetPart = nil,
         silentTargetPos = nil,
+        silentRandomChoice = "Head",
+        lastSilentRandomAt = 0,
         lastTriggerShotAt = 0,
         lastAutoQueueAt = 0,
         lastAutoVoteAt = 0,
         lastZombieTickAt = 0,
         lastRewardClaimAt = 0,
         lastDeviceSpoofAt = 0,
+        lastUnlockSyncAt = 0,
         tracer3DPool = {},
         trajectoryPool = {},
         zombieEspPool = {},
         selectedSkinName = nil,
         skinConnections = {},
+        cachedCardMeta = {},
+        wrappedFunctions = {},
         origMovementValues = {},
         origFogStart = nil,
         origFogEnd = nil,
@@ -9612,6 +9672,311 @@ do
             return true
         end
         return false
+    end
+
+    local function safeRequireModule(modScript)
+        if not modScript or not modScript:IsA("ModuleScript") then
+            return nil
+        end
+        local ok, res = pcall(require, modScript)
+        if ok and res ~= nil then
+            return res
+        end
+        return nil
+    end
+
+    -- Helper: checks whether Silent Aim should redirect the current knife throw (synced with Hit Chance)
+    local function shouldSilentAimRedirect()
+        if not ConfigState.SilentAim then
+            return false
+        end
+        local part = KD.silentTargetPart
+        local pos = KD.silentTargetPos
+        if not part or not part.Parent or not pos then
+            return false
+        end
+        local chance = math.clamp(tonumber(ConfigState.SilentHitChance) or 100, 1, 100)
+        if chance < 100 and math.random(1, 100) > chance then
+            return false
+        end
+        return true
+    end
+
+    -- Helper: computes ballistic unit direction from any origin Vector3 to KD.silentTargetPos
+    local function getSilentRedirectDirection(originPos)
+        local targetPos = KD.silentTargetPos
+        if not targetPos then
+            return nil
+        end
+        local orig = originPos
+        if typeof(orig) ~= "Vector3" then
+            local cam = workspace.CurrentCamera
+            local myChar = LocalPlayer and LocalPlayer.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            orig = (cam and cam.CFrame.Position) or (myHRP and myHRP.Position) or Vector3.zero
+        end
+        local delta = targetPos - orig
+        if delta.Magnitude < 0.001 then
+            return Vector3.new(0, 0, -1)
+        end
+        return delta.Unit
+    end
+
+    -- Helper: rewrites arguments passed to trajectory / throw / network functions when Silent Aim is active
+    local function rewriteArgsForSilentAim(...)
+        local args = { ... }
+        local n = select("#", ...)
+        if not shouldSilentAimRedirect() then
+            return args, n
+        end
+        local targetPos = KD.silentTargetPos
+        local targetPart = KD.silentTargetPart
+        if not targetPos then
+            return args, n
+        end
+        local cam = workspace.CurrentCamera
+        local myChar = LocalPlayer and LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local fallbackOrigin = (myHRP and (myHRP.Position + Vector3.new(0, 1.4, 0))) or (cam and cam.CFrame.Position) or Vector3.zero
+
+        local firstVecIdx = nil
+        local secondVecIdx = nil
+        for i = 1, n do
+            local v = args[i]
+            local t = typeof(v)
+            if t == "Vector3" then
+                if not firstVecIdx then
+                    firstVecIdx = i
+                elseif not secondVecIdx then
+                    secondVecIdx = i
+                end
+            elseif t == "CFrame" then
+                local pos = v.Position
+                args[i] = CFrame.new(pos, targetPos)
+            elseif t == "Ray" then
+                local orig = v.Origin
+                local mag = v.Direction.Magnitude
+                if mag <= 0.001 then mag = 1 end
+                args[i] = Ray.new(orig, getSilentRedirectDirection(orig) * mag)
+            elseif t == "table" then
+                local okClone, copy = pcall(function()
+                    local c = {}
+                    for k, val in pairs(v) do
+                        c[k] = val
+                    end
+                    local tblOrigin = (typeof(c.Origin) == "Vector3" and c.Origin)
+                        or (typeof(c.origin) == "Vector3" and c.origin)
+                        or (typeof(c.StartPosition) == "Vector3" and c.StartPosition)
+                        or (typeof(c.startPos) == "Vector3" and c.startPos)
+                        or fallbackOrigin
+                    local unitDir = getSilentRedirectDirection(tblOrigin)
+                    if typeof(c.Direction) == "Vector3" then
+                        local mag = c.Direction.Magnitude
+                        c.Direction = (mag > 1.5) and (unitDir * mag) or unitDir
+                    end
+                    if typeof(c.direction) == "Vector3" then
+                        local mag = c.direction.Magnitude
+                        c.direction = (mag > 1.5) and (unitDir * mag) or unitDir
+                    end
+                    if typeof(c.LookVector) == "Vector3" then c.LookVector = unitDir end
+                    if typeof(c.AimDirection) == "Vector3" then c.AimDirection = unitDir end
+                    if typeof(c.aimDirection) == "Vector3" then c.aimDirection = unitDir end
+                    if typeof(c.Velocity) == "Vector3" then
+                        local spd = c.Velocity.Magnitude
+                        c.Velocity = unitDir * (spd > 1 and spd or 135)
+                    end
+                    if typeof(c.velocity) == "Vector3" then
+                        local spd = c.velocity.Magnitude
+                        c.velocity = unitDir * (spd > 1 and spd or 135)
+                    end
+                    if typeof(c.TargetPosition) == "Vector3" then c.TargetPosition = targetPos end
+                    if typeof(c.targetPosition) == "Vector3" then c.targetPosition = targetPos end
+                    if typeof(c.HitPosition) == "Vector3" then c.HitPosition = targetPos end
+                    if typeof(c.hitPosition) == "Vector3" then c.hitPosition = targetPos end
+                    if typeof(c.Position) == "Vector3" and (c.HitPart ~= nil or c.Target ~= nil) then
+                        c.Position = targetPos
+                    end
+                    if typeof(c.CFrame) == "CFrame" then
+                        c.CFrame = CFrame.new(c.CFrame.Position, targetPos)
+                    end
+                    if typeof(c.cframe) == "CFrame" then
+                        c.cframe = CFrame.new(c.cframe.Position, targetPos)
+                    end
+                    if c.HitPart ~= nil and targetPart then c.HitPart = targetPart end
+                    if c.hitPart ~= nil and targetPart then c.hitPart = targetPart end
+                    if c.Target ~= nil and targetPart then c.Target = targetPart end
+                    return c
+                end)
+                if okClone and type(copy) == "table" then
+                    args[i] = copy
+                end
+            end
+        end
+
+        if firstVecIdx and secondVecIdx then
+            local orig = args[firstVecIdx]
+            local secondVec = args[secondVecIdx]
+            local mag = secondVec.Magnitude
+            local unitDir = getSilentRedirectDirection(orig)
+            if mag <= 2.5 then
+                args[secondVecIdx] = unitDir * (mag > 0.01 and mag or 1)
+            elseif (secondVec - orig).Magnitude > 2.5 and mag > 250 then
+                args[secondVecIdx] = targetPos
+            else
+                args[secondVecIdx] = unitDir * mag
+            end
+        elseif firstVecIdx and not secondVecIdx then
+            local v = args[firstVecIdx]
+            local mag = v.Magnitude
+            if mag <= 2.5 then
+                args[firstVecIdx] = getSilentRedirectDirection(fallbackOrigin) * (mag > 0.01 and mag or 1)
+            else
+                args[firstVecIdx] = targetPos
+            end
+        end
+
+        return args, n
+    end
+
+    -- Wraps all functions inside a module table so Silent Aim rewrites throw trajectory arguments automatically
+    local function hookModuleTableForSilentAim(tbl)
+        if type(tbl) ~= "table" or KD.wrappedFunctions[tbl] then
+            return
+        end
+        KD.wrappedFunctions[tbl] = true
+        pcall(function()
+            for k, fn in pairs(tbl) do
+                if type(fn) == "function" and not KD.wrappedFunctions[fn] then
+                    local keyLower = string.lower(tostring(k))
+                    if keyLower ~= "init" and keyLower ~= "start" and keyLower ~= "knitinit" and keyLower ~= "knitstart" then
+                        local origFn = fn
+                        local wrapped = function(...)
+                            if ConfigState.SilentAim and KD.silentTargetPos then
+                                local newArgs, argCount = rewriteArgsForSilentAim(...)
+                                return origFn(table.unpack(newArgs, 1, argCount))
+                            end
+                            return origFn(...)
+                        end
+                        KD.wrappedFunctions[origFn] = true
+                        KD.wrappedFunctions[wrapped] = true
+                        pcall(function()
+                            tbl[k] = wrapped
+                        end)
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Installs Silent Aim module & metamethod hooks (NEVER rotates the real camera on screen!)
+    local function installSilentAimHooks()
+        if KD.hooksInstalled then
+            return
+        end
+        KD.hooksInstalled = true
+
+        -- 1. Hook module tables directly (works across 100% of executors)
+        if KD.KnifeThrowTrajectoryTable then
+            hookModuleTableForSilentAim(KD.KnifeThrowTrajectoryTable)
+        end
+        if KD.AimAssistController then
+            hookModuleTableForSilentAim(KD.AimAssistController)
+        end
+        if KD.KnifeController then
+            hookModuleTableForSilentAim(KD.KnifeController)
+        end
+        if KD.CombatNetClient then
+            hookModuleTableForSilentAim(KD.CombatNetClient)
+        end
+
+        -- 2. Hook __namecall & __index if supported by executor
+        local hookmm = (type(hookmetamethod) == "function" and hookmetamethod)
+            or (Env and type(Env.hookmetamethod) == "function" and Env.hookmetamethod)
+        local getnmMethod = (type(getnamecallmethod) == "function" and getnamecallmethod)
+            or (Env and type(Env.getnamecallmethod) == "function" and Env.getnamecallmethod)
+        local chkCaller = (type(checkcaller) == "function" and checkcaller)
+            or (Env and type(Env.checkcaller) == "function" and Env.checkcaller)
+            or function() return false end
+        local getCallScript = (type(getcallingscript) == "function" and getcallingscript)
+            or (Env and type(Env.getcallingscript) == "function" and Env.getcallingscript)
+
+        if hookmm and getnmMethod then
+            pcall(function()
+                local oldNamecall
+                oldNamecall = hookmm(game, "__namecall", function(self, ...)
+                    local method = getnmMethod()
+                    if ConfigState.SilentAim and KD.silentTargetPos and not chkCaller() then
+                        if method == "FireServer" and typeof(self) == "Instance" and self:IsA("RemoteEvent") then
+                            local rName = self.Name
+                            if not isHoneypotName(rName) and not KD.honeypotRemotes[self] then
+                                if self == KD.ThrowKnifeRE or KD.cleanCombatNet[rName] == self or rName == "ThrowKnife" then
+                                    local newArgs, argCount = rewriteArgsForSilentAim(...)
+                                    return oldNamecall(self, table.unpack(newArgs, 1, argCount))
+                                end
+                            end
+                        elseif (method == "ViewportPointToRay" or method == "ScreenPointToRay") and self == workspace.CurrentCamera then
+                            local callerName = ""
+                            if getCallScript then
+                                local okS, scr = pcall(getCallScript)
+                                if okS and scr then callerName = tostring(scr.Name) end
+                            end
+                            if callerName == "" or string.find(callerName, "Knife", 1, true) or string.find(callerName, "Combat", 1, true) or string.find(callerName, "Aim", 1, true) then
+                                if shouldSilentAimRedirect() then
+                                    local origRay = oldNamecall(self, ...)
+                                    if typeof(origRay) == "Ray" then
+                                        local dir = getSilentRedirectDirection(origRay.Origin)
+                                        if dir then
+                                            return Ray.new(origRay.Origin, dir)
+                                        end
+                                    end
+                                end
+                            end
+                        elseif method == "Raycast" and self == workspace then
+                            local callerName = ""
+                            if getCallScript then
+                                local okS, scr = pcall(getCallScript)
+                                if okS and scr then callerName = tostring(scr.Name) end
+                            end
+                            if string.find(callerName, "Knife", 1, true) or string.find(callerName, "Combat", 1, true) or string.find(callerName, "Aim", 1, true) then
+                                if shouldSilentAimRedirect() then
+                                    local rArgs = { ... }
+                                    if typeof(rArgs[1]) == "Vector3" and typeof(rArgs[2]) == "Vector3" then
+                                        local mag = rArgs[2].Magnitude
+                                        local dir = getSilentRedirectDirection(rArgs[1])
+                                        if dir then
+                                            rArgs[2] = dir * (mag > 0.01 and mag or 500)
+                                            return oldNamecall(self, table.unpack(rArgs))
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    return oldNamecall(self, ...)
+                end)
+            end)
+
+            if getCallScript then
+                pcall(function()
+                    local oldIndex
+                    oldIndex = hookmm(game, "__index", function(self, key)
+                        if ConfigState.SilentAim and KD.silentTargetPos and (key == "CFrame" or key == "cframe") and self == workspace.CurrentCamera and not chkCaller() then
+                            local okS, scr = pcall(getCallScript)
+                            local sName = (okS and scr and tostring(scr.Name)) or ""
+                            if sName == "KnifeController" or sName == "AimAssistController" or sName == "KnifeThrowTrajectory" or sName == "CombatNetClient" then
+                                if shouldSilentAimRedirect() then
+                                    local realCF = oldIndex(self, key)
+                                    if typeof(realCF) == "CFrame" then
+                                        return CFrame.new(realCF.Position, KD.silentTargetPos)
+                                    end
+                                end
+                            end
+                        end
+                        return oldIndex(self, key)
+                    end)
+                end)
+            end
+        end
     end
 
     local function resolveKnifeDuelsRemotes()
@@ -9675,13 +10040,10 @@ do
             -- 6. Rewards & Quests Services
             local dailySvc = ReplicatedStorage:FindFirstChild("DailyRewardsService")
             KD.ClaimDailyRF = dailySvc and dailySvc:FindFirstChild("RF") and dailySvc.RF:FindFirstChild("ClaimReward")
-
             local bpSvc = ReplicatedStorage:FindFirstChild("BattlepassService")
             KD.ClaimBattlepassRF = bpSvc and bpSvc:FindFirstChild("RF") and bpSvc.RF:FindFirstChild("ClaimReward")
-
             local likeSvc = ReplicatedStorage:FindFirstChild("LikeRewardService")
             KD.ClaimLikeRF = likeSvc and likeSvc:FindFirstChild("RF") and likeSvc.RF:FindFirstChild("RequestClaim")
-
             local chalSvc = ReplicatedStorage:FindFirstChild("ChallengeService")
             KD.RefreshQuestsRF = chalSvc and chalSvc:FindFirstChild("RF") and chalSvc.RF:FindFirstChild("RefreshBonusQuests")
 
@@ -9705,92 +10067,142 @@ do
                 end
             end
 
-            -- 8. Shared Assets & Modules
-            local shared = ReplicatedStorage:FindFirstChild("Shared")
-            if shared then
-                KD.KnifeTexturesFolder = shared:FindFirstChild("KnifeTextures")
-                KD.KnifeConfigModule = shared:FindFirstChild("KnifeConfig")
-                KD.ZombiesUpgradeTreeModule = shared:FindFirstChild("ZombiesUpgradeTree")
-                local uiFolder = shared:FindFirstChild("UI")
-                KD.KnifeUITemplate = uiFolder and uiFolder:FindFirstChild("KnifeUITemplate")
+            -- 8. ReplicatedStorage.Assets (KnifeTextures, KnifeTypes, Viewmodels, UI.KnifeUITemplate)
+            local assets = ReplicatedStorage:FindFirstChild("Assets")
+            if assets then
+                KD.KnifeTexturesFolder = assets:FindFirstChild("KnifeTextures")
+                KD.KnifeTypesFolder = assets:FindFirstChild("KnifeTypes")
+                KD.ViewmodelsFolder = assets:FindFirstChild("Viewmodels")
+                local assetsUI = assets:FindFirstChild("UI")
+                if assetsUI then
+                    KD.KnifeUITemplate = assetsUI:FindFirstChild("KnifeUITemplate")
+                end
             end
 
-            -- 9. StarterPlayer Controllers (MovementConfig, KnifeController)
+            -- 9. ReplicatedStorage.Shared Modules
+            local shared = ReplicatedStorage:FindFirstChild("Shared")
+            if shared then
+                if not KD.KnifeTexturesFolder then
+                    KD.KnifeTexturesFolder = shared:FindFirstChild("KnifeTextures")
+                end
+                KD.KnifeConfigModule = shared:FindFirstChild("KnifeConfig")
+                KD.KnifePresentationModule = shared:FindFirstChild("KnifePresentation")
+                KD.KnifeAssetResolverModule = shared:FindFirstChild("KnifeAssetResolver")
+                KD.KnifeThrowTrajectoryModule = shared:FindFirstChild("KnifeThrowTrajectory")
+                KD.AimAssistConfigModule = shared:FindFirstChild("AimAssistConfig")
+                KD.ZombiesUpgradeTreeModule = shared:FindFirstChild("ZombiesUpgradeTree")
+
+                KD.KnifeConfigTable = safeRequireModule(KD.KnifeConfigModule)
+                KD.KnifePresentationTable = safeRequireModule(KD.KnifePresentationModule)
+                KD.KnifeAssetResolverTable = safeRequireModule(KD.KnifeAssetResolverModule)
+                KD.KnifeThrowTrajectoryTable = safeRequireModule(KD.KnifeThrowTrajectoryModule)
+                KD.AimAssistConfigTable = safeRequireModule(KD.AimAssistConfigModule)
+
+                if not KD.KnifeUITemplate then
+                    local uiFolder = shared:FindFirstChild("UI")
+                    KD.KnifeUITemplate = uiFolder and uiFolder:FindFirstChild("KnifeUITemplate")
+                end
+            end
+
+            -- 10. StarterPlayer Controllers
             local ps = LocalPlayer and LocalPlayer:FindFirstChild("PlayerScripts")
             local controllers = ps and ps:FindFirstChild("Controllers")
             if controllers then
                 local charCtrl = controllers:FindFirstChild("Character")
                 local movCtrl = charCtrl and charCtrl:FindFirstChild("MovementController")
                 if movCtrl then
-                    local movCfg = movCtrl:FindFirstChild("MovementConfig")
-                    if movCfg and movCfg:IsA("ModuleScript") then
-                        local ok, mod = pcall(require, movCfg)
-                        if ok and type(mod) == "table" then
-                            KD.MovementConfig = mod
-                        end
-                    end
+                    KD.MovementConfig = safeRequireModule(movCtrl:FindFirstChild("MovementConfig"))
                 end
                 local combatCtrl = controllers:FindFirstChild("Combat")
-                local knifeCtrl = combatCtrl and combatCtrl:FindFirstChild("KnifeController")
-                if knifeCtrl and knifeCtrl:IsA("ModuleScript") then
-                    local ok, mod = pcall(require, knifeCtrl)
-                    if ok and type(mod) == "table" then
-                        KD.KnifeController = mod
-                    end
+                if combatCtrl then
+                    KD.KnifeController = safeRequireModule(combatCtrl:FindFirstChild("KnifeController"))
+                    KD.AimAssistController = safeRequireModule(combatCtrl:FindFirstChild("AimAssistController"))
+                    KD.CombatNetClient = safeRequireModule(combatCtrl:FindFirstChild("CombatNetClient"))
+                    KD.ViewmodelController = safeRequireModule(combatCtrl:FindFirstChild("ViewmodelController"))
+                    KD.ViewmodelKnifeVisual = safeRequireModule(combatCtrl:FindFirstChild("ViewmodelKnifeVisual"))
+                end
+                local utilsCtrl = controllers:FindFirstChild("Utils")
+                if utilsCtrl then
+                    KD.InventoryClient = safeRequireModule(utilsCtrl:FindFirstChild("InventoryClient"))
+                end
+                local uiCtrl = controllers:FindFirstChild("UI")
+                if uiCtrl then
+                    KD.KnifeUIController = safeRequireModule(uiCtrl:FindFirstChild("KnifeUIController"))
                 end
             end
 
+            installSilentAimHooks()
             KD.remotesResolved = true
         end)
     end
-
     resolveKnifeDuelsRemotes()
 
     -- Raycast visibility check helper for Silent Aim & TriggerBot
     local function isPartVisibleFromCamera(camera, targetPart, targetChar)
-        if not ConfigState.AimbotWallCheck then
-            return true
+        if not camera or not targetPart then
+            return false
         end
         local ok, res = pcall(function()
             rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
-            local dir = targetPart.Position - camera.CFrame.Position
-            local ray = workspace:Raycast(camera.CFrame.Position, dir.Unit * 999, rayParams)
-            return (ray and ray.Instance and ray.Instance:IsDescendantOf(targetChar)) and true or false
+            local origin = camera.CFrame.Position
+            local dir = targetPart.Position - origin
+            local hit = workspace:Raycast(origin, dir.Unit * math.min(dir.Magnitude + 4, 999), rayParams)
+            if not hit then
+                return true
+            end
+            return (targetChar and hit.Instance and hit.Instance:IsDescendantOf(targetChar)) and true or false
         end)
         return (not ok) or res
     end
 
-    -- Silent Aim Target Finder (Respects SilentFOVRadius, SilentHitpart, and SilentHitChance)
+    -- Silent Aim Target Finder (Respects SilentFOVRadius, SilentHitpart, SilentTeamCheck, and SilentWallCheck)
+    -- NEVER moves camera.CFrame! Only computes KD.silentTargetPart and KD.silentTargetPos for trajectory redirection.
     local function getSilentAimTarget(camera)
         if not camera or not ConfigState.SilentAim then
             return nil, nil
         end
         local bestPart = nil
-        local shortestDist = ConfigState.SilentFOVRadius or 160
+        local shortestDist = tonumber(ConfigState.SilentFOVRadius) or 135
         local vp = camera.ViewportSize
         local center = Vector2.new(vp.X / 2, vp.Y / 2)
+        local checkTeam = (ConfigState.SilentTeamCheck ~= false)
+        local checkWall = (ConfigState.SilentWallCheck == true)
+
+        local now = os.clock()
+        if (now - KD.lastSilentRandomAt) >= 0.25 then
+            KD.lastSilentRandomAt = now
+            KD.silentRandomChoice = (math.random(1, 2) == 1) and "Head" or "Torso"
+        end
+        local hitpartSetting = ConfigState.SilentHitpart or "Head"
+        if hitpartSetting == "Random" then
+            hitpartSetting = KD.silentRandomChoice
+        end
 
         for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and passesTeamCheck(p) and p.Character then
+            if p ~= LocalPlayer and passesTeamCheckWithFlag(p, checkTeam) and p.Character then
                 local char = p.Character
-                local part = resolveCharacterHitpart(char, ConfigState.SilentHitpart)
+                local part = resolveCharacterHitpart(char, hitpartSetting)
                 if part and isKnifeDuelsCharacterAlive(char) then
                     local pos, onScreen = camera:WorldToViewportPoint(part.Position)
                     if onScreen and pos.Z > 0 then
                         local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                        if dist <= shortestDist and isPartVisibleFromCamera(camera, part, char) then
-                            shortestDist = dist
-                            bestPart = part
+                        if dist <= shortestDist then
+                            if (not checkWall) or isPartVisibleFromCamera(camera, part, char) then
+                                shortestDist = dist
+                                bestPart = part
+                            end
                         end
                     end
                 end
             end
         end
-
         if bestPart then
+            local myChar = LocalPlayer and LocalPlayer.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            local originPos = (myHRP and (myHRP.Position + Vector3.new(0, 1.4, 0))) or camera.CFrame.Position
             local predPos = computePredictedAimPosition(
                 bestPart,
-                camera.CFrame.Position,
+                originPos,
                 ConfigState.Prediction ~= false,
                 ConfigState.PredictionAmount or 0.16
             )
@@ -9799,8 +10211,8 @@ do
         return nil, nil
     end
 
-    -- TriggerBot Knife Thrower
-    local function fireKnifeThrow(targetPos)
+    -- TriggerBot Knife Thrower (Throws Knife ONLY — NEVER calls mouse1click() so it never switches Mobile HUD to PC or stabs!)
+    local function fireKnifeThrowOnly(targetPos)
         resolveKnifeDuelsRemotes()
         local myChar = LocalPlayer.Character
         if not myChar or not isKnifeDuelsCharacterAlive(myChar) then
@@ -9811,28 +10223,85 @@ do
             return
         end
 
-        if KD.KnifeController then
+        local prevSilentPos = KD.silentTargetPos
+        local prevSilentAim = ConfigState.SilentAim
+        if targetPos and not prevSilentPos then
+            KD.silentTargetPos = targetPos
+        end
+
+        local threwViaGuiOrController = false
+
+        -- Method 1: Fire the in-game MobileControls.Throw button Lua connections directly (getconnections / firesignal)
+        -- Invokes the exact Throw button handler in Lua without generating MouseButton1 in UserInputService!
+        pcall(function()
+            local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+            local mobGui = pgui and pgui:FindFirstChild("MobileControls")
+            local throwBtn = mobGui and mobGui:FindFirstChild("Throw")
+            if throwBtn and throwBtn:IsA("GuiButton") then
+                local getconns = (type(getconnections) == "function" and getconnections)
+                    or (Env and type(Env.getconnections) == "function" and Env.getconnections)
+                local firesig = (type(firesignal) == "function" and firesignal)
+                    or (Env and type(Env.firesignal) == "function" and Env.firesignal)
+                if getconns then
+                    for _, sig in ipairs({ throwBtn.Activated, throwBtn.MouseButton1Down, throwBtn.MouseButton1Click }) do
+                        local okC, list = pcall(getconns, sig)
+                        if okC and type(list) == "table" and #list > 0 then
+                            for _, conn in ipairs(list) do
+                                if conn.Function then
+                                    pcall(conn.Function)
+                                    threwViaGuiOrController = true
+                                elseif conn.Fire then
+                                    pcall(function() conn:Fire() end)
+                                    threwViaGuiOrController = true
+                                end
+                            end
+                        end
+                    end
+                    task.delay(0.04, function()
+                        pcall(function()
+                            for _, conn in ipairs(getconns(throwBtn.MouseButton1Up)) do
+                                if conn.Function then pcall(conn.Function) elseif conn.Fire then pcall(function() conn:Fire() end) end
+                            end
+                        end)
+                    end)
+                elseif firesig then
+                    pcall(firesig, throwBtn.MouseButton1Down)
+                    pcall(firesig, throwBtn.Activated)
+                    task.delay(0.04, function()
+                        pcall(firesig, throwBtn.MouseButton1Up)
+                    end)
+                    threwViaGuiOrController = true
+                end
+            end
+        end)
+
+        -- Method 2: Invoke KnifeController throw methods directly if present
+        if not threwViaGuiOrController and KD.KnifeController and type(KD.KnifeController) == "table" then
             pcall(function()
-                if type(KD.KnifeController.ThrowKnife) == "function" then
-                    KD.KnifeController:ThrowKnife(targetPos)
-                elseif type(KD.KnifeController.Throw) == "function" then
-                    KD.KnifeController:Throw(targetPos)
+                for _, methodName in ipairs({ "ThrowKnife", "Throw", "RequestThrow", "StartThrow", "PerformThrow", "FireThrow" }) do
+                    local fn = KD.KnifeController[methodName]
+                    if type(fn) == "function" then
+                        pcall(fn, KD.KnifeController, targetPos)
+                        threwViaGuiOrController = true
+                        break
+                    end
                 end
             end)
         end
 
-        local envClick = (type(mouse1click) == "function" and mouse1click) or (Env and type(Env.mouse1click) == "function" and Env.mouse1click)
-        if envClick then
-            pcall(envClick)
-        end
-
+        -- Method 3: Direct ThrowKnife RemoteEvent fallback with origin + ballistic direction
         if KD.ThrowKnifeRE and targetPos then
             pcall(function()
                 local cam = workspace.CurrentCamera
-                local origin = (cam and cam.CFrame.Position) or (myChar.PrimaryPart and myChar.PrimaryPart.Position) or Vector3.zero
+                local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+                local origin = (myHRP and (myHRP.Position + Vector3.new(0, 1.4, 0))) or (cam and cam.CFrame.Position) or Vector3.zero
                 local dir = (targetPos - origin).Unit
                 KD.ThrowKnifeRE:FireServer(origin, dir)
             end)
+        end
+
+        if not prevSilentAim then
+            KD.silentTargetPos = prevSilentPos
         end
     end
 
@@ -9943,18 +10412,15 @@ do
             return
         end
         ensureTrajectoryPool()
-
         local startPos = myHRP.Position + Vector3.new(0, 1.4, 0)
         local aimDir = camera.CFrame.LookVector
         if ConfigState.SilentAim and KD.silentTargetPos then
             aimDir = (KD.silentTargetPos - startPos).Unit
         end
-
         local speed = 135
         local gravity = Vector3.new(0, -28, 0)
         local totalDuration = math.clamp(tonumber(ConfigState.TrajectoryTime) or 0.45, 0.1, 1.0)
         local col = ConfigState.TrajectoryColor or Color3.fromRGB(110, 175, 255)
-
         local prevPos = startPos
         for i = 1, TRAJECTORY_SEGMENTS do
             local t = (i / TRAJECTORY_SEGMENTS) * totalDuration
@@ -10032,7 +10498,6 @@ do
             end
             return
         end
-
         local seen = {}
         local candidates = {}
         for _, folderName in ipairs({ "Zombies", "Enemies", "Mobs", "NPCs" }) do
@@ -10052,7 +10517,6 @@ do
                 end
             end
         end
-
         for _, zModel in ipairs(candidates) do
             local hrp = zModel:FindFirstChild("HumanoidRootPart") or zModel.PrimaryPart
             local hum = zModel:FindFirstChildOfClass("Humanoid")
@@ -10073,7 +10537,6 @@ do
                 end
             end
         end
-
         for model, entry in pairs(KD.zombieEspPool) do
             if not seen[model] then
                 if entry and entry.Frame then
@@ -10107,11 +10570,9 @@ do
                     KD.origAtmosDensity = atmos.Density
                 end
             end
-
             if ConfigState.TimeEnabled then
                 Lighting.ClockTime = math.clamp(tonumber(ConfigState.TimeOfDay) or 14, 0, 24)
             end
-
             if ConfigState.NoFog then
                 Lighting.FogStart = 100000
                 Lighting.FogEnd = 100000
@@ -10127,13 +10588,11 @@ do
                     atmos.Density = KD.origAtmosDensity
                 end
             end
-
             if ConfigState.NoShadows then
                 Lighting.GlobalShadows = false
             elseif KD.origGlobalShadows ~= nil then
                 Lighting.GlobalShadows = KD.origGlobalShadows
             end
-
             if ConfigState.Fullbright then
                 Lighting.Brightness = 2.5
                 Lighting.Ambient = Color3.fromRGB(255, 255, 255)
@@ -10175,7 +10634,102 @@ do
         end)
     end
 
-    -- Client-Side Unlock All Knife Skins (Populates PlayerGui.Knives & Equips onto Viewmodel + Character)
+    ----------------------------------------------------------------------------
+    -- FIX 5: CLIENT-SIDE UNLOCK ALL KNIFE SKINS (IN-GAME INVENTORY POPULATOR)
+    -- Populates all 110+ skins from ReplicatedStorage.Assets.KnifeTextures &
+    -- ReplicatedStorage.Shared.KnifeConfig directly into
+    -- PlayerGui.Knives.Frame.Container.ScrollingFrame using the native Template,
+    -- and equips any clicked skin onto the player's Viewmodel & Character!
+    ----------------------------------------------------------------------------
+    local WEAPON_SUFFIXES = {
+        { suffix = "DualDaggers", display = "Dual Daggers", model = "DualDaggers" },
+        { suffix = "Butterfly", display = "Butterfly", model = "Butterfly" },
+        { suffix = "Karambit", display = "Karambit", model = "Karambit" },
+        { suffix = "Skeleton", display = "Skeleton", model = "Skeleton" },
+        { suffix = "Bayonet", display = "Bayonet", model = "Bayonet" },
+        { suffix = "Pitchfork", display = "Pitchfork", model = "Pitchfork" },
+        { suffix = "Katana", display = "Katana", model = "Katana" },
+        { suffix = "Scythe", display = "Scythe", model = "Scythe" },
+        { suffix = "Sickle", display = "Sickle", model = "Sickle" },
+        { suffix = "Kukri", display = "Kukri", model = "Kukri" },
+        { suffix = "Bowie", display = "Bowie", model = "Bowie" },
+    }
+
+    local function parseSkinIdDetails(skinId)
+        local s = tostring(skinId or "Default")
+        if KD.cachedCardMeta[s] then
+            return KD.cachedCardMeta[s]
+        end
+        local skinTitle = s
+        local weaponDisplay = "Knife"
+        local weaponModel = "Default"
+        for _, entry in ipairs(WEAPON_SUFFIXES) do
+            local suf = entry.suffix
+            if #s > #suf and string.sub(s, -#suf) == suf then
+                weaponDisplay = entry.display
+                weaponModel = entry.model
+                local rawPrefix = string.sub(s, 1, #s - #suf)
+                skinTitle = string.gsub(rawPrefix, "(%l)(%u)", "%1 %2")
+                break
+            elseif s == suf then
+                weaponDisplay = entry.display
+                weaponModel = entry.model
+                skinTitle = "Vanilla"
+                break
+            end
+        end
+        if type(KD.KnifeConfigTable) == "table" then
+            pcall(function()
+                local cfg = KD.KnifeConfigTable[s] or (type(KD.KnifeConfigTable.Knives) == "table" and KD.KnifeConfigTable.Knives[s])
+                if type(cfg) == "table" then
+                    skinTitle = tostring(cfg.DisplayName or cfg.TextureName or cfg.SkinName or cfg.Name or skinTitle)
+                    weaponDisplay = tostring(cfg.KnifeType or cfg.WeaponType or cfg.Type or weaponDisplay)
+                end
+            end)
+        end
+        local meta = {
+            skinTitle = skinTitle,
+            weaponDisplay = weaponDisplay,
+            weaponModel = weaponModel,
+            image = "",
+        }
+        KD.cachedCardMeta[s] = meta
+        return meta
+    end
+
+    local function scanExistingGuiCardsForMeta()
+        pcall(function()
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            if not pgui then return end
+            for _, guiName in ipairs({ "Knives", "Shop", "Battlepass", "ZombiesEvent", "DailyRewards" }) do
+                local sgui = pgui:FindFirstChild(guiName)
+                if sgui then
+                    for _, desc in ipairs(sgui:GetDescendants()) do
+                        if desc:IsA("GuiButton") and desc.Name == "Button" then
+                            local kId = desc:GetAttribute("KnifeId")
+                            if type(kId) == "string" and kId ~= "" then
+                                local card = desc.Parent
+                                local texLbl = card and card:FindFirstChild("TextureType")
+                                local typeLbl = card and card:FindFirstChild("KnifeType")
+                                local imgLbl = desc:FindFirstChild("ImageLabel")
+                                local existing = parseSkinIdDetails(kId)
+                                if texLbl and texLbl:IsA("TextLabel") and texLbl.Text ~= "" then
+                                    existing.skinTitle = texLbl.Text
+                                end
+                                if typeLbl and typeLbl:IsA("TextLabel") and typeLbl.Text ~= "" then
+                                    existing.weaponDisplay = typeLbl.Text
+                                end
+                                if imgLbl and imgLbl:IsA("ImageLabel") and imgLbl.Image ~= "" then
+                                    existing.image = imgLbl.Image
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
     local function applySkinToKnifeModel(knifeModel, skinName)
         if not knifeModel or not skinName then
             return
@@ -10189,7 +10743,6 @@ do
         if not skinAsset then
             return
         end
-
         pcall(function()
             knifeModel:SetAttribute("KnifeId", skinName)
             for _, part in ipairs(knifeModel:GetDescendants()) do
@@ -10202,12 +10755,38 @@ do
                     if skinAsset:IsA("SurfaceAppearance") then
                         skinAsset:Clone().Parent = part
                     elseif skinAsset:IsA("Folder") or skinAsset:IsA("Model") then
-                        local surf = skinAsset:FindFirstChildOfClass("SurfaceAppearance")
-                        if surf then
-                            surf:Clone().Parent = part
+                        local specific = skinAsset:FindFirstChild(part.Name)
+                        if specific and specific:IsA("SurfaceAppearance") then
+                            specific:Clone().Parent = part
+                        else
+                            local surf = skinAsset:FindFirstChildOfClass("SurfaceAppearance")
+                            if surf then
+                                surf:Clone().Parent = part
+                            end
                         end
                     elseif skinAsset:IsA("Texture") or skinAsset:IsA("Decal") then
                         skinAsset:Clone().Parent = part
+                    end
+                end
+            end
+        end)
+    end
+
+    local function updateInventoryEquippedCheckmarks(selectedSkinId)
+        pcall(function()
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            local knivesGui = pgui and pgui:FindFirstChild("Knives")
+            local frame = knivesGui and knivesGui:FindFirstChild("Frame")
+            local container = frame and frame:FindFirstChild("Container")
+            local scroll = container and container:FindFirstChild("ScrollingFrame")
+            if not scroll then return end
+            for _, card in ipairs(scroll:GetChildren()) do
+                if card:IsA("Frame") and card.Name ~= "Template" then
+                    local btn = card:FindFirstChild("Button")
+                    local eqFrame = btn and btn:FindFirstChild("Equipped")
+                    if btn and eqFrame and eqFrame:IsA("GuiObject") then
+                        local kId = btn:GetAttribute("KnifeId")
+                        eqFrame.Visible = (kId == selectedSkinId)
                     end
                 end
             end
@@ -10221,6 +10800,16 @@ do
         KD.selectedSkinName = skinName
         pcall(function()
             LocalPlayer:SetAttribute("EquippedKnife", skinName)
+            updateInventoryEquippedCheckmarks(skinName)
+
+            if type(KD.ViewmodelKnifeVisual) == "table" then
+                for _, fnName in ipairs({ "ApplyKnifeSkin", "UpdateKnife", "SetKnife", "Apply" }) do
+                    if type(KD.ViewmodelKnifeVisual[fnName]) == "function" then
+                        pcall(KD.ViewmodelKnifeVisual[fnName], KD.ViewmodelKnifeVisual, skinName)
+                    end
+                end
+            end
+
             local myChar = LocalPlayer.Character
             if myChar then
                 local eqKnife = myChar:FindFirstChild("EquippedKnife")
@@ -10228,11 +10817,13 @@ do
                     applySkinToKnifeModel(eqKnife, skinName)
                 end
             end
+
             local cam = workspace.CurrentCamera
             if cam then
                 for _, child in ipairs(cam:GetChildren()) do
                     if child:IsA("Model") then
-                        applySkinToKnifeModel(child, skinName)
+                        local vmKnife = child:FindFirstChild("Knife") or child
+                        applySkinToKnifeModel(vmKnife, skinName)
                     end
                 end
             end
@@ -10242,79 +10833,159 @@ do
     State.syncUnlockAllSkins = function(enabled)
         resolveKnifeDuelsRemotes()
         if not enabled then
+            pcall(function()
+                local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+                local knivesGui = pgui and pgui:FindFirstChild("Knives")
+                local frame = knivesGui and knivesGui:FindFirstChild("Frame")
+                local container = frame and frame:FindFirstChild("Container")
+                local scroll = container and container:FindFirstChild("ScrollingFrame")
+                if scroll then
+                    for _, ch in ipairs(scroll:GetChildren()) do
+                        if ch:IsA("Frame") and string.find(ch.Name, "^stack|unlock:") then
+                            ch:Destroy()
+                        end
+                    end
+                end
+            end)
             return
         end
-        pcall(function()
-            local texFolder = KD.KnifeTexturesFolder
-            if not texFolder then
-                return
-            end
 
+        pcall(function()
+            scanExistingGuiCardsForMeta()
+
+            local skinMap = {}
             local allSkins = {}
-            for _, item in ipairs(texFolder:GetChildren()) do
-                table.insert(allSkins, item.Name)
+            if KD.KnifeTexturesFolder then
+                for _, item in ipairs(KD.KnifeTexturesFolder:GetChildren()) do
+                    if not skinMap[item.Name] then
+                        skinMap[item.Name] = true
+                        table.insert(allSkins, item.Name)
+                    end
+                end
+            end
+            if type(KD.KnifeConfigTable) == "table" then
+                local srcTbl = type(KD.KnifeConfigTable.Knives) == "table" and KD.KnifeConfigTable.Knives or KD.KnifeConfigTable
+                for k, v in pairs(srcTbl) do
+                    if type(k) == "string" and type(v) == "table" and not skinMap[k] then
+                        skinMap[k] = true
+                        table.insert(allSkins, k)
+                    end
+                end
             end
             table.sort(allSkins)
 
-            -- Populate PlayerGui.Knives.Frame.Container.ScrollingFrame so clicking any skin in inventory equips it!
-            local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
             local knivesGui = pgui and pgui:FindFirstChild("Knives")
             local frame = knivesGui and knivesGui:FindFirstChild("Frame")
             local container = frame and frame:FindFirstChild("Container")
             local scroll = container and container:FindFirstChild("ScrollingFrame")
 
             if scroll then
-                local sampleTemplate = KD.KnifeUITemplate
+                local sampleTemplate = scroll:FindFirstChild("Template") or KD.KnifeUITemplate
                 if not sampleTemplate then
                     for _, ch in ipairs(scroll:GetChildren()) do
-                        if ch:IsA("GuiObject") then
+                        if ch:IsA("Frame") then
                             sampleTemplate = ch
                             break
                         end
                     end
                 end
 
-                for _, skinName in ipairs(allSkins) do
-                    local existingCard = scroll:FindFirstChild(skinName) or scroll:FindFirstChild("KD_Skin_" .. skinName)
-                    if not existingCard and sampleTemplate then
-                        local ok, card = pcall(function()
-                            return sampleTemplate:Clone()
-                        end)
-                        if ok and card then
-                            card.Name = "KD_Skin_" .. skinName
-                            card.Visible = true
-                            for _, desc in ipairs(card:GetDescendants()) do
-                                if desc:IsA("TextLabel") then
-                                    if desc.Name == "Name" or desc.Name == "Title" or desc.Name == "KnifeName" or desc.Text ~= "" then
-                                        desc.Text = skinName
-                                    end
+                if sampleTemplate then
+                    for idx, skinName in ipairs(allSkins) do
+                        local stackKey = "stack|unlock:" .. skinName
+                        local existingCard = scroll:FindFirstChild(stackKey)
+                        if not existingCard then
+                            for _, ch in ipairs(scroll:GetChildren()) do
+                                local b = ch:IsA("Frame") and ch:FindFirstChild("Button")
+                                if b and b:GetAttribute("KnifeId") == skinName and ch.Name ~= "Template" then
+                                    existingCard = ch
+                                    break
                                 end
                             end
-                            card.Parent = scroll
-                            existingCard = card
                         end
-                    end
 
-                    if existingCard and not KD.skinConnections[existingCard] then
-                        local btn = existingCard:IsA("GuiButton") and existingCard or existingCard:FindFirstChildWhichIsA("GuiButton", true)
-                        if btn then
-                            KD.skinConnections[existingCard] = btn.Activated:Connect(function()
-                                equipUnlockedSkin(skinName)
-                                notify("Knife Duels", "Equipped Skin: " .. tostring(skinName), 2)
+                        if not existingCard then
+                            local ok, card = pcall(function()
+                                return sampleTemplate:Clone()
                             end)
+                            if ok and card then
+                                local meta = parseSkinIdDetails(skinName)
+                                card.Name = stackKey
+                                card.Visible = true
+                                card.LayoutOrder = 100 + idx
+                                pcall(function()
+                                    card:SetAttribute("UsesCentralizedKnifeUITemplate", true)
+                                end)
+
+                                local texLbl = card:FindFirstChild("TextureType")
+                                if texLbl and texLbl:IsA("TextLabel") then
+                                    texLbl.Text = meta.skinTitle
+                                    texLbl.Visible = true
+                                end
+
+                                local typeLbl = card:FindFirstChild("KnifeType")
+                                if typeLbl and typeLbl:IsA("TextLabel") then
+                                    typeLbl.Text = meta.weaponDisplay
+                                    typeLbl.Visible = true
+                                end
+
+                                local btn = card:FindFirstChild("Button")
+                                if btn and btn:IsA("GuiButton") then
+                                    pcall(function()
+                                        btn:SetAttribute("CanEquip", true)
+                                        btn:SetAttribute("KnifeAnchorUuid", "unlock_" .. skinName)
+                                        btn:SetAttribute("KnifeId", skinName)
+                                        btn:SetAttribute("KnifeOwnedQuantity", 1)
+                                        btn:SetAttribute("KnifeStackKey", stackKey)
+                                        btn:SetAttribute("KnifeUuid", "unlock_" .. skinName)
+                                        btn:SetAttribute("SourceMenu", "Knives")
+                                    end)
+                                    local imgLbl = btn:FindFirstChild("ImageLabel")
+                                    if imgLbl and imgLbl:IsA("ImageLabel") and meta.image ~= "" then
+                                        imgLbl.Image = meta.image
+                                    end
+                                    local eqFrame = btn:FindFirstChild("Equipped")
+                                    if eqFrame and eqFrame:IsA("GuiObject") then
+                                        eqFrame.Visible = (KD.selectedSkinName == skinName)
+                                    end
+                                end
+
+                                if type(KD.KnifePresentationTable) == "table" then
+                                    pcall(function()
+                                        for _, fnName in ipairs({ "ApplyToCard", "ApplyKnifeCard", "ConfigureCard", "DecorateCard" }) do
+                                            if type(KD.KnifePresentationTable[fnName]) == "function" then
+                                                pcall(KD.KnifePresentationTable[fnName], card, skinName)
+                                                break
+                                            end
+                                        end
+                                    end)
+                                end
+
+                                card.Parent = scroll
+                                existingCard = card
+                            end
+                        end
+
+                        if existingCard and not KD.skinConnections[existingCard] then
+                            local btn = existingCard:FindFirstChild("Button") or (existingCard:IsA("GuiButton") and existingCard) or existingCard:FindFirstChildWhichIsA("GuiButton", true)
+                            if btn then
+                                KD.skinConnections[existingCard] = btn.Activated:Connect(function()
+                                    equipUnlockedSkin(skinName)
+                                    notify("Unlock All", "Equipped: " .. tostring(skinName), 2)
+                                end)
+                                btn.MouseButton1Click:Connect(function()
+                                    if KD.selectedSkinName ~= skinName then
+                                        equipUnlockedSkin(skinName)
+                                        notify("Unlock All", "Equipped: " .. tostring(skinName), 2)
+                                    end
+                                end)
+                            end
                         end
                     end
                 end
             end
 
-            if not KD.selectedSkinName and #allSkins > 0 then
-                local currentAttr = LocalPlayer:GetAttribute("EquippedKnife")
-                if type(currentAttr) == "string" and currentAttr ~= "" and currentAttr ~= "Default" then
-                    KD.selectedSkinName = currentAttr
-                else
-                    KD.selectedSkinName = allSkins[1]
-                end
-            end
             if KD.selectedSkinName then
                 equipUnlockedSkin(KD.selectedSkinName)
             end
@@ -10341,24 +11012,24 @@ do
 
     -- Frame-Rate Render Pass Hook (Silent Aim FOV, Silent Aim Target, TriggerBot, Trajectory, Zombie ESP)
     State.runKnifeDuelsRenderPass = function(camera, safeDt, animClock)
-        -- 1. Silent Aim FOV Circle Update
+        -- 1. Silent Aim FOV Circle Update (Independent 2nd FOV Circle: UI.SilentFovCircle)
         if UI.SilentFovCircle then
             local showSilent = (ConfigState.SilentShowFOV == true)
             if UI.SilentFovCircle.Visible ~= showSilent then
                 UI.SilentFovCircle.Visible = showSilent
             end
             if showSilent and UI.SilentFovOuterStroke then
-                local rad = ConfigState.SilentFOVRadius or 160
+                local rad = tonumber(ConfigState.SilentFOVRadius) or 135
                 UI.SilentFovCircle.Size = UDim2.fromOffset(rad * 2, rad * 2)
                 local mode = ConfigState.SilentFovVisualMode or "Still"
                 local baseCol = ConfigState.SilentFovColor or Color3.fromRGB(255, 90, 120)
                 if mode == "Rainbow" then
-                    local h = (animClock * 0.45) % 1
+                    local h = ((animClock * 0.45) + 0.25) % 1
                     local c1 = hsvToColor3(h, 0.9, 1)
                     local c2 = hsvToColor3((h + 0.33) % 1, 0.9, 1)
                     local c3 = hsvToColor3((h + 0.66) % 1, 0.9, 1)
                     UI.SilentFovOuterStroke.Color = c1
-                    UI.SilentFovOuterStroke.Thickness = 1.6
+                    UI.SilentFovOuterStroke.Thickness = 1.6 + 0.35 * math.sin(animClock * 4.2)
                     if UI.SilentFovGradient then
                         UI.SilentFovGradient.Color = ColorSequence.new({
                             ColorSequenceKeypoint.new(0.0, c1),
@@ -10366,10 +11037,10 @@ do
                             ColorSequenceKeypoint.new(1.0, c3),
                         })
                     end
-                elseif mode == "Gradient" or mode == "Gardiant" then
+                elseif mode == "Gradient" or mode == "Gardiant" or mode == "Gradiant" then
                     local edgeCol = ConfigState.SilentFovGradientColor or Color3.fromRGB(65, 45, 70)
                     UI.SilentFovOuterStroke.Color = Color3.fromRGB(255, 255, 255)
-                    UI.SilentFovOuterStroke.Thickness = 1.6
+                    UI.SilentFovOuterStroke.Thickness = 1.8
                     if UI.SilentFovGradient then
                         UI.SilentFovGradient.Color = ColorSequence.new({
                             ColorSequenceKeypoint.new(0.0, edgeCol),
@@ -10380,16 +11051,16 @@ do
                         })
                     end
                 elseif mode == "Pulse" then
-                    local pulseAlpha = 0.5 + 0.5 * math.sin(animClock * 5.0)
+                    local pulseAlpha = 0.4 + 0.6 * (0.5 + 0.5 * math.sin(animClock * 5.0))
                     local darkCol = Color3.new(baseCol.R * 0.25, baseCol.G * 0.25, baseCol.B * 0.25)
                     UI.SilentFovOuterStroke.Color = darkCol:Lerp(baseCol, pulseAlpha)
-                    UI.SilentFovOuterStroke.Thickness = 1.4 + 1.1 * pulseAlpha
+                    UI.SilentFovOuterStroke.Thickness = 1.3 + 1.2 * pulseAlpha
                     if UI.SilentFovGradient then
                         UI.SilentFovGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
                     end
                 else
                     UI.SilentFovOuterStroke.Color = baseCol
-                    UI.SilentFovOuterStroke.Thickness = 1.6
+                    UI.SilentFovOuterStroke.Thickness = 1.8
                     if UI.SilentFovGradient then
                         UI.SilentFovGradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
                     end
@@ -10397,23 +11068,17 @@ do
             end
         end
 
-        -- 2. Silent Aim Target Resolution
-        if ConfigState.SilentAim then
+        -- 2. Silent Aim Target Resolution (NEVER touches camera.CFrame!)
+        if ConfigState.SilentAim and camera then
             local sPart, sPos = getSilentAimTarget(camera)
             KD.silentTargetPart = sPart
             KD.silentTargetPos = sPos
-            if sPart and sPos and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                local chance = tonumber(ConfigState.SilentHitChance) or 100
-                if math.random(1, 100) <= chance then
-                    camera.CFrame = CFrame.new(camera.CFrame.Position, sPos)
-                end
-            end
         else
             KD.silentTargetPart = nil
             KD.silentTargetPos = nil
         end
 
-        -- 3. TriggerBot (Throws Knife after Delay when target is in crosshair)
+        -- 3. TriggerBot (Auto-Throws Knife ONLY when enemy enters crosshair ray/cone; NEVER calls mouse1click)
         if ConfigState.TriggerBot and camera then
             local now = os.clock()
             local delaySec = math.clamp(tonumber(ConfigState.TriggerBotDelay) or 0.15, 0.1, 1.0)
@@ -10424,7 +11089,7 @@ do
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= LocalPlayer and passesTeamCheck(p) and p.Character then
                         local char = p.Character
-                        local part = resolveCharacterHitpart(char, ConfigState.AimbotHitpart)
+                        local part = resolveCharacterHitpart(char, ConfigState.AimbotHitpart or "Head")
                         if part and isKnifeDuelsCharacterAlive(char) then
                             local screenPt, onScreen = camera:WorldToViewportPoint(part.Position)
                             if onScreen and screenPt.Z > 0 then
@@ -10439,7 +11104,7 @@ do
                 end
                 if triggerTargetPos then
                     KD.lastTriggerShotAt = now
-                    fireKnifeThrow(triggerTargetPos)
+                    fireKnifeThrowOnly(triggerTargetPos)
                 end
             end
         end
@@ -10494,7 +11159,7 @@ do
             end
         end
 
-        -- 3. Instant Vault (Zero-delay ledge clearance when vaulting or approaching waist-high obstacles)
+        -- 3. Instant Vault
         if ConfigState.InstantVault and myHRP and myHum then
             if KD.MovementConfig then
                 pcall(function()
@@ -10516,7 +11181,7 @@ do
             end
         end
 
-        -- 4. Bhop (Auto-Jump on ground contact while moving + air-strafe velocity boost)
+        -- 4. Bhop
         if ConfigState.Bhop and myHRP and myHum then
             if myHum.MoveDirection.Magnitude > 0.05 then
                 local st = myHum:GetState()
@@ -10568,7 +11233,7 @@ do
             end
         end
 
-        -- 7. Zombies Automation (Auto-Vote Skip Wave, Auto Upgrade Tree Nodes, Auto Respawn)
+        -- 7. Zombies Automation
         if (ConfigState.AutoVoteSkipWave or ConfigState.AutoUpgradeTree or ConfigState.AutoRespawnZombies) and (now - KD.lastZombieTickAt) >= 1.8 then
             KD.lastZombieTickAt = now
             resolveKnifeDuelsRemotes()
@@ -10638,11 +11303,28 @@ do
             end)
         end
 
-        -- 9. Unlock All Re-application on EquippedKnife / Viewmodel
-        if ConfigState.UnlockAll and KD.selectedSkinName then
-            local eqKnife = char:FindFirstChild("EquippedKnife")
-            if eqKnife and eqKnife:GetAttribute("KnifeId") ~= KD.selectedSkinName then
-                applySkinToKnifeModel(eqKnife, KD.selectedSkinName)
+        -- 9. Unlock All Periodic Sync & Re-application on EquippedKnife / Viewmodel
+        if ConfigState.UnlockAll then
+            if (now - KD.lastUnlockSyncAt) >= 2.0 then
+                KD.lastUnlockSyncAt = now
+                State.syncUnlockAllSkins(true)
+            end
+            if KD.selectedSkinName then
+                local eqKnife = char and char:FindFirstChild("EquippedKnife")
+                if eqKnife and eqKnife:GetAttribute("KnifeId") ~= KD.selectedSkinName then
+                    applySkinToKnifeModel(eqKnife, KD.selectedSkinName)
+                end
+                local cam = workspace.CurrentCamera
+                if cam then
+                    for _, child in ipairs(cam:GetChildren()) do
+                        if child:IsA("Model") then
+                            local vmKnife = child:FindFirstChild("Knife") or child
+                            if vmKnife:GetAttribute("KnifeId") ~= KD.selectedSkinName then
+                                applySkinToKnifeModel(vmKnife, KD.selectedSkinName)
+                            end
+                        end
+                    end
+                end
             end
         end
 
@@ -10668,6 +11350,14 @@ do
         end
     end)
 
+    createToggle(aimbotSec, "Team Check", true, function(val)
+        ConfigState.TeamCheck = val
+    end)
+
+    createToggle(aimbotSec, "Wall Check", false, function(val)
+        ConfigState.AimbotWallCheck = val
+    end)
+
     createSlider(aimbotSec, "Smoothness", 0.1, 1.0, 0.5, 0.05, "", function(val)
         ConfigState.Smoothness = val
     end)
@@ -10687,12 +11377,16 @@ do
 
     createToggle(aimbotSec, "Fov Circle", false, function(val)
         ConfigState.ShowFOV = val
-        UI.FovCircle.Visible = val
+        if UI.FovCircle then
+            UI.FovCircle.Visible = val
+        end
     end)
 
     createSlider(aimbotSec, "Fov Size", 30, 500, 180, 5, "px", function(val)
         ConfigState.FOVRadius = val
-        UI.FovCircle.Size = UDim2.fromOffset(val * 2, val * 2)
+        if UI.FovCircle then
+            UI.FovCircle.Size = UDim2.fromOffset(val * 2, val * 2)
+        end
     end)
 
     createDropdown(aimbotSec, "Fov Style", { "Still", "Gradient", "Rainbow", "Pulse" }, "Still", function(opt)
@@ -10708,6 +11402,18 @@ do
 
     createToggle(silentSec, "Silent Aim", false, function(val)
         ConfigState.SilentAim = val
+        if not val and State.KD then
+            State.KD.silentTargetPart = nil
+            State.KD.silentTargetPos = nil
+        end
+    end)
+
+    createToggle(silentSec, "Team Check", true, function(val)
+        ConfigState.SilentTeamCheck = val
+    end)
+
+    createToggle(silentSec, "Wall Check", false, function(val)
+        ConfigState.SilentWallCheck = val
     end)
 
     createSlider(silentSec, "Hit Chance", 1, 100, 100, 1, "%", function(val)
@@ -10725,7 +11431,7 @@ do
         end
     end)
 
-    createSlider(silentSec, "Fov Size", 30, 500, 160, 5, "px", function(val)
+    createSlider(silentSec, "Fov Size", 30, 500, 135, 5, "px", function(val)
         ConfigState.SilentFOVRadius = val
         if UI.SilentFovCircle then
             UI.SilentFovCircle.Size = UDim2.fromOffset(val * 2, val * 2)
@@ -12441,6 +13147,8 @@ do
             UI.FovCircle.Visible = ConfigState.ShowFOV
         end
         if UI.FovCircle.Visible and UI.FovOuterStroke then
+            local aimRad = tonumber(ConfigState.FOVRadius) or 180
+            UI.FovCircle.Size = UDim2.fromOffset(aimRad * 2, aimRad * 2)
             UI.FovOuterStroke.Thickness = 1.6 + 0.45 * math.sin(animClock * 4.2)
             local fovMode = ConfigState.FovVisualMode or "Still"
             local baseCol = ConfigState.FovColor or Theme.White
@@ -12696,74 +13404,10 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 15. START-TO-END ANIMATED BOOT SEQUENCE (5-STEP SAAS LOADER -> KEYLESS DIRECT LAUNCH)
+-- 15. INSTANT HUB LAUNCH (LOADING SCREEN REMOVED)
 --------------------------------------------------------------------------------
-task.spawn(function()
-    local targetScale = getResponsiveScale()
-    tween(UI.LoaderCard, SmoothTween, { BackgroundTransparency = 0.03 })
-    tween(UI.LoaderStroke, SmoothTween, { Transparency = 0.08 })
-    tween(UI.LoaderScale, SpringTween, { Scale = targetScale })
-    if UI.LoaderTopBar then tween(UI.LoaderTopBar, SmoothTween, { BackgroundTransparency = 0 }) end
-    if UI.LoaderStageBadge then tween(UI.LoaderStageBadge, SmoothTween, { BackgroundTransparency = 0.15, TextTransparency = 0 }) end
-    if UI.LoaderSubDetail then tween(UI.LoaderSubDetail, SmoothTween, { TextTransparency = 0 }) end
-    if UI.LoaderFooterHint then tween(UI.LoaderFooterHint, SmoothTween, { TextTransparency = 0 }) end
-    tween(UI.EmblemOuterStroke, SmoothTween, { Transparency = 0.08 })
-    tween(UI.EmblemInnerStroke, SmoothTween, { Transparency = 0.25 })
-    tween(UI.EmblemCore, SmoothTween, { BackgroundTransparency = 0 })
-    tween(UI.LoaderTitle, SmoothTween, { TextTransparency = 0 })
-    tween(UI.LoaderStatus, SmoothTween, { TextTransparency = 0 })
-    tween(UI.LoaderBarBg, SmoothTween, { BackgroundTransparency = 0 })
-    tween(UI.LoaderPercent, SmoothTween, { TextTransparency = 0 })
-
-    local stages = {
-        { pct = 20, tag = "STAGE 1 / 5  ·  CORE", text = "Starting Core.xyz...", sub = "Initializing runtime environment & core modules..." },
-        { pct = 40, tag = "STAGE 2 / 5  ·  RENDER", text = "Preparing graphics & overlay engine...", sub = "Pre-allocating 3D ESP, skeleton & chams pools..." },
-        { pct = 60, tag = "STAGE 3 / 5  ·  WEATHER", text = "Optimizing frame pacing & memory pool...", sub = "Warming up 3D volumetric weather & audio nodes..." },
-        { pct = 80, tag = "STAGE 4 / 5  ·  CONFIG", text = "Loading saved profile & preferences...", sub = "Syncing themes, keybinds & performance profiles..." },
-        { pct = 100, tag = "STAGE 5 / 5  ·  READY", text = "Finalizing workspace...", sub = "All systems ready · Launching Main Hub..." },
-    }
-
-    local currentPct = 0
-    for idx, stage in ipairs(stages) do
-        UI.LoaderStatus.Text = stage.text
-        if UI.LoaderStageBadge then
-            UI.LoaderStageBadge.Text = stage.tag
-        end
-        if UI.LoaderSubDetail then
-            UI.LoaderSubDetail.Text = stage.sub
-        end
-        tween(UI.LoaderBarFill, SlowTween, { Size = UDim2.fromScale(stage.pct / 100, 1) })
-        while currentPct < stage.pct do
-            currentPct = math.min(stage.pct, currentPct + 1)
-            UI.LoaderPercent.Text = tostring(currentPct) .. "%"
-            task.wait(0.042)
-        end
-        task.wait(0.38)
-    end
-
-    task.wait(0.45)
-
-    tween(UI.LoaderScale, FastTween, { Scale = targetScale * 0.9 })
-    tween(UI.LoaderCard, FastTween, { BackgroundTransparency = 1 })
-    tween(UI.LoaderStroke, FastTween, { Transparency = 1 })
-    if UI.LoaderTopBar then tween(UI.LoaderTopBar, FastTween, { BackgroundTransparency = 1 }) end
-    if UI.LoaderStageBadge then tween(UI.LoaderStageBadge, FastTween, { BackgroundTransparency = 1, TextTransparency = 1 }) end
-    if UI.LoaderSubDetail then tween(UI.LoaderSubDetail, FastTween, { TextTransparency = 1 }) end
-    if UI.LoaderFooterHint then tween(UI.LoaderFooterHint, FastTween, { TextTransparency = 1 }) end
-    tween(UI.LoaderTitle, FastTween, { TextTransparency = 1 })
-    tween(UI.LoaderStatus, FastTween, { TextTransparency = 1 })
-    tween(UI.LoaderPercent, FastTween, { TextTransparency = 1 })
-    tween(UI.LoaderBarBg, FastTween, { BackgroundTransparency = 1 })
-    tween(UI.LoaderBarFill, FastTween, { BackgroundTransparency = 1 })
-    tween(UI.EmblemOuterStroke, FastTween, { Transparency = 1 })
-    tween(UI.EmblemInnerStroke, FastTween, { Transparency = 1 })
-    tween(UI.EmblemCore, FastTween, { BackgroundTransparency = 1 })
-    task.wait(0.24)
+if UI.LoaderCard then
     UI.LoaderCard.Visible = false
-
-    -- Launch Main Hub directly (Keyless Mode)
-    launchMainHub()
+end
+launchMainHub()
 end)
-end)
-
-
