@@ -10099,6 +10099,8 @@ do
         BFE_SellPetSelection = { "All" },
         BFE_AutoSellPets = false,
         BFE_AutoBuyBestBike = false,
+        BFE_AutoUpgradeWorldBike = false,
+        BFE_AutoSkipCrystalCinematic = false,
         BFE_AutoBuyBestTrail = false,
         BFE_AutoUpgradeTreadmill = false,
         BFE_AutoUpgradeBase = false,
@@ -10127,24 +10129,60 @@ do
         "Prehistoric",
         "Cosmic",
         "Royal Kingdom",
+        "Crystal Canyon",
     }
 
     local FALLBACK_RARITIES = {
+        "Basic",
         "Common",
         "Uncommon",
         "Rare",
+        "SuperRare",
         "Epic",
+        "Superior",
         "Legendary",
+        "Mythic",
         "Mythical",
+        "Exotic",
         "Divine",
+        "Celestial",
+        "Cosmic",
+        "Eternal",
         "Secret",
+        "BrainrotGod",
         "Exclusive",
+        "Limited",
+        "Rainbow",
         "Halloween",
     }
 
     local MUTATION_FILTER_OPTIONS = {
         "All",
         "Mutated Only",
+        "Golden",
+        "Rainbow",
+        "Silver",
+        "Celestial",
+        "Voidtouched",
+        "Heavenly",
+        "Dawnbound",
+        "Alienlike",
+        "Galactic",
+        "Plasma",
+        "Magma",
+        "Shocked",
+        "Zombified",
+        "Chilled",
+        "Frozen",
+        "Choc",
+        "Wet",
+        "Twisted",
+        "Moonlit",
+        "Bloodlit",
+        "Burnt",
+        "Pollinated",
+        "Honey",
+        "Candy",
         "Gold",
         "Diamond",
         "Bloodmoon",
@@ -10154,6 +10192,45 @@ do
     }
 
     local FALLBACK_EGG_NAMES = {
+        "Pebble",
+        "Embercrest",
+        "Rubyrazor",
+        "Grizzlite",
+        "Copperfist",
+        "Roselotl",
+        "Sapphire Hammerhead",
+        "Crystal Mammoth",
+        "Pebble Egg",
+        "Embercrest Egg",
+        "Rubyrazor Egg",
+        "Grizzlite Egg",
+        "Copperfist Egg",
+        "Roselotl Egg",
+        "Sapphire Hammerhead Egg",
+        "Crystal Hammerhead Egg",
+        "Crystal Mammoth Egg",
+        "Kingmaw",
+        "Ironhowl",
+        "Gravemarch",
+        "Dreadhorn",
+        "Gatehound",
+        "Royal Hippogriff",
+        "Riftscourge",
+        "Crownfang",
+        "Royal Jester",
+        "Sea Knight",
+        "Royal Manta",
+        "Pearl Dragon",
+        "Cloudbreaker",
+        "Soulflare",
+        "Halloween Horse",
+        "Halloween Witch Cat",
+        "Halloween Skeleton Wolf",
+        "Halloween Pumpkin",
+        "Halloween Spider",
+        "Halloween Reaper",
+        "Halloween Ghost",
+        "Halloween Jester",
         "Basic Egg",
         "Forest Egg",
         "Spotted Egg",
@@ -10178,6 +10255,36 @@ do
     }
 
     local FALLBACK_PET_NAMES = {
+        "Pebble",
+        "Embercrest",
+        "Rubyrazor",
+        "Grizzlite",
+        "Copperfist",
+        "Roselotl",
+        "Sapphire Hammerhead",
+        "Crystal Mammoth",
+        "Kingmaw",
+        "Ironhowl",
+        "Gravemarch",
+        "Dreadhorn",
+        "Gatehound",
+        "Royal Hippogriff",
+        "Riftscourge",
+        "Crownfang",
+        "Royal Jester",
+        "Sea Knight",
+        "Royal Manta",
+        "Pearl Dragon",
+        "Cloudbreaker",
+        "Soulflare",
+        "Halloween Horse",
+        "Halloween Witch Cat",
+        "Halloween Skeleton Wolf",
+        "Halloween Pumpkin",
+        "Halloween Spider",
+        "Halloween Reaper",
+        "Halloween Ghost",
+        "Halloween Jester",
         "Bunny",
         "Fox",
         "Deer",
@@ -10592,7 +10699,7 @@ do
                         local hasEggField = (safeRawGet(info, "Egg") ~= nil)
                         local hasEggModel = (eggsModelsFolder ~= nil and eggsModelsFolder:FindFirstChild(k) ~= nil)
 
-                        if hasEggField or hasEggModel then
+                        if hasEggField or hasEggModel or safeRawGet(info, "DisplayName") ~= nil then
                             local rec = {
                                 Id = k,
                                 DisplayName = dispName,
@@ -10605,8 +10712,11 @@ do
                             BFE.EggIdToInfo[k] = rec
                             BFE.EggLookup[k] = k
                             BFE.EggLookup[dispName] = k
+                            BFE.EggLookup[k .. " Egg"] = k
+                            BFE.EggLookup[dispName .. " Egg"] = k
                             BFE.EggLookup[rec.Formatted] = k
-                        elseif safeRawGet(info, "DisplayName") ~= nil or safeRawGet(info, "Icon") ~= nil then
+                        end
+                        if safeRawGet(info, "DisplayName") ~= nil or safeRawGet(info, "Icon") ~= nil or hasEggField or hasEggModel then
                             local rec = {
                                 Id = k,
                                 DisplayName = dispName,
@@ -10700,6 +10810,42 @@ do
                         Name = dispName,
                         RarityNum = maxDropRarity,
                     })
+                end
+            end
+        end
+
+        -- Ensure Crystal Canyon & Royal Kingdom are always present even before streaming in
+        for _, fixedArea in ipairs({ "Crystal Canyon", "Royal Kingdom" }) do
+            if not seenAreaIds[fixedArea] then
+                seenAreaIds[fixedArea] = true
+                table.insert(areaEntries, {
+                    Id = fixedArea,
+                    Name = fixedArea,
+                    RarityNum = (fixedArea == "Crystal Canyon") and 999 or 990,
+                })
+            end
+        end
+
+        -- Also check Workspace.AreaEggSlotsClient for any live AreaId or new Egg attributes
+        local slotsFolderScan = workspace and workspace:FindFirstChild("AreaEggSlotsClient")
+        if slotsFolderScan then
+            for _, mdl in ipairs(slotsFolderScan:GetChildren()) do
+                local aId = mdl:GetAttribute("AreaId")
+                if type(aId) == "string" and aId ~= "" and not seenAreaIds[aId] then
+                    seenAreaIds[aId] = true
+                    table.insert(areaEntries, {
+                        Id = aId,
+                        Name = aId,
+                        RarityNum = 500,
+                    })
+                end
+                local dEgg = mdl:GetAttribute("DisplayName")
+                local dPet = mdl:GetAttribute("PetDisplayName")
+                if type(dPet) == "string" and dPet ~= "" then
+                    BFE.EggLookup[dPet] = dPet
+                    if type(dEgg) == "string" and dEgg ~= "" then
+                        BFE.EggLookup[dEgg] = dPet
+                    end
                 end
             end
         end
@@ -10837,27 +10983,50 @@ do
         return ok
     end
 
+    local function getEggModelWorldPosition(mdl)
+        if not mdl then
+            return nil
+        end
+        local pos = nil
+        pcall(function()
+            if mdl:IsA("BasePart") then
+                pos = mdl.Position
+            else
+                local rootPart = mdl:FindFirstChild("EggRoot") or mdl:FindFirstChild("Hitbox") or mdl.PrimaryPart or mdl:FindFirstChildWhichIsA("BasePart", true)
+                if rootPart and rootPart:IsA("BasePart") then
+                    pos = rootPart.Position
+                else
+                    pos = mdl:GetPivot().Position
+                end
+            end
+        end)
+        return pos
+    end
+
     local function Farm_FindEggModel(uid)
         if type(uid) ~= "string" or uid == "" or not workspace then
             return nil
         end
-        local direct = workspace:FindFirstChild(uid)
-        if direct and (direct:IsA("Model") or direct:IsA("BasePart")) then
-            return direct
-        end
+        local prefixed = string.find(uid, "^AreaEgg_") and uid or ("AreaEgg_" .. uid)
+        local rawUid = string.gsub(uid, "^AreaEgg_", "")
+
         local slotsFolder = workspace:FindFirstChild("AreaEggSlotsClient")
         if slotsFolder then
-            local inSlot = slotsFolder:FindFirstChild(uid)
+            local inSlot = slotsFolder:FindFirstChild(prefixed) or slotsFolder:FindFirstChild(rawUid) or slotsFolder:FindFirstChild(uid)
             if inSlot and (inSlot:IsA("Model") or inSlot:IsA("BasePart")) then
                 return inSlot
             end
         end
         local carriedFolder = workspace:FindFirstChild("GuardCarriedEggsClient")
         if carriedFolder then
-            local inCarried = carriedFolder:FindFirstChild(uid)
+            local inCarried = carriedFolder:FindFirstChild(prefixed) or carriedFolder:FindFirstChild(rawUid) or carriedFolder:FindFirstChild(uid)
             if inCarried and (inCarried:IsA("Model") or inCarried:IsA("BasePart")) then
                 return inCarried
             end
+        end
+        local direct = workspace:FindFirstChild(prefixed) or workspace:FindFirstChild(rawUid) or workspace:FindFirstChild(uid)
+        if direct and (direct:IsA("Model") or direct:IsA("BasePart")) then
+            return direct
         end
         return nil
     end
@@ -10967,14 +11136,22 @@ do
                         end
                         local model = Farm_FindEggModel(uid)
                         if not pos and model then
-                            pcall(function()
-                                pos = model:IsA("BasePart") and model.Position or model:GetPivot().Position
-                            end)
+                            pos = getEggModelWorldPosition(model)
                         end
+                        if model then
+                            local mArea = model:GetAttribute("AreaId")
+                            if (areaId == "" or areaId == "Forest") and type(mArea) == "string" and mArea ~= "" then
+                                areaId = mArea
+                                areaName = BFE.AreasNameById[areaId] or areaId
+                            end
+                        end
+                        local dispEggName = (model and model:GetAttribute("DisplayName")) or cat
+                        local dispPetName = (model and model:GetAttribute("PetDisplayName")) or cat
                         table.insert(list, {
                             Uid = uid,
                             AssetCategory = cat,
-                            DisplayName = cat,
+                            DisplayName = tostring(dispEggName or cat),
+                            PetDisplayName = tostring(dispPetName or cat),
                             RarityName = rName,
                             RarityNumber = rNum,
                             Luck = luck,
@@ -10999,7 +11176,7 @@ do
 
         local filtered = {}
         for _, item in ipairs(allEggs) do
-            local passEgg = allEggsPass or (eggLookup[item.AssetCategory] == true)
+            local passEgg = allEggsPass or (eggLookup[item.AssetCategory] == true) or (eggLookup[item.DisplayName] == true) or (item.PetDisplayName and eggLookup[item.PetDisplayName] == true)
             local passRar = allRarPass or (rarLookup[item.RarityName] == true)
             local passArea = allAreaPass or (areaLookup[item.AreaName] == true) or (areaLookup[item.AreaId] == true)
             local passMut = matchesMutationFilter(item.Mutation)
@@ -11076,6 +11253,30 @@ do
             local char = LocalPlayer and LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local myPos = hrp and hrp.Position
+            -- Scan top-level SmartPromptPart instances in Workspace (New Update CarryAreaEgg Prompt architecture!)
+            if workspace then
+                for _, child in ipairs(workspace:GetChildren()) do
+                    if child.Name == "SmartPromptPart" and child:IsA("BasePart") then
+                        local prompt = child:FindFirstChild("CarryAreaEgg") or child:FindFirstChildOfClass("ProximityPrompt")
+                        if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                            if BFE.promptOrigHold[prompt] == nil then
+                                BFE.promptOrigHold[prompt] = prompt.HoldDuration
+                            end
+                            prompt.HoldDuration = 0
+                            prompt.RequiresLineOfSight = false
+                            if (tonumber(prompt.MaxActivationDistance) or 0) < 32 then
+                                prompt.MaxActivationDistance = 32
+                            end
+                            if myPos and Env.fireproximityprompt and not Farm_IsCarrying() then
+                                if (child.Position - myPos).Magnitude <= 34 then
+                                    pcall(Env.fireproximityprompt, prompt)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
             local containers = {
                 workspace and workspace:FindFirstChild("AreaEggSlotsClient"),
                 workspace and workspace:FindFirstChild("GuardCarriedEggsClient"),
@@ -11197,9 +11398,7 @@ do
 
         local mdl = Farm_FindEggModel(uid)
         if not targetPos and mdl then
-            pcall(function()
-                targetPos = mdl:IsA("BasePart") and mdl.Position or mdl:GetPivot().Position
-            end)
+            targetPos = getEggModelWorldPosition(mdl)
         end
         if not targetPos then
             return false
@@ -11211,6 +11410,7 @@ do
         pcall(function()
             BFE.EggCmds.RequestCarryAreaEgg(uid)
         end)
+        safeInvokeNetwork("Eggs: RequestAreaEggCarry", uid)
         stepInternalFarmFastPrompts(mdl)
 
         local wait1 = os.clock() + 1.0
@@ -11373,6 +11573,27 @@ do
                     end
                 end
             end
+        end
+
+        -- 3. Fallback: Check CrystalBiomeSetup & Known World Coordinates for Crystal Canyon / Royal Kingdom
+        local knownCoords = {
+            ["crystal canyon"] = Vector3.new(4794, 73, -340),
+            ["royal kingdom"] = Vector3.new(4032, 73, -394),
+            ["cosmic"] = Vector3.new(3574, 72, -410),
+            ["prehistoric"] = Vector3.new(3389, 72, -328),
+            ["abyss ocean"] = Vector3.new(2817, 72, -395),
+            ["volcano"] = Vector3.new(2278, 72, -330),
+            ["jungle"] = Vector3.new(1877, 72, -394),
+            ["snow"] = Vector3.new(1492, 72, -312),
+            ["desert"] = Vector3.new(1192, 72, -406),
+            ["lake"] = Vector3.new(944, 72, -321),
+            ["forest"] = Vector3.new(600, 72, -331),
+        }
+        local fallbackVec = knownCoords[lowerZone] or knownCoords[lowerId]
+        if fallbackVec then
+            Farm_Teleport(fallbackVec)
+            notify("Bike for Egg", "Teleported to " .. zoneName .. "!", 2.5)
+            return true
         end
 
         notify("Bike for Egg", "Could not locate zone '" .. zoneName .. "' in Workspace.", 3)
@@ -12213,6 +12434,65 @@ do
         return false
     end
 
+    local function Shop_UpgradeWorldBike()
+        discoverBFEModules(false)
+        pcall(function()
+            if BFE.WorldBikeUpgradeClient and type(BFE.WorldBikeUpgradeClient) == "table" then
+                for _, fnName in ipairs({ "RequestUpgrade", "PurchaseUpgrade", "Upgrade", "TryUpgrade", "BuyNextUpgrade" }) do
+                    local fn = safeRawGet(BFE.WorldBikeUpgradeClient, fnName)
+                    if type(fn) == "function" then
+                        pcall(fn)
+                    end
+                end
+            end
+            if BFE.BikeShopRemote and BFE.BikeShopRemote:IsA("RemoteFunction") then
+                pcall(function()
+                    BFE.BikeShopRemote:InvokeServer("UpgradeWorldBike")
+                end)
+            end
+        end)
+    end
+
+    local function skipCrystalCanyonCinematics(showToast)
+        pcall(function()
+            if not ReplicatedStorage then return end
+            local ccOpen = ReplicatedStorage:FindFirstChild("CrystalCanyonOpening")
+            if ccOpen then
+                local ctrl = ccOpen:FindFirstChild("Control")
+                local ev = ccOpen:FindFirstChild("Event")
+                if ctrl and ctrl:IsA("RemoteEvent") then
+                    pcall(function() ctrl:FireServer("Skip") end)
+                    pcall(function() ctrl:FireServer("Complete") end)
+                end
+                if ev and ev:IsA("RemoteEvent") then
+                    pcall(function() ev:FireServer("Complete") end)
+                end
+            end
+            local cbCin = ReplicatedStorage:FindFirstChild("CrystalBloomCinematic")
+            if cbCin then
+                local ctrl = cbCin:FindFirstChild("Control")
+                local ev = cbCin:FindFirstChild("Event")
+                if ctrl and ctrl:IsA("RemoteEvent") then
+                    pcall(function() ctrl:FireServer("Skip") end)
+                    pcall(function() ctrl:FireServer("Complete") end)
+                end
+                if ev and ev:IsA("RemoteEvent") then
+                    pcall(function() ev:FireServer("Complete") end)
+                end
+            end
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            if pgui then
+                local bloomHud = pgui:FindFirstChild("CrystalBloomHUD")
+                if bloomHud and bloomHud:IsA("ScreenGui") then
+                    bloomHud.Enabled = false
+                end
+            end
+        end)
+        if showToast then
+            notify("Crystal Canyon", "Skipped Crystal Canyon Opening & Crystal Bloom cinematics!", 2.5)
+        end
+    end
+
     local function stepShopAndUpgrades()
         if BFE.isShopTickBusy then
             return
@@ -12221,6 +12501,9 @@ do
         pcall(function()
             if ConfigState.BFE_AutoBuyBestBike then
                 pcall(Shop_BuyAndEquipBestBike)
+            end
+            if ConfigState.BFE_AutoUpgradeWorldBike then
+                pcall(Shop_UpgradeWorldBike)
             end
             if ConfigState.BFE_AutoBuyBestTrail then
                 pcall(Shop_BuyAndEquipBestTrail)
@@ -12258,6 +12541,10 @@ do
                 local royalRem = ReplicatedStorage and ReplicatedStorage:FindFirstChild("RoyalEggRequest")
                 if royalRem and royalRem:IsA("RemoteFunction") then
                     pcall(function() royalRem:InvokeServer() end)
+                end
+                local halEggRem = ReplicatedStorage and ReplicatedStorage:FindFirstChild("HalloweenEggRequest")
+                if halEggRem and halEggRem:IsA("RemoteFunction") then
+                    pcall(function() halEggRem:InvokeServer() end)
                 end
                 local rewardFeatRem = ReplicatedStorage and ReplicatedStorage:FindFirstChild("RewardFeaturesRequest")
                 if rewardFeatRem and rewardFeatRem:IsA("RemoteFunction") then
@@ -12412,6 +12699,7 @@ do
                 local guardAreas = areasRoot and areasRoot:FindFirstChild("GuardAreas")
                 local guardContainers = {
                     guardAreas,
+                    workspace and workspace:FindFirstChild("_Guards"),
                     workspace and workspace:FindFirstChild("GuardAreasClient"),
                     workspace and workspace:FindFirstChild("Guards"),
                 }
@@ -12655,8 +12943,27 @@ do
             teleportToZoneByName("My Plot")
         end)
 
+        createButton(FarmTab, "Teleport to Crystal Canyon (New Dimension)", function()
+            teleportToZoneByName("Crystal Canyon")
+        end)
+
+        createButton(FarmTab, "Teleport to Royal Kingdom", function()
+            teleportToZoneByName("Royal Kingdom")
+        end)
+
         createButton(FarmTab, "Teleport to Lobby / Spawn", function()
             teleportToZoneByName("Lobby / Spawn")
+        end)
+
+        createToggle(FarmTab, "Auto-Skip Crystal Canyon Cinematics", ConfigState.BFE_AutoSkipCrystalCinematic == true, function(val)
+            ConfigState.BFE_AutoSkipCrystalCinematic = val
+            if val then
+                skipCrystalCanyonCinematics(true)
+            end
+        end)
+
+        createButton(FarmTab, "Skip Crystal Canyon & Bloom Cinematics Now", function()
+            skipCrystalCanyonCinematics(true)
         end)
 
         createLabel(FarmTab, "World Esp")
@@ -12895,6 +13202,11 @@ do
             if val then task.spawn(stepShopAndUpgrades) end
         end)
 
+        createToggle(ShopTab, "Auto Upgrade World / Crystal Bike", ConfigState.BFE_AutoUpgradeWorldBike == true, function(val)
+            ConfigState.BFE_AutoUpgradeWorldBike = val
+            if val then task.spawn(stepShopAndUpgrades) end
+        end)
+
         createToggle(ShopTab, "Auto Buy & Equip Best Trail", ConfigState.BFE_AutoBuyBestTrail == true, function(val)
             ConfigState.BFE_AutoBuyBestTrail = val
             if val then task.spawn(stepShopAndUpgrades) end
@@ -13107,8 +13419,11 @@ do
                             BFE.isTreadmillBusy = false
                         end)
                     end
-                    if ConfigState.BFE_AutoBuyBestBike or ConfigState.BFE_AutoBuyBestTrail or ConfigState.BFE_AutoUpgradeTreadmill or ConfigState.BFE_AutoUpgradeBase or ConfigState.BFE_AutoRebirth then
+                    if ConfigState.BFE_AutoBuyBestBike or ConfigState.BFE_AutoUpgradeWorldBike or ConfigState.BFE_AutoBuyBestTrail or ConfigState.BFE_AutoUpgradeTreadmill or ConfigState.BFE_AutoUpgradeBase or ConfigState.BFE_AutoRebirth then
                         task.spawn(stepShopAndUpgrades)
+                    end
+                    if ConfigState.BFE_AutoSkipCrystalCinematic then
+                        pcall(skipCrystalCanyonCinematics, false)
                     end
                 end
 
