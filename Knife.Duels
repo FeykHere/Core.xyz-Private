@@ -9586,80 +9586,6 @@ end
 do
     local ReplicatedStorage = safeGetService("ReplicatedStorage")
 
-    local KD = {
-        remotesResolved = false,
-        hooksInstalled = false,
-        cleanCombatNet = {},
-        honeypotRemotes = {},
-        ThrowKnifeRE = nil,
-        VoteCastRE = nil,
-        VoteSkipRE = nil,
-        PurchaseNodeRF = nil,
-        RequestRespawnRF = nil,
-        UpdateDeviceRE = nil,
-        ClaimDailyRF = nil,
-        ClaimBattlepassRF = nil,
-        ClaimLikeRF = nil,
-        RefreshQuestsRF = nil,
-        NetRequestQueue = nil,
-        NetQueueAgain = nil,
-        NetCancelQueue = nil,
-        NetFfaPlay = nil,
-        NetZombiesPlay = nil,
-        NetZombiesPlayAgain = nil,
-        NetDeviceType = nil,
-        KnifeTexturesFolder = nil,
-        KnifeTypesFolder = nil,
-        ViewmodelsFolder = nil,
-        KnifeConfigModule = nil,
-        KnifeConfigTable = nil,
-        KnifePresentationModule = nil,
-        KnifePresentationTable = nil,
-        KnifeAssetResolverModule = nil,
-        KnifeAssetResolverTable = nil,
-        KnifeThrowTrajectoryModule = nil,
-        KnifeThrowTrajectoryTable = nil,
-        AimAssistConfigModule = nil,
-        AimAssistConfigTable = nil,
-        KnifeUITemplate = nil,
-        ZombiesUpgradeTreeModule = nil,
-        KnifeController = nil,
-        AimAssistController = nil,
-        CombatNetClient = nil,
-        ViewmodelController = nil,
-        ViewmodelKnifeVisual = nil,
-        InventoryClient = nil,
-        KnifeUIController = nil,
-        MovementConfig = nil,
-        silentTargetPart = nil,
-        silentTargetPos = nil,
-        silentRandomChoice = "Head",
-        lastSilentRandomAt = 0,
-        lastTriggerShotAt = 0,
-        lastAutoQueueAt = 0,
-        lastAutoVoteAt = 0,
-        lastZombieTickAt = 0,
-        lastRewardClaimAt = 0,
-        lastDeviceSpoofAt = 0,
-        lastUnlockSyncAt = 0,
-        tracer3DPool = {},
-        trajectoryPool = {},
-        zombieEspPool = {},
-        selectedSkinName = nil,
-        skinConnections = {},
-        cachedCardMeta = {},
-        wrappedFunctions = {},
-        origMovementValues = {},
-        origFogStart = nil,
-        origFogEnd = nil,
-        origAtmosDensity = nil,
-        origGlobalShadows = nil,
-        origBrightness = nil,
-        origAmbient = nil,
-        origOutdoorAmbient = nil,
-    }
-    State.KD = KD
-
     -- Zero-Width Space (\226\128\139) Honeypot Detector & Safe Remote Resolver
     local function isHoneypotName(name)
         if type(name) ~= "string" then
@@ -9674,310 +9600,70 @@ do
         return false
     end
 
-    local function safeRequireModule(modScript)
-        if not modScript or not modScript:IsA("ModuleScript") then
-            return nil
-        end
-        local ok, res = pcall(require, modScript)
-        if ok and res ~= nil then
-            return res
-        end
-        return nil
-    end
-
-    -- Helper: checks whether Silent Aim should redirect the current knife throw (synced with Hit Chance)
-    local function shouldSilentAimRedirect()
-        if not ConfigState.SilentAim then
-            return false
-        end
-        local part = KD.silentTargetPart
-        local pos = KD.silentTargetPos
-        if not part or not part.Parent or not pos then
-            return false
-        end
-        local chance = math.clamp(tonumber(ConfigState.SilentHitChance) or 100, 1, 100)
-        if chance < 100 and math.random(1, 100) > chance then
-            return false
-        end
-        return true
-    end
-
-    -- Helper: computes ballistic unit direction from any origin Vector3 to KD.silentTargetPos
-    local function getSilentRedirectDirection(originPos)
-        local targetPos = KD.silentTargetPos
-        if not targetPos then
-            return nil
-        end
-        local orig = originPos
-        if typeof(orig) ~= "Vector3" then
-            local cam = workspace.CurrentCamera
-            local myChar = LocalPlayer and LocalPlayer.Character
-            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            orig = (cam and cam.CFrame.Position) or (myHRP and myHRP.Position) or Vector3.zero
-        end
-        local delta = targetPos - orig
-        if delta.Magnitude < 0.001 then
-            return Vector3.new(0, 0, -1)
-        end
-        return delta.Unit
-    end
-
-    -- Helper: rewrites arguments passed to trajectory / throw / network functions when Silent Aim is active
-    local function rewriteArgsForSilentAim(...)
-        local args = { ... }
-        local n = select("#", ...)
-        if not shouldSilentAimRedirect() then
-            return args, n
-        end
-        local targetPos = KD.silentTargetPos
-        local targetPart = KD.silentTargetPart
-        if not targetPos then
-            return args, n
-        end
-        local cam = workspace.CurrentCamera
-        local myChar = LocalPlayer and LocalPlayer.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local fallbackOrigin = (myHRP and (myHRP.Position + Vector3.new(0, 1.4, 0))) or (cam and cam.CFrame.Position) or Vector3.zero
-
-        local firstVecIdx = nil
-        local secondVecIdx = nil
-        for i = 1, n do
-            local v = args[i]
-            local t = typeof(v)
-            if t == "Vector3" then
-                if not firstVecIdx then
-                    firstVecIdx = i
-                elseif not secondVecIdx then
-                    secondVecIdx = i
-                end
-            elseif t == "CFrame" then
-                local pos = v.Position
-                args[i] = CFrame.new(pos, targetPos)
-            elseif t == "Ray" then
-                local orig = v.Origin
-                local mag = v.Direction.Magnitude
-                if mag <= 0.001 then mag = 1 end
-                args[i] = Ray.new(orig, getSilentRedirectDirection(orig) * mag)
-            elseif t == "table" then
-                local okClone, copy = pcall(function()
-                    local c = {}
-                    for k, val in pairs(v) do
-                        c[k] = val
-                    end
-                    local tblOrigin = (typeof(c.Origin) == "Vector3" and c.Origin)
-                        or (typeof(c.origin) == "Vector3" and c.origin)
-                        or (typeof(c.StartPosition) == "Vector3" and c.StartPosition)
-                        or (typeof(c.startPos) == "Vector3" and c.startPos)
-                        or fallbackOrigin
-                    local unitDir = getSilentRedirectDirection(tblOrigin)
-                    if typeof(c.Direction) == "Vector3" then
-                        local mag = c.Direction.Magnitude
-                        c.Direction = (mag > 1.5) and (unitDir * mag) or unitDir
-                    end
-                    if typeof(c.direction) == "Vector3" then
-                        local mag = c.direction.Magnitude
-                        c.direction = (mag > 1.5) and (unitDir * mag) or unitDir
-                    end
-                    if typeof(c.LookVector) == "Vector3" then c.LookVector = unitDir end
-                    if typeof(c.AimDirection) == "Vector3" then c.AimDirection = unitDir end
-                    if typeof(c.aimDirection) == "Vector3" then c.aimDirection = unitDir end
-                    if typeof(c.Velocity) == "Vector3" then
-                        local spd = c.Velocity.Magnitude
-                        c.Velocity = unitDir * (spd > 1 and spd or 135)
-                    end
-                    if typeof(c.velocity) == "Vector3" then
-                        local spd = c.velocity.Magnitude
-                        c.velocity = unitDir * (spd > 1 and spd or 135)
-                    end
-                    if typeof(c.TargetPosition) == "Vector3" then c.TargetPosition = targetPos end
-                    if typeof(c.targetPosition) == "Vector3" then c.targetPosition = targetPos end
-                    if typeof(c.HitPosition) == "Vector3" then c.HitPosition = targetPos end
-                    if typeof(c.hitPosition) == "Vector3" then c.hitPosition = targetPos end
-                    if typeof(c.Position) == "Vector3" and (c.HitPart ~= nil or c.Target ~= nil) then
-                        c.Position = targetPos
-                    end
-                    if typeof(c.CFrame) == "CFrame" then
-                        c.CFrame = CFrame.new(c.CFrame.Position, targetPos)
-                    end
-                    if typeof(c.cframe) == "CFrame" then
-                        c.cframe = CFrame.new(c.cframe.Position, targetPos)
-                    end
-                    if c.HitPart ~= nil and targetPart then c.HitPart = targetPart end
-                    if c.hitPart ~= nil and targetPart then c.hitPart = targetPart end
-                    if c.Target ~= nil and targetPart then c.Target = targetPart end
-                    return c
-                end)
-                if okClone and type(copy) == "table" then
-                    args[i] = copy
-                end
-            end
-        end
-
-        if firstVecIdx and secondVecIdx then
-            local orig = args[firstVecIdx]
-            local secondVec = args[secondVecIdx]
-            local mag = secondVec.Magnitude
-            local unitDir = getSilentRedirectDirection(orig)
-            if mag <= 2.5 then
-                args[secondVecIdx] = unitDir * (mag > 0.01 and mag or 1)
-            elseif (secondVec - orig).Magnitude > 2.5 and mag > 250 then
-                args[secondVecIdx] = targetPos
-            else
-                args[secondVecIdx] = unitDir * mag
-            end
-        elseif firstVecIdx and not secondVecIdx then
-            local v = args[firstVecIdx]
-            local mag = v.Magnitude
-            if mag <= 2.5 then
-                args[firstVecIdx] = getSilentRedirectDirection(fallbackOrigin) * (mag > 0.01 and mag or 1)
-            else
-                args[firstVecIdx] = targetPos
-            end
-        end
-
-        return args, n
-    end
-
-    -- Wraps all functions inside a module table so Silent Aim rewrites throw trajectory arguments automatically
-    local function hookModuleTableForSilentAim(tbl)
-        if type(tbl) ~= "table" or KD.wrappedFunctions[tbl] then
-            return
-        end
-        KD.wrappedFunctions[tbl] = true
-        pcall(function()
-            for k, fn in pairs(tbl) do
-                if type(fn) == "function" and not KD.wrappedFunctions[fn] then
-                    local keyLower = string.lower(tostring(k))
-                    if keyLower ~= "init" and keyLower ~= "start" and keyLower ~= "knitinit" and keyLower ~= "knitstart" then
-                        local origFn = fn
-                        local wrapped = function(...)
-                            if ConfigState.SilentAim and KD.silentTargetPos then
-                                local newArgs, argCount = rewriteArgsForSilentAim(...)
-                                return origFn(table.unpack(newArgs, 1, argCount))
-                            end
-                            return origFn(...)
-                        end
-                        KD.wrappedFunctions[origFn] = true
-                        KD.wrappedFunctions[wrapped] = true
-                        pcall(function()
-                            tbl[k] = wrapped
-                        end)
-                    end
-                end
-            end
-        end)
-    end
-
-    -- Installs Silent Aim module & metamethod hooks (NEVER rotates the real camera on screen!)
-    local function installSilentAimHooks()
-        if KD.hooksInstalled then
-            return
-        end
-        KD.hooksInstalled = true
-
-        -- 1. Hook module tables directly (works across 100% of executors)
-        if KD.KnifeThrowTrajectoryTable then
-            hookModuleTableForSilentAim(KD.KnifeThrowTrajectoryTable)
-        end
-        if KD.AimAssistController then
-            hookModuleTableForSilentAim(KD.AimAssistController)
-        end
-        if KD.KnifeController then
-            hookModuleTableForSilentAim(KD.KnifeController)
-        end
-        if KD.CombatNetClient then
-            hookModuleTableForSilentAim(KD.CombatNetClient)
-        end
-
-        -- 2. Hook __namecall & __index if supported by executor
-        local hookmm = (type(hookmetamethod) == "function" and hookmetamethod)
-            or (Env and type(Env.hookmetamethod) == "function" and Env.hookmetamethod)
-        local getnmMethod = (type(getnamecallmethod) == "function" and getnamecallmethod)
-            or (Env and type(Env.getnamecallmethod) == "function" and Env.getnamecallmethod)
-        local chkCaller = (type(checkcaller) == "function" and checkcaller)
-            or (Env and type(Env.checkcaller) == "function" and Env.checkcaller)
-            or function() return false end
-        local getCallScript = (type(getcallingscript) == "function" and getcallingscript)
-            or (Env and type(Env.getcallingscript) == "function" and Env.getcallingscript)
-
-        if hookmm and getnmMethod then
-            pcall(function()
-                local oldNamecall
-                oldNamecall = hookmm(game, "__namecall", function(self, ...)
-                    local method = getnmMethod()
-                    if ConfigState.SilentAim and KD.silentTargetPos and not chkCaller() then
-                        if method == "FireServer" and typeof(self) == "Instance" and self:IsA("RemoteEvent") then
-                            local rName = self.Name
-                            if not isHoneypotName(rName) and not KD.honeypotRemotes[self] then
-                                if self == KD.ThrowKnifeRE or KD.cleanCombatNet[rName] == self or rName == "ThrowKnife" then
-                                    local newArgs, argCount = rewriteArgsForSilentAim(...)
-                                    return oldNamecall(self, table.unpack(newArgs, 1, argCount))
-                                end
-                            end
-                        elseif (method == "ViewportPointToRay" or method == "ScreenPointToRay") and self == workspace.CurrentCamera then
-                            local callerName = ""
-                            if getCallScript then
-                                local okS, scr = pcall(getCallScript)
-                                if okS and scr then callerName = tostring(scr.Name) end
-                            end
-                            if callerName == "" or string.find(callerName, "Knife", 1, true) or string.find(callerName, "Combat", 1, true) or string.find(callerName, "Aim", 1, true) then
-                                if shouldSilentAimRedirect() then
-                                    local origRay = oldNamecall(self, ...)
-                                    if typeof(origRay) == "Ray" then
-                                        local dir = getSilentRedirectDirection(origRay.Origin)
-                                        if dir then
-                                            return Ray.new(origRay.Origin, dir)
-                                        end
-                                    end
-                                end
-                            end
-                        elseif method == "Raycast" and self == workspace then
-                            local callerName = ""
-                            if getCallScript then
-                                local okS, scr = pcall(getCallScript)
-                                if okS and scr then callerName = tostring(scr.Name) end
-                            end
-                            if string.find(callerName, "Knife", 1, true) or string.find(callerName, "Combat", 1, true) or string.find(callerName, "Aim", 1, true) then
-                                if shouldSilentAimRedirect() then
-                                    local rArgs = { ... }
-                                    if typeof(rArgs[1]) == "Vector3" and typeof(rArgs[2]) == "Vector3" then
-                                        local mag = rArgs[2].Magnitude
-                                        local dir = getSilentRedirectDirection(rArgs[1])
-                                        if dir then
-                                            rArgs[2] = dir * (mag > 0.01 and mag or 500)
-                                            return oldNamecall(self, table.unpack(rArgs))
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    return oldNamecall(self, ...)
-                end)
-            end)
-
-            if getCallScript then
-                pcall(function()
-                    local oldIndex
-                    oldIndex = hookmm(game, "__index", function(self, key)
-                        if ConfigState.SilentAim and KD.silentTargetPos and (key == "CFrame" or key == "cframe") and self == workspace.CurrentCamera and not chkCaller() then
-                            local okS, scr = pcall(getCallScript)
-                            local sName = (okS and scr and tostring(scr.Name)) or ""
-                            if sName == "KnifeController" or sName == "AimAssistController" or sName == "KnifeThrowTrajectory" or sName == "CombatNetClient" then
-                                if shouldSilentAimRedirect() then
-                                    local realCF = oldIndex(self, key)
-                                    if typeof(realCF) == "CFrame" then
-                                        return CFrame.new(realCF.Position, KD.silentTargetPos)
-                                    end
-                                end
-                            end
-                        end
-                        return oldIndex(self, key)
-                    end)
-                end)
-            end
-        end
-    end
+    -- Knife Duels Runtime State & Remote Cache (100% Undetected — Zero Metatable Hooks, Zero require(), Zero Raw Combat Remotes)
+    local KD = {
+        remotesResolved = false,
+        honeypotRemotes = {},
+        -- Remotes
+        VoteCastRE = nil,
+        VoteSkipRE = nil,
+        PurchaseNodeRF = nil,
+        RequestRespawnRF = nil,
+        UpdateDeviceRE = nil,
+        ClaimDailyRF = nil,
+        ClaimBattlepassRF = nil,
+        ClaimLikeRF = nil,
+        RefreshQuestsRF = nil,
+        -- Sleitnick Net Remotes
+        NetRequestQueue = nil,
+        NetQueueAgain = nil,
+        NetCancelQueue = nil,
+        NetFfaPlay = nil,
+        NetZombiesPlay = nil,
+        NetZombiesPlayAgain = nil,
+        NetDeviceType = nil,
+        -- Asset Folders (Never required!)
+        KnifeTexturesFolder = nil,
+        KnifeTypesFolder = nil,
+        ViewmodelsFolder = nil,
+        KnifeUITemplate = nil,
+        -- Silent Aim & TriggerBot Runtime State (Undetected Throw-Button Micro-Snap & Restore)
+        silentTargetPart = nil,
+        silentTargetPos = nil,
+        silentSnapTargetPos = nil,
+        silentSnapUntil = 0,
+        silentRestoreCF = nil,
+        boundThrowButton = nil,
+        boundThrowDownConn = nil,
+        boundThrowActConn = nil,
+        boundPCThrowConn = nil,
+        lastTriggerShotAt = 0,
+        lastSilentRandomAt = 0,
+        silentRandomChoice = "Head",
+        -- Pools & Timers
+        tracer3DPool = {},
+        trajectoryPool = {},
+        zombieEspPool = {},
+        lastAutoQueueAt = 0,
+        lastAutoVoteAt = 0,
+        lastZombieTickAt = 0,
+        lastRewardClaimAt = 0,
+        lastDeviceSpoofAt = 0,
+        lastUnlockSyncAt = 0,
+        selectedSkinName = nil,
+        skinConnections = {},
+        cachedCardMeta = {},
+        -- Original Lighting Cache
+        origFogEnd = Lighting and Lighting.FogEnd or 100000,
+        origFogStart = Lighting and Lighting.FogStart or 0,
+        origClockTime = Lighting and Lighting.ClockTime or 14,
+        origBrightness = Lighting and Lighting.Brightness or 2,
+        origGlobalShadows = Lighting and Lighting.GlobalShadows ~= false,
+        origAmbient = Lighting and Lighting.Ambient or Color3.fromRGB(128, 128, 128),
+        origOutdoorAmbient = Lighting and Lighting.OutdoorAmbient or Color3.fromRGB(128, 128, 128),
+        origAtmosDensity = nil,
+    }
+    State.KD = KD
 
     local function resolveKnifeDuelsRemotes()
         if KD.remotesResolved then
@@ -9987,40 +9673,26 @@ do
             if not ReplicatedStorage then
                 return
             end
-            -- 1. CombatNet filtering (excludes \u200b zero-width-space honeypots)
-            local combatNet = ReplicatedStorage:FindFirstChild("CombatNet")
-            if combatNet then
-                for _, child in ipairs(combatNet:GetChildren()) do
-                    if child:IsA("RemoteEvent") then
-                        if isHoneypotName(child.Name) then
-                            KD.honeypotRemotes[child] = true
-                        else
-                            KD.cleanCombatNet[child.Name] = child
-                        end
+
+            -- 1. Identify Honeypot Remotes in Knit Services (Never touch or hook them)
+            local knitServices = ReplicatedStorage:FindFirstChild("Packages")
+                and ReplicatedStorage.Packages:FindFirstChild("_Index")
+            if knitServices then
+                for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+                    if (desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction")) and isHoneypotName(desc.Name) then
+                        KD.honeypotRemotes[desc] = true
                     end
                 end
             end
 
-            -- 2. CombatService Remotes (Explicitly blacklist ReportHit & ReportGlassHit)
-            local combatSvc = ReplicatedStorage:FindFirstChild("CombatService")
-            local combatRE = combatSvc and combatSvc:FindFirstChild("RE")
-            if combatRE then
-                for _, child in ipairs(combatRE:GetChildren()) do
-                    if isHoneypotName(child.Name) then
-                        KD.honeypotRemotes[child] = true
-                    end
-                end
-                KD.ThrowKnifeRE = combatRE:FindFirstChild("ThrowKnife")
-            end
-
-            -- 3. MapVotingService
+            -- 2. MapVotingService
             local mapVotingSvc = ReplicatedStorage:FindFirstChild("MapVotingService")
             local mapVotingRE = mapVotingSvc and mapVotingSvc:FindFirstChild("RE")
             if mapVotingRE then
                 KD.VoteCastRE = mapVotingRE:FindFirstChild("VoteCast")
             end
 
-            -- 4. ZombiesService
+            -- 3. ZombiesService
             local zombiesSvc = ReplicatedStorage:FindFirstChild("ZombiesService")
             if zombiesSvc then
                 local zRE = zombiesSvc:FindFirstChild("RE")
@@ -10030,14 +9702,14 @@ do
                 KD.RequestRespawnRF = zRF and zRF:FindFirstChild("RequestRespawn")
             end
 
-            -- 5. DeviceService
+            -- 4. DeviceService
             local deviceSvc = ReplicatedStorage:FindFirstChild("DeviceService")
             local deviceRE = deviceSvc and deviceSvc:FindFirstChild("RE")
             if deviceRE then
                 KD.UpdateDeviceRE = deviceRE:FindFirstChild("UpdateDevice")
             end
 
-            -- 6. Rewards & Quests Services
+            -- 5. Rewards & Quests Services
             local dailySvc = ReplicatedStorage:FindFirstChild("DailyRewardsService")
             KD.ClaimDailyRF = dailySvc and dailySvc:FindFirstChild("RF") and dailySvc.RF:FindFirstChild("ClaimReward")
             local bpSvc = ReplicatedStorage:FindFirstChild("BattlepassService")
@@ -10047,7 +9719,7 @@ do
             local chalSvc = ReplicatedStorage:FindFirstChild("ChallengeService")
             KD.RefreshQuestsRF = chalSvc and chalSvc:FindFirstChild("RF") and chalSvc.RF:FindFirstChild("RefreshBonusQuests")
 
-            -- 7. Sleitnick Net Package Remotes
+            -- 6. Sleitnick Net Package Remotes
             local pkgs = ReplicatedStorage:FindFirstChild("Packages")
             local idx = pkgs and pkgs:FindFirstChild("_Index")
             if idx then
@@ -10067,7 +9739,7 @@ do
                 end
             end
 
-            -- 8. ReplicatedStorage.Assets (KnifeTextures, KnifeTypes, Viewmodels, UI.KnifeUITemplate)
+            -- 7. ReplicatedStorage.Assets (KnifeTextures, KnifeTypes, Viewmodels, UI.KnifeUITemplate — Read-only instances, zero require!)
             local assets = ReplicatedStorage:FindFirstChild("Assets")
             if assets then
                 KD.KnifeTexturesFolder = assets:FindFirstChild("KnifeTextures")
@@ -10079,59 +9751,17 @@ do
                 end
             end
 
-            -- 9. ReplicatedStorage.Shared Modules
             local shared = ReplicatedStorage:FindFirstChild("Shared")
             if shared then
                 if not KD.KnifeTexturesFolder then
                     KD.KnifeTexturesFolder = shared:FindFirstChild("KnifeTextures")
                 end
-                KD.KnifeConfigModule = shared:FindFirstChild("KnifeConfig")
-                KD.KnifePresentationModule = shared:FindFirstChild("KnifePresentation")
-                KD.KnifeAssetResolverModule = shared:FindFirstChild("KnifeAssetResolver")
-                KD.KnifeThrowTrajectoryModule = shared:FindFirstChild("KnifeThrowTrajectory")
-                KD.AimAssistConfigModule = shared:FindFirstChild("AimAssistConfig")
-                KD.ZombiesUpgradeTreeModule = shared:FindFirstChild("ZombiesUpgradeTree")
-
-                KD.KnifeConfigTable = safeRequireModule(KD.KnifeConfigModule)
-                KD.KnifePresentationTable = safeRequireModule(KD.KnifePresentationModule)
-                KD.KnifeAssetResolverTable = safeRequireModule(KD.KnifeAssetResolverModule)
-                KD.KnifeThrowTrajectoryTable = safeRequireModule(KD.KnifeThrowTrajectoryModule)
-                KD.AimAssistConfigTable = safeRequireModule(KD.AimAssistConfigModule)
-
                 if not KD.KnifeUITemplate then
                     local uiFolder = shared:FindFirstChild("UI")
                     KD.KnifeUITemplate = uiFolder and uiFolder:FindFirstChild("KnifeUITemplate")
                 end
             end
 
-            -- 10. StarterPlayer Controllers
-            local ps = LocalPlayer and LocalPlayer:FindFirstChild("PlayerScripts")
-            local controllers = ps and ps:FindFirstChild("Controllers")
-            if controllers then
-                local charCtrl = controllers:FindFirstChild("Character")
-                local movCtrl = charCtrl and charCtrl:FindFirstChild("MovementController")
-                if movCtrl then
-                    KD.MovementConfig = safeRequireModule(movCtrl:FindFirstChild("MovementConfig"))
-                end
-                local combatCtrl = controllers:FindFirstChild("Combat")
-                if combatCtrl then
-                    KD.KnifeController = safeRequireModule(combatCtrl:FindFirstChild("KnifeController"))
-                    KD.AimAssistController = safeRequireModule(combatCtrl:FindFirstChild("AimAssistController"))
-                    KD.CombatNetClient = safeRequireModule(combatCtrl:FindFirstChild("CombatNetClient"))
-                    KD.ViewmodelController = safeRequireModule(combatCtrl:FindFirstChild("ViewmodelController"))
-                    KD.ViewmodelKnifeVisual = safeRequireModule(combatCtrl:FindFirstChild("ViewmodelKnifeVisual"))
-                end
-                local utilsCtrl = controllers:FindFirstChild("Utils")
-                if utilsCtrl then
-                    KD.InventoryClient = safeRequireModule(utilsCtrl:FindFirstChild("InventoryClient"))
-                end
-                local uiCtrl = controllers:FindFirstChild("UI")
-                if uiCtrl then
-                    KD.KnifeUIController = safeRequireModule(uiCtrl:FindFirstChild("KnifeUIController"))
-                end
-            end
-
-            installSilentAimHooks()
             KD.remotesResolved = true
         end)
     end
@@ -10156,7 +9786,6 @@ do
     end
 
     -- Silent Aim Target Finder (Respects SilentFOVRadius, SilentHitpart, SilentTeamCheck, and SilentWallCheck)
-    -- NEVER moves camera.CFrame! Only computes KD.silentTargetPart and KD.silentTargetPos for trajectory redirection.
     local function getSilentAimTarget(camera)
         if not camera or not ConfigState.SilentAim then
             return nil, nil
@@ -10206,15 +9835,113 @@ do
                 ConfigState.Prediction ~= false,
                 ConfigState.PredictionAmount or 0.16
             )
-            return bestPart, predPos
+            -- Ballistic gravity drop compensation for thrown knives (Speed ~135, Gravity ~28)
+            local dist3D = (predPos - originPos).Magnitude
+            local flightT = math.clamp(dist3D / 135, 0, 1.15)
+            local ballisticPos = predPos + Vector3.new(0, 0.5 * 28 * flightT * flightT, 0)
+            return bestPart, ballisticPos
         end
         return nil, nil
     end
 
-    -- TriggerBot Knife Thrower (Throws Knife ONLY — NEVER calls mouse1click() so it never switches Mobile HUD to PC or stabs!)
+    -- Undetected Silent Aim Throw-Window Micro-Snap (Activates ONLY for 55ms when Throw is pressed — NEVER on walk/touch/stab!)
+    local function triggerSilentAimThrowWindow(forcedTargetPos)
+        local cam = workspace.CurrentCamera
+        if not cam then
+            return
+        end
+        local targetPos = forcedTargetPos
+        if not targetPos and ConfigState.SilentAim then
+            local chance = math.clamp(tonumber(ConfigState.SilentHitChance) or 100, 1, 100)
+            if math.random(1, 100) <= chance then
+                if not KD.silentTargetPos then
+                    local _, sPos = getSilentAimTarget(cam)
+                    KD.silentTargetPos = sPos
+                end
+                targetPos = KD.silentTargetPos
+            end
+        end
+        if not targetPos then
+            return
+        end
+        local now = os.clock()
+        if now >= KD.silentSnapUntil then
+            KD.silentRestoreCF = cam.CFrame
+        end
+        KD.silentSnapTargetPos = targetPos
+        KD.silentSnapUntil = now + 0.055
+
+        pcall(function()
+            local camPos = cam.CFrame.Position
+            if (targetPos - camPos).Magnitude > 0.2 then
+                cam.CFrame = CFrame.new(camPos, targetPos)
+            end
+            local myChar = LocalPlayer and LocalPlayer.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            if myHRP then
+                local myPos = myHRP.Position
+                local flatTarget = Vector3.new(targetPos.X, myPos.Y, targetPos.Z)
+                if (flatTarget - myPos).Magnitude > 0.05 then
+                    myHRP.CFrame = CFrame.new(myPos, flatTarget)
+                end
+            end
+        end)
+    end
+
+    -- Bind Passive Throw Listeners (MobileControls.Throw button + PC RightClick/E/F/Q throw keys — Zero Metatable Hooks!)
+    local function ensureSilentAimThrowListeners()
+        pcall(function()
+            local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            local mobGui = pgui and pgui:FindFirstChild("MobileControls")
+            local throwBtn = mobGui and mobGui:FindFirstChild("Throw")
+            if throwBtn and throwBtn:IsA("GuiButton") and KD.boundThrowButton ~= throwBtn then
+                KD.boundThrowButton = throwBtn
+                if KD.boundThrowDownConn then
+                    pcall(function() KD.boundThrowDownConn:Disconnect() end)
+                end
+                if KD.boundThrowActConn then
+                    pcall(function() KD.boundThrowActConn:Disconnect() end)
+                end
+                KD.boundThrowDownConn = throwBtn.MouseButton1Down:Connect(function()
+                    if ConfigState.SilentAim then
+                        triggerSilentAimThrowWindow(nil)
+                    end
+                end)
+                KD.boundThrowActConn = throwBtn.Activated:Connect(function()
+                    if ConfigState.SilentAim then
+                        triggerSilentAimThrowWindow(nil)
+                    end
+                end)
+            end
+
+            if not KD.boundPCThrowConn and UserInputService then
+                KD.boundPCThrowConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                    if not ConfigState.SilentAim then
+                        return
+                    end
+                    -- Only trigger on explicit PC/Gamepad Throw inputs (NEVER on MouseButton1 or Touch!)
+                    local ut = input.UserInputType
+                    local kc = input.KeyCode
+                    if ut == Enum.UserInputType.MouseButton2
+                        or kc == Enum.KeyCode.E
+                        or kc == Enum.KeyCode.F
+                        or kc == Enum.KeyCode.Q
+                        or kc == Enum.KeyCode.ButtonL2
+                        or kc == Enum.KeyCode.ButtonR2
+                    then
+                        if not gameProcessed or ut == Enum.UserInputType.MouseButton2 then
+                            triggerSilentAimThrowWindow(nil)
+                        end
+                    end
+                end)
+            end
+        end)
+    end
+    ensureSilentAimThrowListeners()
+
+    -- TriggerBot Knife Thrower (Throws Knife ONLY — NEVER calls mouse1click() or raw CombatService remotes!)
     local function fireKnifeThrowOnly(targetPos)
-        resolveKnifeDuelsRemotes()
-        local myChar = LocalPlayer.Character
+        local myChar = LocalPlayer and LocalPlayer.Character
         if not myChar or not isKnifeDuelsCharacterAlive(myChar) then
             return
         end
@@ -10223,16 +9950,11 @@ do
             return
         end
 
-        local prevSilentPos = KD.silentTargetPos
-        local prevSilentAim = ConfigState.SilentAim
-        if targetPos and not prevSilentPos then
-            KD.silentTargetPos = targetPos
+        if targetPos then
+            triggerSilentAimThrowWindow(targetPos)
         end
 
-        local threwViaGuiOrController = false
-
-        -- Method 1: Fire the in-game MobileControls.Throw button Lua connections directly (getconnections / firesignal)
-        -- Invokes the exact Throw button handler in Lua without generating MouseButton1 in UserInputService!
+        local threwViaGui = false
         pcall(function()
             local pgui = LocalPlayer:FindFirstChild("PlayerGui")
             local mobGui = pgui and pgui:FindFirstChild("MobileControls")
@@ -10249,10 +9971,10 @@ do
                             for _, conn in ipairs(list) do
                                 if conn.Function then
                                     pcall(conn.Function)
-                                    threwViaGuiOrController = true
+                                    threwViaGui = true
                                 elseif conn.Fire then
                                     pcall(function() conn:Fire() end)
-                                    threwViaGuiOrController = true
+                                    threwViaGui = true
                                 end
                             end
                         end
@@ -10270,38 +9992,21 @@ do
                     task.delay(0.04, function()
                         pcall(firesig, throwBtn.MouseButton1Up)
                     end)
-                    threwViaGuiOrController = true
+                    threwViaGui = true
                 end
             end
         end)
 
-        -- Method 2: Invoke KnifeController throw methods directly if present
-        if not threwViaGuiOrController and KD.KnifeController and type(KD.KnifeController) == "table" then
+        -- PC fallback if MobileControls is not active and VirtualInputManager is available (presses Throw key E without MouseButton1)
+        if not threwViaGui and VirtualInputManager and not (UserInputService and UserInputService.TouchEnabled) then
             pcall(function()
-                for _, methodName in ipairs({ "ThrowKnife", "Throw", "RequestThrow", "StartThrow", "PerformThrow", "FireThrow" }) do
-                    local fn = KD.KnifeController[methodName]
-                    if type(fn) == "function" then
-                        pcall(fn, KD.KnifeController, targetPos)
-                        threwViaGuiOrController = true
-                        break
-                    end
-                end
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                task.delay(0.04, function()
+                    pcall(function()
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                    end)
+                end)
             end)
-        end
-
-        -- Method 3: Direct ThrowKnife RemoteEvent fallback with origin + ballistic direction
-        if KD.ThrowKnifeRE and targetPos then
-            pcall(function()
-                local cam = workspace.CurrentCamera
-                local myHRP = myChar:FindFirstChild("HumanoidRootPart")
-                local origin = (myHRP and (myHRP.Position + Vector3.new(0, 1.4, 0))) or (cam and cam.CFrame.Position) or Vector3.zero
-                local dir = (targetPos - origin).Unit
-                KD.ThrowKnifeRE:FireServer(origin, dir)
-            end)
-        end
-
-        if not prevSilentAim then
-            KD.silentTargetPos = prevSilentPos
         end
     end
 
@@ -10678,12 +10383,14 @@ do
                 break
             end
         end
-        if type(KD.KnifeConfigTable) == "table" then
+        if KD.KnifeTexturesFolder then
             pcall(function()
-                local cfg = KD.KnifeConfigTable[s] or (type(KD.KnifeConfigTable.Knives) == "table" and KD.KnifeConfigTable.Knives[s])
-                if type(cfg) == "table" then
-                    skinTitle = tostring(cfg.DisplayName or cfg.TextureName or cfg.SkinName or cfg.Name or skinTitle)
-                    weaponDisplay = tostring(cfg.KnifeType or cfg.WeaponType or cfg.Type or weaponDisplay)
+                local folder = KD.KnifeTexturesFolder:FindFirstChild(s)
+                if folder then
+                    local dName = folder:GetAttribute("DisplayName") or folder:GetAttribute("TextureName")
+                    local kType = folder:GetAttribute("KnifeType") or folder:GetAttribute("WeaponType")
+                    if type(dName) == "string" and dName ~= "" then skinTitle = dName end
+                    if type(kType) == "string" and kType ~= "" then weaponDisplay = kType end
                 end
             end)
         end
@@ -10744,7 +10451,7 @@ do
             return
         end
         pcall(function()
-            knifeModel:SetAttribute("KnifeId", skinName)
+            -- Apply local MeshPart SurfaceAppearance / Texture without mutating replicated attributes
             for _, part in ipairs(knifeModel:GetDescendants()) do
                 if part:IsA("MeshPart") or part:IsA("BasePart") then
                     for _, child in ipairs(part:GetChildren()) do
@@ -10799,16 +10506,7 @@ do
         end
         KD.selectedSkinName = skinName
         pcall(function()
-            LocalPlayer:SetAttribute("EquippedKnife", skinName)
             updateInventoryEquippedCheckmarks(skinName)
-
-            if type(KD.ViewmodelKnifeVisual) == "table" then
-                for _, fnName in ipairs({ "ApplyKnifeSkin", "UpdateKnife", "SetKnife", "Apply" }) do
-                    if type(KD.ViewmodelKnifeVisual[fnName]) == "function" then
-                        pcall(KD.ViewmodelKnifeVisual[fnName], KD.ViewmodelKnifeVisual, skinName)
-                    end
-                end
-            end
 
             local myChar = LocalPlayer.Character
             if myChar then
@@ -10863,15 +10561,7 @@ do
                     end
                 end
             end
-            if type(KD.KnifeConfigTable) == "table" then
-                local srcTbl = type(KD.KnifeConfigTable.Knives) == "table" and KD.KnifeConfigTable.Knives or KD.KnifeConfigTable
-                for k, v in pairs(srcTbl) do
-                    if type(k) == "string" and type(v) == "table" and not skinMap[k] then
-                        skinMap[k] = true
-                        table.insert(allSkins, k)
-                    end
-                end
-            end
+
             table.sort(allSkins)
 
             local pgui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
@@ -10951,16 +10641,7 @@ do
                                     end
                                 end
 
-                                if type(KD.KnifePresentationTable) == "table" then
-                                    pcall(function()
-                                        for _, fnName in ipairs({ "ApplyToCard", "ApplyKnifeCard", "ConfigureCard", "DecorateCard" }) do
-                                            if type(KD.KnifePresentationTable[fnName]) == "function" then
-                                                pcall(KD.KnifePresentationTable[fnName], card, skinName)
-                                                break
-                                            end
-                                        end
-                                    end)
-                                end
+
 
                                 card.Parent = scroll
                                 existingCard = card
@@ -11000,7 +10681,7 @@ do
         resolveKnifeDuelsRemotes()
         local dev = ConfigState.SpoofedDevice or "Mobile"
         pcall(function()
-            LocalPlayer:SetAttribute("Device", dev)
+            -- Send DeviceSpoof via network remote only (never mutate LocalPlayer attributes)
             if KD.UpdateDeviceRE then
                 KD.UpdateDeviceRE:FireServer(dev)
             end
@@ -11068,7 +10749,8 @@ do
             end
         end
 
-        -- 2. Silent Aim Target Resolution (NEVER touches camera.CFrame!)
+        -- 2. Silent Aim Target Resolution & Passive Throw-Button Listener Sync
+        ensureSilentAimThrowListeners()
         if ConfigState.SilentAim and camera then
             local sPart, sPos = getSilentAimTarget(camera)
             KD.silentTargetPart = sPart
@@ -11076,6 +10758,34 @@ do
         else
             KD.silentTargetPart = nil
             KD.silentTargetPos = nil
+        end
+
+        -- 2b. Undetected 55ms Throw-Window Micro-Snap & Instant Camera Restore
+        if camera and KD.silentSnapUntil > 0 then
+            local nowSnap = os.clock()
+            if nowSnap <= KD.silentSnapUntil and KD.silentSnapTargetPos then
+                local camPos = camera.CFrame.Position
+                if (KD.silentSnapTargetPos - camPos).Magnitude > 0.2 then
+                    camera.CFrame = CFrame.new(camPos, KD.silentSnapTargetPos)
+                end
+                local myChar = LocalPlayer and LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    local myPos = myHRP.Position
+                    local flatTarget = Vector3.new(KD.silentSnapTargetPos.X, myPos.Y, KD.silentSnapTargetPos.Z)
+                    if (flatTarget - myPos).Magnitude > 0.05 then
+                        myHRP.CFrame = CFrame.new(myPos, flatTarget)
+                    end
+                end
+            else
+                KD.silentSnapUntil = 0
+                KD.silentSnapTargetPos = nil
+                if KD.silentRestoreCF and not ConfigState.Aimbot then
+                    local curPos = camera.CFrame.Position
+                    camera.CFrame = CFrame.new(curPos) * (KD.silentRestoreCF - KD.silentRestoreCF.Position)
+                end
+                KD.silentRestoreCF = nil
+            end
         end
 
         -- 3. TriggerBot (Auto-Throws Knife ONLY when enemy enters crosshair ray/cone; NEVER calls mouse1click)
@@ -11134,22 +10844,7 @@ do
         -- 2. Slider Extender (Boosts slide velocity & MovementConfig slide parameters)
         if ConfigState.SlideExtender and myHRP and myHum then
             local power = math.clamp(tonumber(ConfigState.SlideExtenderPower) or 1.6, 1.0, 4.0)
-            if KD.MovementConfig then
-                pcall(function()
-                    if KD.origMovementValues.SlideSpeed == nil and KD.MovementConfig.SlideSpeed then
-                        KD.origMovementValues.SlideSpeed = KD.MovementConfig.SlideSpeed
-                    end
-                    if KD.origMovementValues.SlideDuration == nil and KD.MovementConfig.SlideDuration then
-                        KD.origMovementValues.SlideDuration = KD.MovementConfig.SlideDuration
-                    end
-                    if KD.origMovementValues.SlideSpeed then
-                        KD.MovementConfig.SlideSpeed = KD.origMovementValues.SlideSpeed * power
-                    end
-                    if KD.origMovementValues.SlideDuration then
-                        KD.MovementConfig.SlideDuration = KD.origMovementValues.SlideDuration * power
-                    end
-                end)
-            end
+
             if char:GetAttribute("IsSliding") == true then
                 local moveDir = myHum.MoveDirection
                 if moveDir.Magnitude < 0.05 then
@@ -11161,16 +10856,7 @@ do
 
         -- 3. Instant Vault
         if ConfigState.InstantVault and myHRP and myHum then
-            if KD.MovementConfig then
-                pcall(function()
-                    if KD.MovementConfig.VaultDuration then
-                        KD.MovementConfig.VaultDuration = 0.05
-                    end
-                    if KD.MovementConfig.VaultCooldown then
-                        KD.MovementConfig.VaultCooldown = 0
-                    end
-                end)
-            end
+
             if myHum.MoveDirection.Magnitude > 0.1 then
                 rayParams.FilterDescendantsInstances = getSafeRaycastExcludeList()
                 local lowHit = workspace:Raycast(myHRP.Position - Vector3.new(0, 1.0, 0), myHRP.CFrame.LookVector * 3.2, rayParams)
@@ -11258,18 +10944,7 @@ do
                 task.spawn(function()
                     pcall(function()
                         local nodeIds = { "Damage", "ThrowSpeed", "Health", "Regen", "MaxHealth", "Speed", "CritChance", "MultiThrow" }
-                        if KD.ZombiesUpgradeTreeModule and KD.ZombiesUpgradeTreeModule:IsA("ModuleScript") then
-                            local ok, tree = pcall(require, KD.ZombiesUpgradeTreeModule)
-                            if ok and type(tree) == "table" then
-                                for k, v in pairs(tree) do
-                                    if type(k) == "string" then
-                                        table.insert(nodeIds, k)
-                                    elseif type(v) == "table" and type(v.Id or v.Name) == "string" then
-                                        table.insert(nodeIds, v.Id or v.Name)
-                                    end
-                                end
-                            end
-                        end
+
                         for _, nodeId in ipairs(nodeIds) do
                             pcall(function()
                                 KD.PurchaseNodeRF:InvokeServer(nodeId)
