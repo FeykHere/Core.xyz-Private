@@ -10262,33 +10262,23 @@ do
                 end
             end
 
-            -- 4. MannequinAnimation.Tuning (Walkspeed, JumpPower, Cooldowns, Balance, Tackle Speed)
+            -- 4. MannequinAnimation.AirKnock Hook (Prevents aerial ball knockdowns when AntiRagdoll or SuperBalance is active, without mutating Tuning/Rig spring constants!)
             local manAnim = gameFolder:FindFirstChild("MannequinAnimation")
-            local tuning = manAnim and safeReq(manAnim:FindFirstChild("Tuning"))
-            local manRig = safeReq(gameFolder:FindFirstChild("MannequinRig"))
-            for idx, m in ipairs({ tuning, manRig }) do
-                if type(m) == "table" then
-                    patchNumericTable(m, "Tune_" .. idx .. "_Cooldown", "cooldown", function()
-                        return 0
-                    end, not ConfigState.NoSlidePokeCooldown)
-                    patchNumericTable(m, "Tune_" .. idx .. "_SlideSpd", "slide", function(orig, kl)
-                        if string.find(kl, "speed") or string.find(kl, "vel") or string.find(kl, "impulse") or string.find(kl, "force") then
-                            return orig * math.clamp(tonumber(ConfigState.TackleSpeedVal) or 2.0, 1.0, 5.0)
-                        end
-                        return orig
-                    end, not ConfigState.TackleSpeedMult)
-                    patchNumericTable(m, "Tune_" .. idx .. "_MoveSpd", "speed", function(orig, kl)
-                        if string.find(kl, "move") or string.find(kl, "run") or string.find(kl, "walk") or string.find(kl, "sprint") or string.find(kl, "base") then
-                            return tonumber(ConfigState.WalkspeedVal) or 32
-                        end
-                        return orig
-                    end, not ConfigState.Walkspeed)
-                    patchNumericTable(m, "Tune_" .. idx .. "_Jump", "jump", function(orig, kl)
-                        if string.find(kl, "speed") or string.find(kl, "vel") or string.find(kl, "height") or string.find(kl, "power") or string.find(kl, "impulse") then
-                            return orig * ((tonumber(ConfigState.JumpPowerVal) or 85) / 50)
-                        end
-                        return orig
-                    end, not ConfigState.JumpPower)
+            local airKnock = manAnim and safeReq(manAnim:FindFirstChild("AirKnock"))
+            if type(airKnock) == "table" and not RS.hookedAirKnock then
+                RS.hookedAirKnock = true
+                for k, fn in pairs(airKnock) do
+                    if type(fn) == "function" then
+                        local origFn = fn
+                        pcall(function()
+                            airKnock[k] = function(...)
+                                if ConfigState.AntiRagdoll or ConfigState.SuperBalance then
+                                    return nil
+                                end
+                                return origFn(...)
+                            end
+                        end)
+                    end
                 end
             end
 
@@ -11165,22 +11155,22 @@ do
         local now = os.clock()
 
         if inp.KeyCode == Enum.KeyCode.Q or inp.KeyCode == Enum.KeyCode.C or inp.KeyCode == Enum.KeyCode.ButtonX then
-            if (now - RS.lastSlideTriggerAt) >= 0.08 then
+            if (now - RS.lastSlideTriggerAt) >= 0.12 then
                 RS.lastSlideTriggerAt = now
                 pcall(function()
                     triggerInputAction("Mannequin", "Slide", true)
+                    task.delay(0.06, function()
+                        triggerInputAction("Mannequin", "Slide", false)
+                    end)
                     local lookDir = Vector3.new(myRoot.CFrame.LookVector.X, 0, myRoot.CFrame.LookVector.Z)
                     if lookDir.Magnitude < 0.01 then lookDir = Vector3.new(1, 0, 0) else lookDir = lookDir.Unit end
                     local mult = ConfigState.TackleSpeedMult and math.clamp(tonumber(ConfigState.TackleSpeedVal) or 2.0, 1.0, 5.0) or 1.0
-                    local slideVel = lookDir * (44 * mult)
-                    myChar:SetAttribute("BodyState", "Sliding")
-                    local pelvis = myChar:FindFirstChild("Pelvis")
-                    local bsv = pelvis and pelvis:FindFirstChild("BodySlideVelocity")
-                    if bsv and bsv:IsA("LinearVelocity") then
-                        bsv.VectorVelocity = slideVel
-                        bsv.Enabled = true
-                    end
+                    local slideVel = lookDir * (42 * mult)
                     myRoot.AssemblyLinearVelocity = Vector3.new(slideVel.X, myRoot.AssemblyLinearVelocity.Y, slideVel.Z)
+                    local pelvis = myChar:FindFirstChild("Pelvis")
+                    if pelvis and pelvis:IsA("BasePart") then
+                        pelvis.AssemblyLinearVelocity = Vector3.new(slideVel.X, pelvis.AssemblyLinearVelocity.Y, slideVel.Z)
+                    end
                     local rSlide = getRemote("RE/MannequinSlide")
                     local rTackle = getRemote("RE/MannequinTackle")
                     if rSlide then rSlide:FireServer(lookDir) end
@@ -11243,10 +11233,12 @@ do
             local groundCtrl = ctrlMgr and ctrlMgr:FindFirstChildOfClass("GroundController")
             local pelvis = myChar:FindFirstChild("Pelvis")
 
-            -- 1. Walkspeed Override (Mannequin ControllerManager + GroundController + Velocity Assist)
+            -- 1. Walkspeed Override (Mannequin ControllerManager + GroundController, with clean restore when disabled)
             if ctrlMgr then
                 if RS.hookedControllerMgr ~= ctrlMgr then
                     RS.hookedControllerMgr = ctrlMgr
+                    RS.origBaseMoveSpeed = ctrlMgr.BaseMoveSpeed > 5 and ctrlMgr.BaseMoveSpeed or 22
+                    RS.origMoveSpeedFactor = (groundCtrl and groundCtrl.MoveSpeedFactor) or 1.0
                     pcall(function()
                         ctrlMgr:GetPropertyChangedSignal("BaseMoveSpeed"):Connect(function()
                             if ConfigState.Walkspeed then
@@ -11259,17 +11251,27 @@ do
                     end)
                 end
                 if ConfigState.Walkspeed then
+                    RS.wasWalkspeedApplied = true
                     local targetSpd = tonumber(ConfigState.WalkspeedVal) or 32
                     pcall(function()
                         ctrlMgr.BaseMoveSpeed = targetSpd
                         if groundCtrl then
-                            groundCtrl.MoveSpeedFactor = math.max(1.0, targetSpd / 22)
+                            groundCtrl.MoveSpeedFactor = 1.0
                         end
+                        local bState = tostring(myChar:GetAttribute("BodyState") or "Animated")
                         local moveDir = ctrlMgr.MovingDirection
-                        if moveDir and moveDir.Magnitude > 0.05 then
+                        if bState == "Animated" and moveDir and moveDir.Magnitude > 0.08 then
                             local horizUnit = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
                             local curVel = myRoot.AssemblyLinearVelocity
                             myRoot.AssemblyLinearVelocity = Vector3.new(horizUnit.X * targetSpd, curVel.Y, horizUnit.Z * targetSpd)
+                        end
+                    end)
+                elseif RS.wasWalkspeedApplied then
+                    RS.wasWalkspeedApplied = false
+                    pcall(function()
+                        ctrlMgr.BaseMoveSpeed = RS.origBaseMoveSpeed or 22
+                        if groundCtrl then
+                            groundCtrl.MoveSpeedFactor = RS.origMoveSpeedFactor or 1.0
                         end
                     end)
                 end
@@ -11292,68 +11294,52 @@ do
                 end
             end
 
-            -- 3. Anti Ragdoll & Super Balance
+            -- 3. Anti Ragdoll & Super Balance (Zero-Constraint-Interference Implementation)
+            -- Leaves MannequinAnimation.Body constraints (AnimationConstraint, BodyAssist*, BodyFootPin*, GroundController)
+            -- 100% under the game engine control so the character NEVER sticks or freezes!
             if ConfigState.AntiRagdoll or ConfigState.SuperBalance then
                 pcall(function()
                     local bState = tostring(myChar:GetAttribute("BodyState") or "Animated")
-                    if bState == "Ragdoll" or bState == "Fallen" or bState == "Falling" or bState == "Tripped" or bState == "Knocked" or bState == "Stunned" then
+                    local isFallenState = (bState == "Ragdoll" or bState == "Fallen" or bState == "Falling" or bState == "Tripped" or bState == "Knocked" or bState == "Stunned" or bState == "Launched" or bState == "KickFall")
+                    if isFallenState then
                         myChar:SetAttribute("BodyState", "Animated")
-                        local recRem = getRemote("RE/MannequinRecovered")
-                        if recRem then
-                            recRem:FireServer()
+                        bState = "Animated"
+                        if ctrlMgr and groundCtrl then
+                            local bodyIdle = ctrlMgr:FindFirstChild("BodyIdleController")
+                            if ctrlMgr.ActiveController == bodyIdle then
+                                ctrlMgr.ActiveController = groundCtrl
+                            end
+                        end
+                        if (now - (RS.lastRecoverFireAt or 0)) >= 0.25 then
+                            RS.lastRecoverFireAt = now
+                            local recRem = getRemote("RE/MannequinRecovered")
+                            if recRem then
+                                recRem:FireServer()
+                            end
                         end
                     end
-                    if groundCtrl then
-                        groundCtrl.BalanceRigidityEnabled = true
-                        groundCtrl.BalanceMaxTorque = 1e9
-                        groundCtrl.BalanceSpeed = 200
-                        groundCtrl.StandForce = 1e9
-                        groundCtrl.StandSpeed = 200
-                    end
-                    if pelvis then
-                        local bao = pelvis:FindFirstChild("BodyAssistOrientation")
-                        if bao and bao:IsA("AlignOrientation") then
-                            bao.Enabled = true
-                            bao.MaxTorque = 1e9
-                            bao.Responsiveness = 200
-                        end
-                    end
-                    for _, desc in ipairs(myChar:GetDescendants()) do
-                        if desc:IsA("AnimationConstraint") then
-                            desc.Enabled = true
-                            desc.MaxTorque = 1e8
-                            desc.MaxForce = 1e8
-                        end
-                    end
-                    if ConfigState.SuperBalance then
-                        myRoot.AssemblyAngularVelocity = Vector3.zero
-                        if pelvis and pelvis:IsA("BasePart") then
-                            pelvis.AssemblyAngularVelocity = Vector3.zero
-                        end
-                        local look = myRoot.CFrame.LookVector
-                        local flatLook = Vector3.new(look.X, 0, look.Z)
-                        if flatLook.Magnitude > 0.01 then
-                            myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + flatLook.Unit)
-                        end
-                    end
-                end)
-            end
 
-            -- 4. No Slide/Poke Cooldown Attribute Clear
-            if ConfigState.NoSlidePokeCooldown then
-                pcall(function()
-                    for attrName, attrVal in pairs(myChar:GetAttributes()) do
-                        local lower = string.lower(attrName)
-                        if string.find(lower, "cooldown") or string.find(lower, "nextslide") or string.find(lower, "nextpoke") or string.find(lower, "wait") then
-                            if type(attrVal) == "number" then
-                                myChar:SetAttribute(attrName, 0)
-                            elseif type(attrVal) == "boolean" then
-                                myChar:SetAttribute(attrName, false)
+                    -- Super Balance: Gently dampen only X/Z tipping angular velocity while keeping Y yaw turning & linear movement 100% free
+                    if ConfigState.SuperBalance and bState == "Animated" then
+                        local rAng = myRoot.AssemblyAngularVelocity
+                        if math.abs(rAng.X) > 3.0 or math.abs(rAng.Z) > 3.0 then
+                            myRoot.AssemblyAngularVelocity = Vector3.new(rAng.X * 0.25, rAng.Y, rAng.Z * 0.25)
+                        end
+                        if pelvis and pelvis:IsA("BasePart") then
+                            local pAng = pelvis.AssemblyAngularVelocity
+                            if math.abs(pAng.X) > 4.0 or math.abs(pAng.Z) > 4.0 then
+                                pelvis.AssemblyAngularVelocity = Vector3.new(pAng.X * 0.3, pAng.Y, pAng.Z * 0.3)
+                            end
+                            local pVel = pelvis.AssemblyLinearVelocity
+                            if pVel.Y < -35 then
+                                pelvis.AssemblyLinearVelocity = Vector3.new(pVel.X, -12, pVel.Z)
                             end
                         end
                     end
                 end)
             end
+
+            -- 4. No Slide/Poke Cooldown (Handled safely via InputBegan + InputAction without corrupting Mannequin attributes)
 
             -- 5. Tackle Speed Multiplier
             if ConfigState.TackleSpeedMult then
@@ -11419,7 +11405,10 @@ do
                             local targetPos = computeShootAimbotTarget(myChar, ball.Position)
                             local flatTarget = Vector3.new(targetPos.X, myRoot.Position.Y, targetPos.Z)
                             if (flatTarget - myRoot.Position).Magnitude > 1 then
-                                myRoot.CFrame = CFrame.new(myRoot.Position, flatTarget)
+                                local faceDir = (flatTarget - myRoot.Position).Unit
+                                if ctrlMgr then
+                                    ctrlMgr.FacingDirection = faceDir
+                                end
                             end
                             if ConfigState.CurvePower then
                                 if ConfigState.CurveMode == "Left Curve" then
@@ -11521,17 +11510,19 @@ do
                                 local dirToBall = Vector3.new(ball.Position.X - myRoot.Position.X, 0, ball.Position.Z - myRoot.Position.Z)
                                 if dirToBall.Magnitude > 0.1 then
                                     dirToBall = dirToBall.Unit
-                                    myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + dirToBall)
+                                    if ctrlMgr then
+                                        ctrlMgr.FacingDirection = dirToBall
+                                    end
                                     triggerInputAction("Mannequin", "Slide", true)
+                                    task.delay(0.06, function()
+                                        triggerInputAction("Mannequin", "Slide", false)
+                                    end)
                                     local mult = ConfigState.TackleSpeedMult and math.clamp(tonumber(ConfigState.TackleSpeedVal) or 2.0, 1.0, 5.0) or 1.25
                                     local slideVel = dirToBall * (42 * mult)
-                                    myChar:SetAttribute("BodyState", "Sliding")
-                                    local bsv = pelvis and pelvis:FindFirstChild("BodySlideVelocity")
-                                    if bsv and bsv:IsA("LinearVelocity") then
-                                        bsv.VectorVelocity = slideVel
-                                        bsv.Enabled = true
-                                    end
                                     myRoot.AssemblyLinearVelocity = Vector3.new(slideVel.X, myRoot.AssemblyLinearVelocity.Y, slideVel.Z)
+                                    if pelvis and pelvis:IsA("BasePart") then
+                                        pelvis.AssemblyLinearVelocity = Vector3.new(slideVel.X, pelvis.AssemblyLinearVelocity.Y, slideVel.Z)
+                                    end
                                 end
                                 local rSlide = getRemote("RE/MannequinSlide")
                                 local rTackle = getRemote("RE/MannequinTackle")
