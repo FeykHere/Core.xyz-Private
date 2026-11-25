@@ -1,581 +1,529 @@
 --// Core.xyz Loader (FlowAuth Auth + Universe ID Gate + Black-Themed Animated White-Glow Key System UI)
-
-local CONFIG = {
-	ProjectId = 10959,
-	LoaderHash = "5aadc1854f782322ada05d461c2cb0cd",
-	ApiToken = "adb858e40cf5dc946478beaa63d0693f51ad4b83ac4bef78",
-	RewardUrl = "https://flowauth.net/reward/5aadc1854f782322ada05d461c2cb0cd",
-	SupportedGames = {
-		[9294074907] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
-		[10766620257] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
-		[9641502068] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
-		[10770730129] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
-	},
-	SupportedPlaces = {
-		[90568084448279] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
-		[74023858073178] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
-		[112731528776884] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
-		[106931373443671] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
-	},
-}
-
-local KEY_FILE = "CoreXYZ_Key.txt"
-local KEY_META_FILE = "CoreXYZ_KeyMeta.json"
-local DEFAULT_KEY_DURATION_SECONDS = 86400
-
--------------------------------------------------------------------------------
---! Services & Executor Helpers
--------------------------------------------------------------------------------
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local StarterGui = game:GetService("StarterGui")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-
-local fToString = tostring
-local fOsTime = os.time
-local fMathFloor = math.floor
-
-local fSetClipboard = setclipboard or toclipboard or set_clipboard or (type(Clipboard) == "table" and Clipboard.set)
-local fRequest = request
-	or http_request
-	or syn_request
-	or (type(syn) == "table" and syn.request)
-	or (type(http) == "table" and http.request)
-	or (type(fluxus) == "table" and fluxus.request)
-
-local function safeJsonEncode(tbl)
-	local ok, res = pcall(function()
-		return HttpService:JSONEncode(tbl)
-	end)
-	return ok and res or "{}"
-end
-
-local function safeJsonDecode(str)
-	if type(str) ~= "string" or str == "" then
-		return nil
+if type(flow_init) ~= "function" then
+	getgenv().flow_init = function(cb)
+		local k = cb("")
+		if type(k) ~= "string" or k == "" then
+			error("FlowAuth: Key verification cancelled.", 0)
+		end
+		return k
 	end
-	local ok, res = pcall(function()
-		return HttpService:JSONDecode(str)
-	end)
-	return ok and res or nil
 end
 
-local function getHwidStr()
-	local ok, rawHwid = pcall(function()
-		if type(gethwid) == "function" then
-			return gethwid()
+flow_init(function(currentKey)
+	local CONFIG = {
+		ProjectId = 10959,
+		LoaderHash = "5aadc1854f782322ada05d461c2cb0cd",
+		ScriptLoaderHash = "940f8bacfe9c5b2cda8fa3d058fad0f4",
+		ApiToken = "adb858e40cf5dc946478beaa63d0693f51ad4b83ac4bef78",
+		RewardUrl = "https://flowauth.net/reward/5aadc1854f782322ada05d461c2cb0cd",
+		SupportedGames = {
+			[9294074907] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
+			[10766620257] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
+			[9641502068] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
+			[10770730129] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
+		},
+		SupportedPlaces = {
+			[90568084448279] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
+			[74023858073178] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
+			[112731528776884] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
+			[106931373443671] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
+		},
+	}
+
+	local KEY_FILE = "CoreXYZ_Key.txt"
+	local KEY_META_FILE = "CoreXYZ_KeyMeta.json"
+	local DEFAULT_KEY_DURATION_SECONDS = 86400
+
+	local Players = game:GetService("Players")
+	local TweenService = game:GetService("TweenService")
+	local UserInputService = game:GetService("UserInputService")
+	local StarterGui = game:GetService("StarterGui")
+	local RunService = game:GetService("RunService")
+	local HttpService = game:GetService("HttpService")
+
+	local fToString = tostring
+	local fOsTime = os.time
+	local fMathFloor = math.floor
+
+	local fSetClipboard = setclipboard or toclipboard or set_clipboard or (type(Clipboard) == "table" and Clipboard.set)
+	local fRequest = request
+		or http_request
+		or syn_request
+		or (type(syn) == "table" and syn.request)
+		or (type(http) == "table" and http.request)
+		or (type(fluxus) == "table" and fluxus.request)
+
+	local function safeJsonEncode(tbl)
+		local ok, res = pcall(function()
+			return HttpService:JSONEncode(tbl)
+		end)
+		return ok and res or "{}"
+	end
+
+	local function safeJsonDecode(str)
+		if type(str) ~= "string" or str == "" then
+			return nil
+		end
+		local ok, res = pcall(function()
+			return HttpService:JSONDecode(str)
+		end)
+		return ok and res or nil
+	end
+
+	local function getHwidStr()
+		local ok, rawHwid = pcall(function()
+			if type(gethwid) == "function" then
+				return gethwid()
+			end
+			local localPlayer = Players.LocalPlayer
+			if localPlayer then
+				return localPlayer.UserId
+			end
+			return 0
+		end)
+		if ok and rawHwid ~= nil and fToString(rawHwid) ~= "" then
+			return fToString(rawHwid)
 		end
 		local localPlayer = Players.LocalPlayer
-		if localPlayer then
-			return localPlayer.UserId
+		return localPlayer and fToString(localPlayer.UserId) or "0"
+	end
+
+	local function safeRequest(reqParams)
+		if type(fRequest) ~= "function" then
+			return nil, "Executor HTTP request function is unavailable."
 		end
-		return 0
-	end)
-	if ok and rawHwid ~= nil and fToString(rawHwid) ~= "" then
-		return fToString(rawHwid)
+		local ok, res = pcall(fRequest, reqParams)
+		if not ok or type(res) ~= "table" then
+			return nil, "Network request failed."
+		end
+		local statusCode = res.StatusCode or res.status_code or res.status or 0
+		local body = res.Body or res.body or ""
+		return {
+			StatusCode = tonumber(statusCode) or 0,
+			Body = type(body) == "string" and body or fToString(body),
+		}, nil
 	end
-	local localPlayer = Players.LocalPlayer
-	return localPlayer and fToString(localPlayer.UserId) or "0"
-end
 
-local function safeRequest(reqParams)
-	if type(fRequest) ~= "function" then
-		return nil, "Executor HTTP request function is unavailable."
+	local function sendNotification(title, text, duration)
+		pcall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = title,
+				Text = text,
+				Duration = duration or 5,
+			})
+		end)
 	end
-	local ok, res = pcall(fRequest, reqParams)
-	if not ok or type(res) ~= "table" then
-		return nil, "Network request failed."
-	end
-	local statusCode = res.StatusCode or res.status_code or res.status or 0
-	local body = res.Body or res.body or ""
-	return {
-		StatusCode = tonumber(statusCode) or 0,
-		Body = type(body) == "string" and body or fToString(body),
-	}, nil
-end
 
--------------------------------------------------------------------------------
---! Shared Utilities (Notifications, Safe GUI, Filesystem, Session Meta)
--------------------------------------------------------------------------------
-local function sendNotification(title, text, duration)
-	pcall(function()
-		StarterGui:SetCore("SendNotification", {
-			Title = title,
-			Text = text,
-			Duration = duration or 5,
+	local function trim(str)
+		if type(str) ~= "string" then
+			return ""
+		end
+		return (str:gsub("^%s+", ""):gsub("%s+$", ""))
+	end
+
+	local function getSafeGuiParent()
+		if type(gethui) == "function" then
+			local ok, hui = pcall(gethui)
+			if ok and hui then
+				return hui
+			end
+		end
+		local okCore, coreGui = pcall(function()
+			return game:GetService("CoreGui")
+		end)
+		if okCore and coreGui then
+			return coreGui
+		end
+		local lp = Players.LocalPlayer
+		if lp then
+			return lp:WaitForChild("PlayerGui")
+		end
+		return nil
+	end
+
+	local function destroyExistingGui(parent, guiName)
+		if not parent then
+			return
+		end
+		pcall(function()
+			local existing = parent:FindFirstChild(guiName)
+			if existing then
+				existing:Destroy()
+			end
+		end)
+	end
+
+	local function safeIsFile(path)
+		if type(isfile) == "function" then
+			local ok, res = pcall(isfile, path)
+			return ok and res == true
+		end
+		return false
+	end
+
+	local function safeReadFile(path)
+		if type(readfile) == "function" then
+			local ok, res = pcall(readfile, path)
+			if ok and type(res) == "string" then
+				return res
+			end
+		end
+		return nil
+	end
+
+	local function safeWriteFile(path, content)
+		if type(writefile) == "function" then
+			return pcall(writefile, path, content)
+		end
+		return false
+	end
+
+	local function safeDeleteFile(path)
+		if type(delfile) == "function" then
+			return pcall(delfile, path)
+		end
+		return false
+	end
+
+	local function formatRemainingTime(remSec, isLifetime)
+		if isLifetime then
+			return "Lifetime"
+		end
+		if type(remSec) ~= "number" or remSec <= 0 then
+			return "Expired"
+		end
+		local days = fMathFloor(remSec / 86400)
+		local hours = fMathFloor((remSec % 86400) / 3600)
+		local mins = fMathFloor((remSec % 3600) / 60)
+		local secs = fMathFloor(remSec % 60)
+		if days > 0 then
+			return string.format("%dd %02dh %02dm %02ds", days, hours, mins, secs)
+		elseif hours > 0 then
+			return string.format("%02dh %02dm %02ds", hours, mins, secs)
+		end
+		return string.format("%02dm %02ds", mins, secs)
+	end
+
+	local lastVerifiedSession = nil
+
+	local function verifyFlowAuthKey(rawKey)
+		local cleanedKey = trim(rawKey)
+		if cleanedKey == "" then
+			return false, "Please enter a key first."
+		end
+
+		local lookupUrl = string.format("https://flowauth.net/v1/projects/%d/keys/lookup", CONFIG.ProjectId)
+		local res, reqErr = safeRequest({
+			Url = lookupUrl,
+			Method = "POST",
+			Headers = {
+				["Authorization"] = "Bearer " .. CONFIG.ApiToken,
+				["Content-Type"] = "application/json",
+			},
+			Body = safeJsonEncode({
+				key_value = cleanedKey,
+			}),
 		})
-	end)
-end
 
-local function trim(str)
-	if type(str) ~= "string" then
+		if not res then
+			return false, reqErr or "Failed to connect to FlowAuth."
+		end
+
+		if res.StatusCode == 404 then
+			return false, "Invalid key. Please check your key and try again."
+		elseif res.StatusCode == 429 then
+			return false, "Rate limited by FlowAuth. Wait a few seconds and try again."
+		elseif res.StatusCode ~= 200 then
+			return false, "Invalid or unrecognized FlowAuth key."
+		end
+
+		local data = safeJsonDecode(res.Body)
+		if type(data) ~= "table" or not data.id then
+			return false, "Invalid response from FlowAuth."
+		end
+
+		if data.blacklist_id ~= nil then
+			return false, "This key has been blacklisted."
+		end
+
+		local effStatus = fToString(data.effective_status or data.status or "")
+		if effStatus == "paused" then
+			return false, "This key is currently paused."
+		elseif effStatus == "expired" then
+			return false, "This key has expired."
+		elseif effStatus ~= "active" then
+			return false, "Key is not active (" .. (effStatus ~= "" and effStatus or "inactive") .. ")."
+		end
+
+		local now = fOsTime()
+		local dur = type(data.duration) == "table" and data.duration or {}
+		local isLifetime = (dur.is_lifetime == true) or (dur.state == "lifetime")
+		local expiresAt = nil
+		local remainingSeconds = nil
+
+		if isLifetime then
+			expiresAt = nil
+			remainingSeconds = math.huge
+		else
+			local remMs = tonumber(dur.remaining_ms)
+			if remMs == nil and tonumber(data.expires_after_ms) then
+				remMs = tonumber(data.expires_after_ms)
+			end
+			if remMs and remMs > 0 then
+				remainingSeconds = fMathFloor(remMs / 1000)
+				expiresAt = now + remainingSeconds
+			elseif tonumber(data.expires_at) then
+				local expVal = tonumber(data.expires_at)
+				if expVal > 1e12 then
+					local evalMs = tonumber(dur.evaluated_at) or (now * 1000)
+					local diffSec = fMathFloor((expVal - evalMs) / 1000)
+					if diffSec <= 0 then
+						return false, "This key has expired."
+					end
+					remainingSeconds = diffSec
+					expiresAt = now + diffSec
+				else
+					if expVal <= now then
+						return false, "This key has expired."
+					end
+					remainingSeconds = expVal - now
+					expiresAt = expVal
+				end
+			elseif remMs and remMs <= 0 then
+				return false, "This key has expired."
+			else
+				remainingSeconds = DEFAULT_KEY_DURATION_SECONDS
+				expiresAt = now + DEFAULT_KEY_DURATION_SECONDS
+			end
+		end
+
+		lastVerifiedSession = {
+			provider = "FlowAuth",
+			projectId = CONFIG.ProjectId,
+			loaderHash = CONFIG.LoaderHash,
+			apiToken = CONFIG.ApiToken,
+			key = cleanedKey,
+			keyId = data.id,
+			tier = fToString(data.tier or "free"),
+			isLifetime = isLifetime,
+			expiresAt = expiresAt,
+			remainingSeconds = remainingSeconds,
+			hasServerExpiry = true,
+			activatedAt = now,
+			verifiedAt = now,
+			note = data.note,
+			claimedBy = data.claimed_by,
+		}
+
+		return true, lastVerifiedSession
+	end
+
+	local function persistKeySession(verifiedKey)
+		local now = fOsTime()
+		local sessionData = lastVerifiedSession or {
+			provider = "FlowAuth",
+			projectId = CONFIG.ProjectId,
+			loaderHash = CONFIG.LoaderHash,
+			apiToken = CONFIG.ApiToken,
+			key = verifiedKey,
+			tier = "free",
+			isLifetime = false,
+			expiresAt = now + DEFAULT_KEY_DURATION_SECONDS,
+			remainingSeconds = DEFAULT_KEY_DURATION_SECONDS,
+			hasServerExpiry = true,
+			activatedAt = now,
+			verifiedAt = now,
+		}
+
+		safeWriteFile(KEY_META_FILE, safeJsonEncode({
+			provider = "FlowAuth",
+			projectId = sessionData.projectId,
+			key = sessionData.key,
+			keyId = sessionData.keyId,
+			tier = sessionData.tier,
+			isLifetime = sessionData.isLifetime == true,
+			activatedAt = sessionData.activatedAt,
+			expiresAt = sessionData.expiresAt,
+			hasServerExpiry = true,
+			verifiedAt = sessionData.verifiedAt,
+		}))
+
+		pcall(function()
+			local envTbl = (type(getgenv) == "function" and getgenv()) or _G
+			envTbl.__CoreXYZ_KeySession = sessionData
+			envTbl.LRM_KeyTier = sessionData.tier or "free"
+			envTbl.LRM_IsUserPremium = true
+			envTbl.LRM_SecondsLeft = sessionData.isLifetime and math.huge or (sessionData.remainingSeconds or DEFAULT_KEY_DURATION_SECONDS)
+			envTbl.LRM_UserNote = fToString(sessionData.note or "")
+			envTbl.LRM_LinkedDiscordID = fToString(sessionData.claimedBy or "")
+		end)
+	end
+
+	local function showUnsupportedBanner(messageText)
+		local guiParent = getSafeGuiParent()
+		if not guiParent then
+			return
+		end
+
+		destroyExistingGui(guiParent, "CoreXYZ_Unsupported")
+
+		local bannerGui = Instance.new("ScreenGui")
+		bannerGui.Name = "CoreXYZ_Unsupported"
+		bannerGui.ResetOnSpawn = false
+		bannerGui.IgnoreGuiInset = true
+		bannerGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		bannerGui.DisplayOrder = 999999
+
+		local bannerFrame = Instance.new("Frame")
+		bannerFrame.Name = "UnsupportedBanner"
+		bannerFrame.AnchorPoint = Vector2.new(0.5, 0)
+		bannerFrame.Position = UDim2.new(0.5, 0, 0, -96)
+		bannerFrame.Size = UDim2.new(0, 344, 0, 74)
+		bannerFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 11)
+		bannerFrame.BorderSizePixel = 0
+		bannerFrame.Parent = bannerGui
+
+		local bCorner = Instance.new("UICorner")
+		bCorner.CornerRadius = UDim.new(0, 10)
+		bCorner.Parent = bannerFrame
+
+		local bStroke = Instance.new("UIStroke")
+		bStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		bStroke.Thickness = 1.2
+		bStroke.Color = Color3.fromRGB(255, 255, 255)
+		bStroke.Transparency = 0.35
+		bStroke.Parent = bannerFrame
+
+		local bDot = Instance.new("Frame")
+		bDot.Position = UDim2.new(0, 14, 0, 16)
+		bDot.Size = UDim2.new(0, 7, 0, 7)
+		bDot.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+		bDot.BorderSizePixel = 0
+		bDot.Parent = bannerFrame
+		local bDotCorner = Instance.new("UICorner")
+		bDotCorner.CornerRadius = UDim.new(1, 0)
+		bDotCorner.Parent = bDot
+
+		local bannerHeader = Instance.new("TextLabel")
+		bannerHeader.Name = "HeaderTitle"
+		bannerHeader.Size = UDim2.new(1, -36, 0, 22)
+		bannerHeader.Position = UDim2.new(0, 28, 0, 9)
+		bannerHeader.BackgroundTransparency = 1
+		bannerHeader.Font = Enum.Font.GothamBold
+		bannerHeader.Text = "CORE.XYZ"
+		bannerHeader.TextSize = 13
+		bannerHeader.TextColor3 = Color3.fromRGB(250, 250, 255)
+		bannerHeader.TextXAlignment = Enum.TextXAlignment.Left
+		bannerHeader.Parent = bannerFrame
+
+		local bannerMessage = Instance.new("TextLabel")
+		bannerMessage.Name = "Message"
+		bannerMessage.Size = UDim2.new(1, -28, 0, 22)
+		bannerMessage.Position = UDim2.new(0, 14, 0, 38)
+		bannerMessage.BackgroundTransparency = 1
+		bannerMessage.Font = Enum.Font.GothamMedium
+		bannerMessage.Text = messageText
+		bannerMessage.TextSize = 13
+		bannerMessage.TextColor3 = Color3.fromRGB(255, 100, 100)
+		bannerMessage.TextXAlignment = Enum.TextXAlignment.Left
+		bannerMessage.Parent = bannerFrame
+
+		local parented = pcall(function()
+			bannerGui.Parent = guiParent
+		end)
+		if not parented then
+			bannerGui:Destroy()
+			return
+		end
+
+		TweenService:Create(
+			bannerFrame,
+			TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{ Position = UDim2.new(0.5, 0, 0, 24) }
+		):Play()
+
+		task.delay(4.5, function()
+			if bannerGui and bannerGui.Parent then
+				local hideTween = TweenService:Create(
+					bannerFrame,
+					TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+					{ Position = UDim2.new(0.5, 0, 0, -96) }
+				)
+				hideTween:Play()
+				hideTween.Completed:Wait()
+				if bannerGui then
+					bannerGui:Destroy()
+				end
+			end
+		end)
+	end
+
+	if not game:IsLoaded() then
+		game.Loaded:Wait()
+	end
+	repeat
+		task.wait(0.1)
+	until game:IsLoaded()
+
+	local targetScriptUrl = CONFIG.SupportedGames[game.GameId] or (CONFIG.SupportedPlaces and CONFIG.SupportedPlaces[game.PlaceId])
+	if not targetScriptUrl then
+		sendNotification("Core.xyz", "Game is not Supported!", 5)
+		showUnsupportedBanner("Game is not Supported!")
 		return ""
 	end
-	return (str:gsub("^%s+", ""):gsub("%s+$", ""))
-end
 
-local function getSafeGuiParent()
-	if type(gethui) == "function" then
-		local ok, hui = pcall(gethui)
-		if ok and hui then
-			return hui
-		end
-	end
-	local okCore, coreGui = pcall(function()
-		return game:GetService("CoreGui")
-	end)
-	if okCore and coreGui then
-		return coreGui
-	end
-	local lp = Players.LocalPlayer
-	if lp then
-		return lp:WaitForChild("PlayerGui")
-	end
-	return nil
-end
+	local initialStatusText = "Enter your FlowAuth key to continue."
+	local initialStatusColor = Color3.fromRGB(195, 198, 210)
 
-local function destroyExistingGui(parent, guiName)
-	if not parent then
-		return
-	end
-	pcall(function()
-		local existing = parent:FindFirstChild(guiName)
-		if existing then
-			existing:Destroy()
-		end
-	end)
-end
-
-local function safeIsFile(path)
-	if type(isfile) == "function" then
-		local ok, res = pcall(isfile, path)
-		return ok and res == true
-	end
-	return false
-end
-
-local function safeReadFile(path)
-	if type(readfile) == "function" then
-		local ok, res = pcall(readfile, path)
-		if ok and type(res) == "string" then
-			return res
-		end
-	end
-	return nil
-end
-
-local function safeWriteFile(path, content)
-	if type(writefile) == "function" then
-		return pcall(writefile, path, content)
-	end
-	return false
-end
-
-local function safeDeleteFile(path)
-	if type(delfile) == "function" then
-		return pcall(delfile, path)
-	end
-	return false
-end
-
-local function formatRemainingTime(remSec, isLifetime)
-	if isLifetime then
-		return "Lifetime"
-	end
-	if type(remSec) ~= "number" or remSec <= 0 then
-		return "Expired"
-	end
-	local days = fMathFloor(remSec / 86400)
-	local hours = fMathFloor((remSec % 86400) / 3600)
-	local mins = fMathFloor((remSec % 3600) / 60)
-	local secs = fMathFloor(remSec % 60)
-	if days > 0 then
-		return string.format("%dd %02dh %02dm %02ds", days, hours, mins, secs)
-	elseif hours > 0 then
-		return string.format("%02dh %02dm %02ds", hours, mins, secs)
-	end
-	return string.format("%02dm %02ds", mins, secs)
-end
-
--------------------------------------------------------------------------------
---! FlowAuth Key Verification & Accurate Expiration Resolution
--------------------------------------------------------------------------------
-local lastVerifiedSession = nil
-
-local function verifyFlowAuthKey(rawKey)
-	local cleanedKey = trim(rawKey)
-	if cleanedKey == "" then
-		return false, "Please enter a key first."
-	end
-
-	local lookupUrl = string.format("https://flowauth.net/v1/projects/%d/keys/lookup", CONFIG.ProjectId)
-	local res, reqErr = safeRequest({
-		Url = lookupUrl,
-		Method = "POST",
-		Headers = {
-			["Authorization"] = "Bearer " .. CONFIG.ApiToken,
-			["Content-Type"] = "application/json",
-		},
-		Body = safeJsonEncode({
-			key_value = cleanedKey,
-		}),
-	})
-
-	if not res then
-		return false, reqErr or "Failed to connect to FlowAuth."
-	end
-
-	if res.StatusCode == 404 then
-		return false, "Invalid key. Please check your key and try again."
-	elseif res.StatusCode == 429 then
-		return false, "Rate limited by FlowAuth. Wait a few seconds and try again."
-	elseif res.StatusCode ~= 200 then
-		return false, "Invalid or unrecognized FlowAuth key."
-	end
-
-	local data = safeJsonDecode(res.Body)
-	if type(data) ~= "table" or not data.id then
-		return false, "Invalid response from FlowAuth."
-	end
-
-	if data.blacklist_id ~= nil then
-		return false, "This key has been blacklisted."
-	end
-
-	local effStatus = fToString(data.effective_status or data.status or "")
-	if effStatus == "paused" then
-		return false, "This key is currently paused."
-	elseif effStatus == "expired" then
-		return false, "This key has expired."
-	elseif effStatus ~= "active" then
-		return false, "Key is not active (" .. (effStatus ~= "" and effStatus or "inactive") .. ")."
-	end
-
-	-- Optional HWID match verification if FlowAuth reports a bound HWID string
-	local currentHwid = getHwidStr()
-	if data.hwidless ~= true and type(data.hwid) == "string" and data.hwid ~= "" then
-		if data.hwid ~= currentHwid then
-			return false, "HWID mismatch! Reset your HWID or use the bound device."
-		end
-	end
-
-	local now = fOsTime()
-	local dur = type(data.duration) == "table" and data.duration or {}
-	local isLifetime = (dur.is_lifetime == true) or (dur.state == "lifetime")
-	local expiresAt = nil
-	local remainingSeconds = nil
-
-	if isLifetime then
-		expiresAt = nil
-		remainingSeconds = math.huge
-	else
-		local remMs = tonumber(dur.remaining_ms)
-		if remMs == nil and tonumber(data.expires_after_ms) then
-			remMs = tonumber(data.expires_after_ms)
-		end
-		if remMs and remMs > 0 then
-			remainingSeconds = fMathFloor(remMs / 1000)
-			expiresAt = now + remainingSeconds
-		elseif tonumber(data.expires_at) then
-			local expVal = tonumber(data.expires_at)
-			if expVal > 1e12 then
-				local evalMs = tonumber(dur.evaluated_at) or (now * 1000)
-				local diffSec = fMathFloor((expVal - evalMs) / 1000)
-				if diffSec <= 0 then
-					return false, "This key has expired."
-				end
-				remainingSeconds = diffSec
-				expiresAt = now + diffSec
-			else
-				if expVal <= now then
-					return false, "This key has expired."
-				end
-				remainingSeconds = expVal - now
-				expiresAt = expVal
-			end
-		elseif remMs and remMs <= 0 then
-			return false, "This key has expired."
-		else
-			remainingSeconds = DEFAULT_KEY_DURATION_SECONDS
-			expiresAt = now + DEFAULT_KEY_DURATION_SECONDS
-		end
-	end
-
-	lastVerifiedSession = {
-		provider = "FlowAuth",
-		projectId = CONFIG.ProjectId,
-		loaderHash = CONFIG.LoaderHash,
-		apiToken = CONFIG.ApiToken,
-		key = cleanedKey,
-		keyId = data.id,
-		tier = fToString(data.tier or "premium"),
-		isLifetime = isLifetime,
-		expiresAt = expiresAt,
-		remainingSeconds = remainingSeconds,
-		hasServerExpiry = true,
-		activatedAt = now,
-		verifiedAt = now,
-		note = data.note,
-		claimedBy = data.claimed_by,
-	}
-
-	return true, lastVerifiedSession
-end
-
-local function persistKeySession(verifiedKey)
-	local now = fOsTime()
-	local sessionData = lastVerifiedSession or {
-		provider = "FlowAuth",
-		projectId = CONFIG.ProjectId,
-		loaderHash = CONFIG.LoaderHash,
-		apiToken = CONFIG.ApiToken,
-		key = verifiedKey,
-		tier = "premium",
-		isLifetime = false,
-		expiresAt = now + DEFAULT_KEY_DURATION_SECONDS,
-		remainingSeconds = DEFAULT_KEY_DURATION_SECONDS,
-		hasServerExpiry = true,
-		activatedAt = now,
-		verifiedAt = now,
-	}
-
-	safeWriteFile(KEY_META_FILE, safeJsonEncode({
-		provider = "FlowAuth",
-		projectId = sessionData.projectId,
-		key = sessionData.key,
-		keyId = sessionData.keyId,
-		tier = sessionData.tier,
-		isLifetime = sessionData.isLifetime == true,
-		activatedAt = sessionData.activatedAt,
-		expiresAt = sessionData.expiresAt,
-		hasServerExpiry = true,
-		verifiedAt = sessionData.verifiedAt,
-	}))
-
-	pcall(function()
-		local envTbl = (type(getgenv) == "function" and getgenv()) or _G
-		envTbl.__CoreXYZ_KeySession = sessionData
-		envTbl.LRM_KeyTier = sessionData.tier or "premium"
-		envTbl.LRM_IsUserPremium = true
-		envTbl.LRM_SecondsLeft = sessionData.isLifetime and math.huge or (sessionData.remainingSeconds or DEFAULT_KEY_DURATION_SECONDS)
-		envTbl.LRM_UserNote = fToString(sessionData.note or "")
-		envTbl.LRM_LinkedDiscordID = fToString(sessionData.claimedBy or "")
-	end)
-end
-
-local function toRawGitHubUrl(url)
-	if type(url) ~= "string" then
-		return url
-	end
-	local owner, repo, path = url:match("^https?://github%.com/([^/]+)/([^/]+)/blob/(.+)$")
-	if owner and repo and path then
-		return string.format("https://raw.githubusercontent.com/%s/%s/%s", owner, repo, path)
-	end
-	return url
-end
-
-local function executeTargetScript(targetUrl)
-	local rawUrl = toRawGitHubUrl(targetUrl)
-	local okFetch, source = pcall(function()
-		return game:HttpGet(rawUrl)
-	end)
-
-	if (not okFetch or type(source) ~= "string" or source == "") and type(fRequest) == "function" then
-		local res = safeRequest({
-			Url = rawUrl,
-			Method = "GET",
-		})
-		if res and res.StatusCode == 200 and type(res.Body) == "string" and res.Body ~= "" then
-			okFetch = true
-			source = res.Body
-		end
-	end
-
-	if not okFetch or type(source) ~= "string" or source == "" then
-		sendNotification("Core.xyz", "Failed to download script payload.", 5)
-		return false
-	end
-
-	local fn, compileErr = loadstring(source)
-	if type(fn) ~= "function" then
-		sendNotification("Core.xyz", "Failed to compile script: " .. fToString(compileErr), 5)
-		return false
-	end
-
-	local okExec, execErr = pcall(fn)
-	if not okExec then
-		sendNotification("Core.xyz", "Runtime error: " .. fToString(execErr), 5)
-		return false
-	end
-
-	return true
-end
-
--------------------------------------------------------------------------------
---! Modern Glassmorphic Toast Banner (Unsupported Game Notification)
--------------------------------------------------------------------------------
-local function showUnsupportedBanner(messageText)
-	local guiParent = getSafeGuiParent()
-	if not guiParent then
-		return
-	end
-
-	destroyExistingGui(guiParent, "CoreXYZ_Unsupported")
-
-	local bannerGui = Instance.new("ScreenGui")
-	bannerGui.Name = "CoreXYZ_Unsupported"
-	bannerGui.ResetOnSpawn = false
-	bannerGui.IgnoreGuiInset = true
-	bannerGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	bannerGui.DisplayOrder = 999999
-
-	local bannerFrame = Instance.new("Frame")
-	bannerFrame.Name = "UnsupportedBanner"
-	bannerFrame.AnchorPoint = Vector2.new(0.5, 0)
-	bannerFrame.Position = UDim2.new(0.5, 0, 0, -96)
-	bannerFrame.Size = UDim2.new(0, 344, 0, 74)
-	bannerFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 11)
-	bannerFrame.BorderSizePixel = 0
-	bannerFrame.Parent = bannerGui
-
-	local bCorner = Instance.new("UICorner")
-	bCorner.CornerRadius = UDim.new(0, 10)
-	bCorner.Parent = bannerFrame
-
-	local bStroke = Instance.new("UIStroke")
-	bStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	bStroke.Thickness = 1.2
-	bStroke.Color = Color3.fromRGB(255, 255, 255)
-	bStroke.Transparency = 0.35
-	bStroke.Parent = bannerFrame
-
-	local bDot = Instance.new("Frame")
-	bDot.Position = UDim2.new(0, 14, 0, 16)
-	bDot.Size = UDim2.new(0, 7, 0, 7)
-	bDot.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
-	bDot.BorderSizePixel = 0
-	bDot.Parent = bannerFrame
-	local bDotCorner = Instance.new("UICorner")
-	bDotCorner.CornerRadius = UDim.new(1, 0)
-	bDotCorner.Parent = bDot
-
-	local bannerHeader = Instance.new("TextLabel")
-	bannerHeader.Name = "HeaderTitle"
-	bannerHeader.Size = UDim2.new(1, -36, 0, 22)
-	bannerHeader.Position = UDim2.new(0, 28, 0, 9)
-	bannerHeader.BackgroundTransparency = 1
-	bannerHeader.Font = Enum.Font.GothamBold
-	bannerHeader.Text = "CORE.XYZ"
-	bannerHeader.TextSize = 13
-	bannerHeader.TextColor3 = Color3.fromRGB(250, 250, 255)
-	bannerHeader.TextXAlignment = Enum.TextXAlignment.Left
-	bannerHeader.Parent = bannerFrame
-
-	local bannerMessage = Instance.new("TextLabel")
-	bannerMessage.Name = "Message"
-	bannerMessage.Size = UDim2.new(1, -28, 0, 22)
-	bannerMessage.Position = UDim2.new(0, 14, 0, 38)
-	bannerMessage.BackgroundTransparency = 1
-	bannerMessage.Font = Enum.Font.GothamMedium
-	bannerMessage.Text = messageText
-	bannerMessage.TextSize = 13
-	bannerMessage.TextColor3 = Color3.fromRGB(255, 100, 100)
-	bannerMessage.TextXAlignment = Enum.TextXAlignment.Left
-	bannerMessage.Parent = bannerFrame
-
-	local parented = pcall(function()
-		bannerGui.Parent = guiParent
-	end)
-	if not parented then
-		bannerGui:Destroy()
-		return
-	end
-
-	TweenService:Create(
-		bannerFrame,
-		TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-		{ Position = UDim2.new(0.5, 0, 0, 24) }
-	):Play()
-
-	task.delay(4.5, function()
-		if bannerGui and bannerGui.Parent then
-			local hideTween = TweenService:Create(
-				bannerFrame,
-				TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-				{ Position = UDim2.new(0.5, 0, 0, -96) }
-			)
-			hideTween:Play()
-			hideTween.Completed:Wait()
-			if bannerGui then
-				bannerGui:Destroy()
-			end
-		end
-	end)
-end
-
--------------------------------------------------------------------------------
---! Step 1 — Wait for Game Load
--------------------------------------------------------------------------------
-if not game:IsLoaded() then
-	game.Loaded:Wait()
-end
-repeat
-	task.wait(0.1)
-until game:IsLoaded()
-
--------------------------------------------------------------------------------
---! Step 2 — Universe ID & Place ID Game Support Gate
--------------------------------------------------------------------------------
-local targetScriptUrl = CONFIG.SupportedGames[game.GameId] or (CONFIG.SupportedPlaces and CONFIG.SupportedPlaces[game.PlaceId])
-if not targetScriptUrl then
-	sendNotification("Core.xyz", "Game is not Supported!", 5)
-	showUnsupportedBanner("Game is not Supported!")
-	return
-end
-
--------------------------------------------------------------------------------
---! Step 3 — Saved Key Auto-Validation (ONLY if Game IS Supported)
--------------------------------------------------------------------------------
-local initialStatusText = "Enter your FlowAuth key to continue."
-local initialStatusColor = Color3.fromRGB(195, 198, 210)
-
-if safeIsFile(KEY_FILE) then
-	local savedKey = trim(safeReadFile(KEY_FILE) or "")
-	if savedKey ~= "" then
-		sendNotification("Core.xyz", "Checking saved FlowAuth key...", 3)
-		local isValid, sessionOrErr = verifyFlowAuthKey(savedKey)
+	-- 1. If a key was passed directly to the loader argument, verify and return it
+	local argKey = trim(fToString(currentKey or ""))
+	if argKey ~= "" and argKey ~= "FLOW-REPLACE-WITH-YOUR-KEY" then
+		local isValid, sessionOrErr = verifyFlowAuthKey(argKey)
 		if isValid == true then
-			persistKeySession(savedKey)
-			local timeTag = "Active"
-			if type(sessionOrErr) == "table" then
-				if sessionOrErr.isLifetime then
-					timeTag = "Lifetime"
-				elseif tonumber(sessionOrErr.remainingSeconds) then
-					timeTag = formatRemainingTime(sessionOrErr.remainingSeconds, false) .. " left"
-				end
-			end
-			sendNotification("Core.xyz", "Key Valid (" .. timeTag .. ")! Loading script...", 4)
-			executeTargetScript(targetScriptUrl)
-			return
+			safeWriteFile(KEY_FILE, argKey)
+			persistKeySession(argKey)
+			return argKey
 		else
-			safeDeleteFile(KEY_FILE)
-			safeDeleteFile(KEY_META_FILE)
-			sendNotification("Core.xyz", "Your Saved key is Invalid/Expired.", 5)
-			initialStatusText = fToString(sessionOrErr or "Your Saved key is Invalid/Expired.")
+			initialStatusText = fToString(sessionOrErr or "Provided key is invalid or expired.")
 			initialStatusColor = Color3.fromRGB(255, 100, 100)
 		end
 	end
-end
 
--------------------------------------------------------------------------------
---! Step 4 — Black-Themed Animated White-Glow Key System UI
--------------------------------------------------------------------------------
-local function openKeySystemUI()
+	-- 2. Check saved key file on disk
+	if safeIsFile(KEY_FILE) then
+		local savedKey = trim(safeReadFile(KEY_FILE) or "")
+		if savedKey ~= "" then
+			sendNotification("Core.xyz", "Checking saved FlowAuth key...", 3)
+			local isValid, sessionOrErr = verifyFlowAuthKey(savedKey)
+			if isValid == true then
+				persistKeySession(savedKey)
+				local timeTag = "Active"
+				if type(sessionOrErr) == "table" then
+					if sessionOrErr.isLifetime then
+						timeTag = "Lifetime"
+					elseif tonumber(sessionOrErr.remainingSeconds) then
+						timeTag = formatRemainingTime(sessionOrErr.remainingSeconds, false) .. " left"
+					end
+				end
+				sendNotification("Core.xyz", "Key Valid (" .. timeTag .. ")! Loading script...", 4)
+				return savedKey
+			else
+				safeDeleteFile(KEY_FILE)
+				safeDeleteFile(KEY_META_FILE)
+				sendNotification("Core.xyz", "Your Saved key is Invalid/Expired.", 5)
+				initialStatusText = fToString(sessionOrErr or "Your Saved key is Invalid/Expired.")
+				initialStatusColor = Color3.fromRGB(255, 100, 100)
+			end
+		end
+	end
+
+	-- 3. Open Black-Themed Animated White-Glow Key System UI and block until verified
+	local verifiedKeyResult = nil
+	local uiClosed = false
+
 	local guiParent = getSafeGuiParent()
 	if not guiParent then
-		return
+		return ""
 	end
 
 	destroyExistingGui(guiParent, "CoreXYZ_KeySystem")
@@ -600,7 +548,6 @@ local function openKeySystemUI()
 	mainScale.Scale = 0.86
 	mainScale.Parent = rootHolder
 
-	-- Deep Pitch-Black Shadow & Soft Outer White Glow Halo
 	local shadowDeep = Instance.new("Frame")
 	shadowDeep.Name = "ShadowDeep"
 	shadowDeep.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -645,7 +592,6 @@ local function openKeySystemUI()
 	})
 	outerGlowGrad.Parent = outerGlowStroke
 
-	-- Main Pure Black Container
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Name = "MainContainer"
 	mainFrame.Size = UDim2.new(1, 0, 1, 0)
@@ -669,7 +615,6 @@ local function openKeySystemUI()
 	})
 	mainGrad.Parent = mainFrame
 
-	-- Crisp Specular White Glow Border
 	local mainStroke = Instance.new("UIStroke")
 	mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	mainStroke.Thickness = 1.45
@@ -688,7 +633,6 @@ local function openKeySystemUI()
 	})
 	borderStrokeGrad.Parent = mainStroke
 
-	-- Top Shimmer White Glow Line + Under-Glow
 	local topAccent = Instance.new("Frame")
 	topAccent.Name = "TopAccent"
 	topAccent.Position = UDim2.new(0, 0, 0, 0)
@@ -726,7 +670,6 @@ local function openKeySystemUI()
 	})
 	topGlowGrad.Parent = topGlow
 
-	-- Bottom Verification Progress Sweep Bar
 	local bottomProgress = Instance.new("Frame")
 	bottomProgress.Name = "BottomProgress"
 	bottomProgress.AnchorPoint = Vector2.new(0, 1)
@@ -737,7 +680,6 @@ local function openKeySystemUI()
 	bottomProgress.ZIndex = 7
 	bottomProgress.Parent = mainFrame
 
-	-- 1. Clean Top Header Bar
 	local headerBar = Instance.new("Frame")
 	headerBar.Name = "HeaderBar"
 	headerBar.Position = UDim2.new(0, 0, 0, 2)
@@ -866,7 +808,6 @@ local function openKeySystemUI()
 	})
 	divGrad.Parent = headerDivider
 
-	-- Body Container
 	local bodyFrame = Instance.new("Frame")
 	bodyFrame.Name = "Body"
 	bodyFrame.Position = UDim2.new(0, 0, 0, 51)
@@ -876,7 +817,6 @@ local function openKeySystemUI()
 	bodyFrame.ZIndex = 3
 	bodyFrame.Parent = mainFrame
 
-	-- 2. Live Status Label
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "StatusLabel"
 	statusLabel.Position = UDim2.new(0, 18, 0, 12)
@@ -892,7 +832,6 @@ local function openKeySystemUI()
 	statusLabel.ZIndex = 4
 	statusLabel.Parent = bodyFrame
 
-	-- 3. Sleek Key Input Box with White Glow Border & Animated Focus Bar
 	local inputHolder = Instance.new("Frame")
 	inputHolder.Name = "InputHolder"
 	inputHolder.AnchorPoint = Vector2.new(0.5, 0)
@@ -973,7 +912,6 @@ local function openKeySystemUI()
 		TweenService:Create(focusBar, focusOutInfo, { Size = UDim2.new(0, 0, 0, 2) }):Play()
 	end)
 
-	-- 4. Clean Animated Button Row ("Submit" & "Get Key")
 	local buttonRow = Instance.new("Frame")
 	buttonRow.Name = "ButtonRow"
 	buttonRow.Position = UDim2.new(0, 18, 0, 108)
@@ -1087,7 +1025,6 @@ local function openKeySystemUI()
 		):Play()
 	end
 
-	-- Live Spring/Quint Button Micro-Interactions
 	local function attachStyledButton(button, strokeObj, sheenObj, styleCfg)
 		local btnScale = Instance.new("UIScale")
 		btnScale.Scale = 1
@@ -1216,7 +1153,6 @@ local function openKeySystemUI()
 		RotateOnHover = true,
 	})
 
-	-- Ultra-Smooth Inertial Dragging on Top Header Bar (Mouse + Touch)
 	local dragging = false
 	local dragInput = nil
 	local dragStart = nil
@@ -1257,7 +1193,6 @@ local function openKeySystemUI()
 		end
 	end)
 
-	-- 60Hz+ Ambient White Glow Shimmer, Specular Border Rotation & Status Pulse
 	local guiAlive = true
 	local animClock = 0
 	local sheenTimer = 0
@@ -1284,6 +1219,7 @@ local function openKeySystemUI()
 
 	screenGui.Destroying:Connect(function()
 		guiAlive = false
+		uiClosed = true
 		if animConn then
 			animConn:Disconnect()
 		end
@@ -1298,7 +1234,6 @@ local function openKeySystemUI()
 		end
 	end)
 
-	-- Input Horizontal Shake + Status Helper
 	local shakeToken = 0
 	local function shakeInputBox()
 		shakeToken = shakeToken + 1
@@ -1378,16 +1313,17 @@ local function openKeySystemUI()
 			if screenGui then
 				screenGui:Destroy()
 			end
+			uiClosed = true
 		else
 			scaleTween.Completed:Connect(function()
 				if screenGui then
 					screenGui:Destroy()
 				end
+				uiClosed = true
 			end)
 		end
 	end
 
-	-- State Locks
 	local isChecking = false
 	local copyResetToken = 0
 
@@ -1395,7 +1331,6 @@ local function openKeySystemUI()
 		fadeOutAndDestroy(false)
 	end)
 
-	-- Submit Button Logic
 	local function handleSubmit()
 		if isChecking or not guiAlive then
 			return
@@ -1440,7 +1375,7 @@ local function openKeySystemUI()
 					task.wait(0.18)
 					fadeOutAndDestroy(true)
 				end
-				executeTargetScript(targetScriptUrl)
+				verifiedKeyResult = enteredKey
 			else
 				if guiAlive then
 					shakeInputBox()
@@ -1463,7 +1398,6 @@ local function openKeySystemUI()
 		end
 	end)
 
-	-- Get Key Button Logic (FlowAuth Reward Link)
 	getKeyBtn.MouseButton1Click:Connect(function()
 		if not guiAlive then
 			return
@@ -1493,7 +1427,6 @@ local function openKeySystemUI()
 		end
 	end)
 
-	-- Parent safely and play staggered fluid entrance animation
 	local okParent = pcall(function()
 		screenGui.Parent = guiParent
 	end)
@@ -1541,7 +1474,141 @@ local function openKeySystemUI()
 		end)
 	else
 		screenGui:Destroy()
+		return ""
+	end
+
+	repeat
+		task.wait(0.1)
+	until verifiedKeyResult ~= nil or uiClosed
+
+	return verifiedKeyResult or ""
+end)
+
+-------------------------------------------------------------------------------
+--! Post-Authentication Protected Game Loader (Executes after FlowAuth or Direct)
+-------------------------------------------------------------------------------
+local SUPPORTED_GAMES = {
+	[9294074907] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
+	[10766620257] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
+	[9641502068] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
+	[10770730129] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
+}
+
+local SUPPORTED_PLACES = {
+	[90568084448279] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
+	[74023858073178] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
+	[112731528776884] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
+	[106931373443671] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
+}
+
+local StarterGui = game:GetService("StarterGui")
+local HttpService = game:GetService("HttpService")
+
+local function sendNotification(title, text, duration)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = title,
+			Text = text,
+			Duration = duration or 5,
+		})
+	end)
+end
+
+-- Sync FlowAuth injected runtime globals (LRM_*) into __CoreXYZ_KeySession & CoreXYZ_KeyMeta.json
+pcall(function()
+	local envTbl = (type(getgenv) == "function" and getgenv()) or _G
+	local now = os.time()
+	local existingSession = type(envTbl.__CoreXYZ_KeySession) == "table" and envTbl.__CoreXYZ_KeySession or {}
+
+	local lrmTier = (type(LRM_KeyTier) == "string" and LRM_KeyTier ~= "" and LRM_KeyTier) or existingSession.tier or "free"
+	local lrmSec = tonumber(LRM_SecondsLeft)
+	local isLife = existingSession.isLifetime == true
+	local expAt = existingSession.expiresAt
+
+	if lrmSec ~= nil then
+		if lrmSec == math.huge or lrmSec > 315360000 then
+			isLife = true
+			expAt = nil
+		elseif lrmSec > 0 then
+			isLife = false
+			expAt = now + math.floor(lrmSec)
+		end
+	end
+
+	local syncedSession = {
+		provider = "FlowAuth",
+		projectId = 10959,
+		loaderHash = "5aadc1854f782322ada05d461c2cb0cd",
+		apiToken = "adb858e40cf5dc946478beaa63d0693f51ad4b83ac4bef78",
+		key = existingSession.key or (type(readfile) == "function" and pcall(readfile, "CoreXYZ_Key.txt") and select(2, pcall(readfile, "CoreXYZ_Key.txt"))) or "",
+		keyId = existingSession.keyId,
+		tier = lrmTier,
+		isLifetime = isLife,
+		expiresAt = expAt,
+		remainingSeconds = isLife and math.huge or (expAt and math.max(0, expAt - now) or 86400),
+		hasServerExpiry = true,
+		activatedAt = existingSession.activatedAt or now,
+		verifiedAt = now,
+		note = (type(LRM_UserNote) == "string" and LRM_UserNote) or existingSession.note or "",
+		claimedBy = (type(LRM_LinkedDiscordID) == "string" and LRM_LinkedDiscordID) or existingSession.claimedBy or "",
+	}
+
+	envTbl.__CoreXYZ_KeySession = syncedSession
+	if type(writefile) == "function" then
+		pcall(writefile, "CoreXYZ_KeyMeta.json", HttpService:JSONEncode({
+			provider = "FlowAuth",
+			projectId = 10959,
+			key = syncedSession.key,
+			keyId = syncedSession.keyId,
+			tier = syncedSession.tier,
+			isLifetime = syncedSession.isLifetime,
+			activatedAt = syncedSession.activatedAt,
+			expiresAt = syncedSession.expiresAt,
+			hasServerExpiry = true,
+			verifiedAt = now,
+		}))
+	end
+end)
+
+local targetUrl = SUPPORTED_GAMES[game.GameId] or SUPPORTED_PLACES[game.PlaceId]
+if not targetUrl then
+	return
+end
+
+local fRequest = request
+	or http_request
+	or syn_request
+	or (type(syn) == "table" and syn.request)
+	or (type(http) == "table" and http.request)
+	or (type(fluxus) == "table" and fluxus.request)
+
+local okFetch, source = pcall(function()
+	return game:HttpGet(targetUrl)
+end)
+
+if (not okFetch or type(source) ~= "string" or source == "") and type(fRequest) == "function" then
+	local okReq, res = pcall(fRequest, { Url = targetUrl, Method = "GET" })
+	if okReq and type(res) == "table" and (res.StatusCode == 200 or res.status_code == 200) then
+		local body = res.Body or res.body
+		if type(body) == "string" and body ~= "" then
+			okFetch = true
+			source = body
+		end
 	end
 end
 
-openKeySystemUI()
+if not okFetch or type(source) ~= "string" or source == "" then
+	sendNotification("Core.xyz", "Failed to download script payload.", 5)
+	return
+end
+
+local fn, compileErr = loadstring(source)
+if type(fn) ~= "function" then
+	sendNotification("Core.xyz", "Failed to compile script: " .. tostring(compileErr), 5)
+	return
+end
+
+local okExec, execErr = pcall(fn)
+if not okExec then
+	sendNotification("Core.xyz", "Runtime error: " .. tostring(execErr), 5)
+end
