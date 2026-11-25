@@ -1,15 +1,13 @@
 --// Core.xyz Loader (FlowAuth Auth + Universe ID Gate + Black-Themed Animated White-Glow Key System UI)
-if type(flow_init) ~= "function" then
-	getgenv().flow_init = function(cb)
-		local k = cb("")
-		if type(k) ~= "string" or k == "" then
-			error("FlowAuth: Key verification cancelled.", 0)
-		end
-		return k
+if type(flow_preinit) ~= "function" then
+	local envTbl = (type(getgenv) == "function" and getgenv()) or _G
+	envTbl.flow_preinit = function(cb)
+		return cb()
 	end
 end
 
-flow_init(function(currentKey)
+flow_preinit(function()
+
 	local CONFIG = {
 		ProjectId = 10959,
 		LoaderHash = "5aadc1854f782322ada05d461c2cb0cd",
@@ -44,7 +42,6 @@ flow_init(function(currentKey)
 	local fToString = tostring
 	local fOsTime = os.time
 	local fMathFloor = math.floor
-
 	local fSetClipboard = setclipboard or toclipboard or set_clipboard or (type(Clipboard) == "table" and Clipboard.set)
 	local fRequest = request
 		or http_request
@@ -70,38 +67,31 @@ flow_init(function(currentKey)
 		return ok and res or nil
 	end
 
-	local function getHwidStr()
-		local ok, rawHwid = pcall(function()
-			if type(gethwid) == "function" then
-				return gethwid()
+	local function safeRequest(opts)
+		if type(fRequest) == "function" then
+			local ok, res = pcall(fRequest, opts)
+			if ok and type(res) == "table" then
+				return {
+					StatusCode = tonumber(res.StatusCode or res.status_code or res.Status or res.status) or 0,
+					Body = fToString(res.Body or res.body or ""),
+				}
 			end
-			local localPlayer = Players.LocalPlayer
-			if localPlayer then
-				return localPlayer.UserId
-			end
-			return 0
+		end
+		local okHttp, resHttp = pcall(function()
+			return HttpService:RequestAsync({
+				Url = opts.Url,
+				Method = opts.Method or "GET",
+				Headers = opts.Headers or {},
+				Body = opts.Body,
+			})
 		end)
-		if ok and rawHwid ~= nil and fToString(rawHwid) ~= "" then
-			return fToString(rawHwid)
+		if okHttp and type(resHttp) == "table" then
+			return {
+				StatusCode = tonumber(resHttp.StatusCode) or 0,
+				Body = fToString(resHttp.Body or ""),
+			}
 		end
-		local localPlayer = Players.LocalPlayer
-		return localPlayer and fToString(localPlayer.UserId) or "0"
-	end
-
-	local function safeRequest(reqParams)
-		if type(fRequest) ~= "function" then
-			return nil, "Executor HTTP request function is unavailable."
-		end
-		local ok, res = pcall(fRequest, reqParams)
-		if not ok or type(res) ~= "table" then
-			return nil, "Network request failed."
-		end
-		local statusCode = res.StatusCode or res.status_code or res.status or 0
-		local body = res.Body or res.body or ""
-		return {
-			StatusCode = tonumber(statusCode) or 0,
-			Body = type(body) == "string" and body or fToString(body),
-		}, nil
+		return nil, "HTTP request function unavailable in this executor."
 	end
 
 	local function sendNotification(title, text, duration)
@@ -269,6 +259,7 @@ flow_init(function(currentKey)
 			if remMs == nil and tonumber(data.expires_after_ms) then
 				remMs = tonumber(data.expires_after_ms)
 			end
+
 			if remMs and remMs > 0 then
 				remainingSeconds = fMathFloor(remMs / 1000)
 				expiresAt = now + remainingSeconds
@@ -318,7 +309,126 @@ flow_init(function(currentKey)
 		return true, lastVerifiedSession
 	end
 
-	local function persistKeySession(verifiedKey)
+	local function publishVerifiedKey(verifiedKey)
+		pcall(function()
+			if type(getgenv) == "function" then
+				getgenv().script_key = verifiedKey
+			end
+		end)
+		pcall(function()
+			_G.script_key = verifiedKey
+		end)
+		for lv = 1, 6 do
+			pcall(function()
+				local env = getfenv(lv)
+				if type(env) == "table" then
+					rawset(env, "script_key", verifiedKey)
+				end
+			end)
+		end
+	end
+
+	local function registerGameLauncher(targetUrl)
+		local envTbl = (type(getgenv) == "function" and getgenv()) or _G
+		envTbl.__CoreXYZ_GameLaunched = false
+		envTbl.__CoreXYZ_LaunchGame = function()
+			if envTbl.__CoreXYZ_GameLaunched then
+				return
+			end
+			envTbl.__CoreXYZ_GameLaunched = true
+
+			pcall(function()
+				local now = fOsTime()
+				local existingSession = type(envTbl.__CoreXYZ_KeySession) == "table" and envTbl.__CoreXYZ_KeySession or {}
+				local lrmTier = (type(LRM_KeyTier) == "string" and LRM_KeyTier ~= "" and LRM_KeyTier) or existingSession.tier or "free"
+				local lrmSec = tonumber(LRM_SecondsLeft)
+				local isLife = existingSession.isLifetime == true
+				local expAt = existingSession.expiresAt
+
+				if lrmSec ~= nil then
+					if lrmSec == math.huge or lrmSec > 315360000 then
+						isLife = true
+						expAt = nil
+					elseif lrmSec > 0 then
+						isLife = false
+						expAt = now + fMathFloor(lrmSec)
+					end
+				end
+
+				local syncedSession = {
+					provider = "FlowAuth",
+					projectId = CONFIG.ProjectId,
+					loaderHash = CONFIG.LoaderHash,
+					apiToken = CONFIG.ApiToken,
+					key = existingSession.key or safeReadFile(KEY_FILE) or "",
+					keyId = existingSession.keyId,
+					tier = lrmTier,
+					isLifetime = isLife,
+					expiresAt = expAt,
+					remainingSeconds = isLife and math.huge or (expAt and math.max(0, expAt - now) or DEFAULT_KEY_DURATION_SECONDS),
+					hasServerExpiry = true,
+					activatedAt = existingSession.activatedAt or now,
+					verifiedAt = now,
+					note = (type(LRM_UserNote) == "string" and LRM_UserNote) or existingSession.note or "",
+					claimedBy = (type(LRM_LinkedDiscordID) == "string" and LRM_LinkedDiscordID) or existingSession.claimedBy or "",
+				}
+				envTbl.__CoreXYZ_KeySession = syncedSession
+
+				safeWriteFile(KEY_META_FILE, safeJsonEncode({
+					provider = "FlowAuth",
+					projectId = CONFIG.ProjectId,
+					key = syncedSession.key,
+					keyId = syncedSession.keyId,
+					tier = syncedSession.tier,
+					isLifetime = syncedSession.isLifetime,
+					activatedAt = syncedSession.activatedAt,
+					expiresAt = syncedSession.expiresAt,
+					hasServerExpiry = true,
+					verifiedAt = now,
+				}))
+			end)
+
+			local okFetch, source = pcall(function()
+				return game:HttpGet(targetUrl)
+			end)
+			if (not okFetch or type(source) ~= "string" or source == "") and type(fRequest) == "function" then
+				local okReq, res = pcall(fRequest, { Url = targetUrl, Method = "GET" })
+				if okReq and type(res) == "table" and (res.StatusCode == 200 or res.status_code == 200) then
+					local body = res.Body or res.body
+					if type(body) == "string" and body ~= "" then
+						okFetch = true
+						source = body
+					end
+				end
+			end
+
+			if not okFetch or type(source) ~= "string" or source == "" then
+				sendNotification("Core.xyz", "Failed to download script payload.", 5)
+				return
+			end
+
+			local fn, compileErr = loadstring(source)
+			if type(fn) ~= "function" then
+				sendNotification("Core.xyz", "Failed to compile script: " .. fToString(compileErr), 5)
+				return
+			end
+
+			local okExec, execErr = pcall(fn)
+			if not okExec then
+				sendNotification("Core.xyz", "Runtime error: " .. fToString(execErr), 5)
+			end
+		end
+
+		-- Watchdog fallback: if FlowAuthRuntime takes >4s or is bypassed, still launch the game cleanly
+		task.spawn(function()
+			task.wait(4)
+			if not envTbl.__CoreXYZ_GameLaunched and type(envTbl.__CoreXYZ_LaunchGame) == "function" then
+				envTbl.__CoreXYZ_LaunchGame()
+			end
+		end)
+	end
+
+	local function persistKeySession(verifiedKey, targetUrl)
 		local now = fOsTime()
 		local sessionData = lastVerifiedSession or {
 			provider = "FlowAuth",
@@ -357,6 +467,9 @@ flow_init(function(currentKey)
 			envTbl.LRM_UserNote = fToString(sessionData.note or "")
 			envTbl.LRM_LinkedDiscordID = fToString(sessionData.claimedBy or "")
 		end)
+
+		publishVerifiedKey(verifiedKey)
+		registerGameLauncher(targetUrl)
 	end
 
 	local function showUnsupportedBanner(messageText)
@@ -400,6 +513,7 @@ flow_init(function(currentKey)
 		bDot.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
 		bDot.BorderSizePixel = 0
 		bDot.Parent = bannerFrame
+
 		local bDotCorner = Instance.new("UICorner")
 		bDotCorner.CornerRadius = UDim.new(1, 0)
 		bDotCorner.Parent = bDot
@@ -409,121 +523,98 @@ flow_init(function(currentKey)
 		bannerHeader.Size = UDim2.new(1, -36, 0, 22)
 		bannerHeader.Position = UDim2.new(0, 28, 0, 9)
 		bannerHeader.BackgroundTransparency = 1
-		bannerHeader.Font = Enum.Font.GothamBold
-		bannerHeader.Text = "CORE.XYZ"
+		bannerHeader.Text = "Core.xyz  •  Unsupported Game"
+		bannerHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
 		bannerHeader.TextSize = 13
-		bannerHeader.TextColor3 = Color3.fromRGB(250, 250, 255)
+		bannerHeader.Font = Enum.Font.GothamBold
 		bannerHeader.TextXAlignment = Enum.TextXAlignment.Left
 		bannerHeader.Parent = bannerFrame
 
-		local bannerMessage = Instance.new("TextLabel")
-		bannerMessage.Name = "Message"
-		bannerMessage.Size = UDim2.new(1, -28, 0, 22)
-		bannerMessage.Position = UDim2.new(0, 14, 0, 38)
-		bannerMessage.BackgroundTransparency = 1
-		bannerMessage.Font = Enum.Font.GothamMedium
-		bannerMessage.Text = messageText
-		bannerMessage.TextSize = 13
-		bannerMessage.TextColor3 = Color3.fromRGB(255, 100, 100)
-		bannerMessage.TextXAlignment = Enum.TextXAlignment.Left
-		bannerMessage.Parent = bannerFrame
+		local bannerDesc = Instance.new("TextLabel")
+		bannerDesc.Name = "Description"
+		bannerDesc.Size = UDim2.new(1, -28, 0, 32)
+		bannerDesc.Position = UDim2.new(0, 14, 0, 32)
+		bannerDesc.BackgroundTransparency = 1
+		bannerDesc.Text = messageText
+		bannerDesc.TextColor3 = Color3.fromRGB(175, 175, 185)
+		bannerDesc.TextSize = 12
+		bannerDesc.Font = Enum.Font.GothamMedium
+		bannerDesc.TextXAlignment = Enum.TextXAlignment.Left
+		bannerDesc.TextYAlignment = Enum.TextYAlignment.Top
+		bannerDesc.TextWrapped = true
+		bannerDesc.Parent = bannerFrame
 
-		local parented = pcall(function()
+		local okParent = pcall(function()
 			bannerGui.Parent = guiParent
 		end)
-		if not parented then
+		if not okParent then
 			bannerGui:Destroy()
 			return
 		end
 
 		TweenService:Create(
 			bannerFrame,
-			TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-			{ Position = UDim2.new(0.5, 0, 0, 24) }
+			TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{ Position = UDim2.new(0.5, 0, 0, 20) }
 		):Play()
 
-		task.delay(4.5, function()
+		task.delay(3.8, function()
 			if bannerGui and bannerGui.Parent then
-				local hideTween = TweenService:Create(
+				local outTween = TweenService:Create(
 					bannerFrame,
-					TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+					TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 					{ Position = UDim2.new(0.5, 0, 0, -96) }
 				)
-				hideTween:Play()
-				hideTween.Completed:Wait()
-				if bannerGui then
+				outTween:Play()
+				outTween.Completed:Wait()
+				pcall(function()
 					bannerGui:Destroy()
-				end
+				end)
 			end
 		end)
 	end
 
-	if not game:IsLoaded() then
-		game.Loaded:Wait()
-	end
-	repeat
-		task.wait(0.1)
-	until game:IsLoaded()
-
-	local targetScriptUrl = CONFIG.SupportedGames[game.GameId] or (CONFIG.SupportedPlaces and CONFIG.SupportedPlaces[game.PlaceId])
+	local targetScriptUrl = CONFIG.SupportedGames[game.GameId] or CONFIG.SupportedPlaces[game.PlaceId]
 	if not targetScriptUrl then
-		sendNotification("Core.xyz", "Game is not Supported!", 5)
-		showUnsupportedBanner("Game is not Supported!")
-		return ""
+		local msg = string.format("This game (GameId: %s) is not supported by Core.xyz.", fToString(game.GameId))
+		sendNotification("Core.xyz", msg, 5)
+		showUnsupportedBanner(msg)
+		error("Core.xyz: Unsupported game.", 0)
 	end
 
-	local initialStatusText = "Enter your FlowAuth key to continue."
-	local initialStatusColor = Color3.fromRGB(195, 198, 210)
+	local initialCandidate = ""
+	pcall(function()
+		local envTbl = (type(getgenv) == "function" and getgenv()) or _G
+		if type(envTbl.script_key) == "string" and envTbl.script_key ~= "" then
+			initialCandidate = envTbl.script_key
+		elseif type(_G.script_key) == "string" and _G.script_key ~= "" then
+			initialCandidate = _G.script_key
+		end
+	end)
+	if initialCandidate == "" and type(script_key) == "string" and script_key ~= "" then
+		initialCandidate = script_key
+	end
 
-	-- 1. If a key was passed directly to the loader argument, verify and return it
-	local argKey = trim(fToString(currentKey or ""))
-	if argKey ~= "" and argKey ~= "FLOW-REPLACE-WITH-YOUR-KEY" then
-		local isValid, sessionOrErr = verifyFlowAuthKey(argKey)
-		if isValid == true then
-			safeWriteFile(KEY_FILE, argKey)
-			persistKeySession(argKey)
-			return argKey
+	local candidateKey = trim(initialCandidate)
+	if candidateKey == "" and safeIsFile(KEY_FILE) then
+		candidateKey = trim(safeReadFile(KEY_FILE) or "")
+	end
+
+	if candidateKey ~= "" then
+		local isValid, _ = verifyFlowAuthKey(candidateKey)
+		if isValid then
+			safeWriteFile(KEY_FILE, candidateKey)
+			persistKeySession(candidateKey, targetScriptUrl)
+			return
 		else
-			initialStatusText = fToString(sessionOrErr or "Provided key is invalid or expired.")
-			initialStatusColor = Color3.fromRGB(255, 100, 100)
+			safeDeleteFile(KEY_FILE)
+			safeDeleteFile(KEY_META_FILE)
 		end
 	end
-
-	-- 2. Check saved key file on disk
-	if safeIsFile(KEY_FILE) then
-		local savedKey = trim(safeReadFile(KEY_FILE) or "")
-		if savedKey ~= "" then
-			sendNotification("Core.xyz", "Checking saved FlowAuth key...", 3)
-			local isValid, sessionOrErr = verifyFlowAuthKey(savedKey)
-			if isValid == true then
-				persistKeySession(savedKey)
-				local timeTag = "Active"
-				if type(sessionOrErr) == "table" then
-					if sessionOrErr.isLifetime then
-						timeTag = "Lifetime"
-					elseif tonumber(sessionOrErr.remainingSeconds) then
-						timeTag = formatRemainingTime(sessionOrErr.remainingSeconds, false) .. " left"
-					end
-				end
-				sendNotification("Core.xyz", "Key Valid (" .. timeTag .. ")! Loading script...", 4)
-				return savedKey
-			else
-				safeDeleteFile(KEY_FILE)
-				safeDeleteFile(KEY_META_FILE)
-				sendNotification("Core.xyz", "Your Saved key is Invalid/Expired.", 5)
-				initialStatusText = fToString(sessionOrErr or "Your Saved key is Invalid/Expired.")
-				initialStatusColor = Color3.fromRGB(255, 100, 100)
-			end
-		end
-	end
-
-	-- 3. Open Black-Themed Animated White-Glow Key System UI and block until verified
-	local verifiedKeyResult = nil
-	local uiClosed = false
 
 	local guiParent = getSafeGuiParent()
 	if not guiParent then
-		return ""
+		error("Core.xyz: Could not initialize UI container.", 0)
 	end
 
 	destroyExistingGui(guiParent, "CoreXYZ_KeySystem")
@@ -538,403 +629,320 @@ flow_init(function(currentKey)
 	local rootHolder = Instance.new("Frame")
 	rootHolder.Name = "RootHolder"
 	rootHolder.AnchorPoint = Vector2.new(0.5, 0.5)
-	rootHolder.Position = UDim2.new(0.5, 0, 0.5, 12)
-	rootHolder.Size = UDim2.new(0, 420, 0, 224)
+	rootHolder.Position = UDim2.new(0.5, 0, 0.5, 16)
+	rootHolder.Size = UDim2.new(0, 392, 0, 216)
 	rootHolder.BackgroundTransparency = 1
 	rootHolder.BorderSizePixel = 0
 	rootHolder.Parent = screenGui
 
 	local mainScale = Instance.new("UIScale")
-	mainScale.Scale = 0.86
+	mainScale.Scale = 0.88
 	mainScale.Parent = rootHolder
 
-	local shadowDeep = Instance.new("Frame")
-	shadowDeep.Name = "ShadowDeep"
-	shadowDeep.AnchorPoint = Vector2.new(0.5, 0.5)
-	shadowDeep.Position = UDim2.new(0.5, 0, 0.5, 8)
-	shadowDeep.Size = UDim2.new(1, 32, 1, 32)
-	shadowDeep.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	shadowDeep.BackgroundTransparency = 0.45
-	shadowDeep.BorderSizePixel = 0
-	shadowDeep.ZIndex = 1
-	shadowDeep.Parent = rootHolder
-	local shadowDeepCorner = Instance.new("UICorner")
-	shadowDeepCorner.CornerRadius = UDim.new(0, 20)
-	shadowDeepCorner.Parent = shadowDeep
+	local outerGlow = Instance.new("Frame")
+	outerGlow.Name = "OuterGlowFrame"
+	outerGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+	outerGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+	outerGlow.Size = UDim2.new(1, 10, 1, 10)
+	outerGlow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	outerGlow.BackgroundTransparency = 0.72
+	outerGlow.BorderSizePixel = 0
+	outerGlow.ZIndex = 1
+	outerGlow.Parent = rootHolder
 
-	local outerGlowFrame = Instance.new("Frame")
-	outerGlowFrame.Name = "OuterWhiteGlow"
-	outerGlowFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	outerGlowFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-	outerGlowFrame.Size = UDim2.new(1, 6, 1, 6)
-	outerGlowFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	outerGlowFrame.BackgroundTransparency = 0.94
-	outerGlowFrame.BorderSizePixel = 0
-	outerGlowFrame.ZIndex = 1
-	outerGlowFrame.Parent = rootHolder
 	local outerGlowCorner = Instance.new("UICorner")
-	outerGlowCorner.CornerRadius = UDim.new(0, 17)
-	outerGlowCorner.Parent = outerGlowFrame
+	outerGlowCorner.CornerRadius = UDim.new(0, 18)
+	outerGlowCorner.Parent = outerGlow
 
 	local outerGlowStroke = Instance.new("UIStroke")
 	outerGlowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	outerGlowStroke.Thickness = 2.4
+	outerGlowStroke.Thickness = 3.2
 	outerGlowStroke.Color = Color3.fromRGB(255, 255, 255)
-	outerGlowStroke.Transparency = 0.72
-	outerGlowStroke.Parent = outerGlowFrame
+	outerGlowStroke.Transparency = 0.78
+	outerGlowStroke.Parent = outerGlow
 
-	local outerGlowGrad = Instance.new("UIGradient")
-	outerGlowGrad.Rotation = 0
-	outerGlowGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(110, 115, 130)),
+	local outerGlowGradient = Instance.new("UIGradient")
+	outerGlowGradient.Rotation = 0
+	outerGlowGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 120, 130)),
 		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(110, 115, 130)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 120, 130)),
 	})
-	outerGlowGrad.Parent = outerGlowStroke
+	outerGlowGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.55),
+		NumberSequenceKeypoint.new(0.5, 0.02),
+		NumberSequenceKeypoint.new(1, 0.55),
+	})
+	outerGlowGradient.Parent = outerGlowStroke
 
-	local mainFrame = Instance.new("Frame")
-	mainFrame.Name = "MainContainer"
-	mainFrame.Size = UDim2.new(1, 0, 1, 0)
-	mainFrame.Position = UDim2.new(0, 0, 0, 0)
-	mainFrame.BackgroundColor3 = Color3.fromRGB(6, 6, 8)
-	mainFrame.BorderSizePixel = 0
-	mainFrame.ClipsDescendants = true
-	mainFrame.ZIndex = 2
-	mainFrame.Parent = rootHolder
+	local midGlow = Instance.new("Frame")
+	midGlow.Name = "MidGlowFrame"
+	midGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+	midGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
+	midGlow.Size = UDim2.new(1, 4, 1, 4)
+	midGlow.BackgroundTransparency = 1
+	midGlow.BorderSizePixel = 0
+	midGlow.ZIndex = 2
+	midGlow.Parent = rootHolder
+
+	local midGlowCorner = Instance.new("UICorner")
+	midGlowCorner.CornerRadius = UDim.new(0, 15)
+	midGlowCorner.Parent = midGlow
+
+	local midGlowStroke = Instance.new("UIStroke")
+	midGlowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	midGlowStroke.Thickness = 1.6
+	midGlowStroke.Color = Color3.fromRGB(255, 255, 255)
+	midGlowStroke.Transparency = 0.52
+	midGlowStroke.Parent = midGlow
+
+	local mainCard = Instance.new("Frame")
+	mainCard.Name = "MainCard"
+	mainCard.AnchorPoint = Vector2.new(0.5, 0.5)
+	mainCard.Position = UDim2.new(0.5, 0, 0.5, 0)
+	mainCard.Size = UDim2.new(1, 0, 1, 0)
+	mainCard.BackgroundColor3 = Color3.fromRGB(7, 7, 9)
+	mainCard.BorderSizePixel = 0
+	mainCard.ClipsDescendants = true
+	mainCard.ZIndex = 3
+	mainCard.Parent = rootHolder
 
 	local mainCorner = Instance.new("UICorner")
-	mainCorner.CornerRadius = UDim.new(0, 14)
-	mainCorner.Parent = mainFrame
+	mainCorner.CornerRadius = UDim.new(0, 13)
+	mainCorner.Parent = mainCard
 
-	local mainGrad = Instance.new("UIGradient")
-	mainGrad.Rotation = 120
-	mainGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 14, 18)),
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(7, 7, 10)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(3, 3, 5)),
+	local bgGradient = Instance.new("UIGradient")
+	bgGradient.Rotation = 135
+	bgGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 16, 21)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(8, 8, 11)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 4, 6)),
 	})
-	mainGrad.Parent = mainFrame
+	bgGradient.Parent = mainCard
 
 	local mainStroke = Instance.new("UIStroke")
 	mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	mainStroke.Thickness = 1.45
+	mainStroke.Thickness = 1.5
 	mainStroke.Color = Color3.fromRGB(255, 255, 255)
-	mainStroke.Transparency = 0.15
-	mainStroke.Parent = mainFrame
+	mainStroke.Transparency = 0.14
+	mainStroke.Parent = mainCard
 
-	local borderStrokeGrad = Instance.new("UIGradient")
-	borderStrokeGrad.Rotation = 0
-	borderStrokeGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(95, 100, 115)),
-		ColorSequenceKeypoint.new(0.3, Color3.fromRGB(200, 205, 220)),
+	local strokeGradient = Instance.new("UIGradient")
+	strokeGradient.Rotation = 0
+	strokeGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(115, 115, 125)),
+		ColorSequenceKeypoint.new(0.25, Color3.fromRGB(190, 190, 205)),
 		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-		ColorSequenceKeypoint.new(0.7, Color3.fromRGB(200, 205, 220)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(95, 100, 115)),
+		ColorSequenceKeypoint.new(0.75, Color3.fromRGB(190, 190, 205)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(115, 115, 125)),
 	})
-	borderStrokeGrad.Parent = mainStroke
+	strokeGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.42),
+		NumberSequenceKeypoint.new(0.5, 0.0),
+		NumberSequenceKeypoint.new(1, 0.42),
+	})
+	strokeGradient.Parent = mainStroke
 
-	local topAccent = Instance.new("Frame")
-	topAccent.Name = "TopAccent"
-	topAccent.Position = UDim2.new(0, 0, 0, 0)
-	topAccent.Size = UDim2.new(1, 0, 0, 2)
-	topAccent.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	topAccent.BorderSizePixel = 0
-	topAccent.ZIndex = 6
-	topAccent.Parent = mainFrame
+	local topAccentLine = Instance.new("Frame")
+	topAccentLine.Name = "TopAccentLine"
+	topAccentLine.AnchorPoint = Vector2.new(0.5, 0)
+	topAccentLine.Position = UDim2.new(0.5, 0, 0, 0)
+	topAccentLine.Size = UDim2.new(0.75, 0, 0, 2)
+	topAccentLine.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	topAccentLine.BackgroundTransparency = 0.25
+	topAccentLine.BorderSizePixel = 0
+	topAccentLine.ZIndex = 5
+	topAccentLine.Parent = mainCard
 
 	local topAccentGrad = Instance.new("UIGradient")
-	topAccentGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 45)),
-		ColorSequenceKeypoint.new(0.32, Color3.fromRGB(165, 170, 185)),
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(165, 170, 185)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(35, 35, 45)),
-	})
-	topAccentGrad.Parent = topAccent
-
-	local topGlow = Instance.new("Frame")
-	topGlow.Name = "TopGlow"
-	topGlow.Position = UDim2.new(0, 0, 0, 2)
-	topGlow.Size = UDim2.new(1, 0, 0, 26)
-	topGlow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	topGlow.BackgroundTransparency = 0.91
-	topGlow.BorderSizePixel = 0
-	topGlow.ZIndex = 2
-	topGlow.Parent = mainFrame
-
-	local topGlowGrad = Instance.new("UIGradient")
-	topGlowGrad.Rotation = 90
-	topGlowGrad.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0),
+	topAccentGrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.2, 0.35),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(0.8, 0.35),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	topGlowGrad.Parent = topGlow
-
-	local bottomProgress = Instance.new("Frame")
-	bottomProgress.Name = "BottomProgress"
-	bottomProgress.AnchorPoint = Vector2.new(0, 1)
-	bottomProgress.Position = UDim2.new(0, 0, 1, 0)
-	bottomProgress.Size = UDim2.new(0, 0, 0, 2)
-	bottomProgress.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	bottomProgress.BorderSizePixel = 0
-	bottomProgress.ZIndex = 7
-	bottomProgress.Parent = mainFrame
+	topAccentGrad.Parent = topAccentLine
 
 	local headerBar = Instance.new("Frame")
 	headerBar.Name = "HeaderBar"
+	headerBar.Size = UDim2.new(1, 0, 0, 46)
 	headerBar.Position = UDim2.new(0, 0, 0, 2)
-	headerBar.Size = UDim2.new(1, 0, 0, 48)
 	headerBar.BackgroundTransparency = 1
-	headerBar.BorderSizePixel = 0
-	headerBar.Active = true
-	headerBar.ZIndex = 3
-	headerBar.Parent = mainFrame
-
-	local statusDotRing = Instance.new("Frame")
-	statusDotRing.Name = "StatusDotRing"
-	statusDotRing.AnchorPoint = Vector2.new(0.5, 0.5)
-	statusDotRing.Position = UDim2.new(0, 22, 0.5, 0)
-	statusDotRing.Size = UDim2.new(0, 14, 0, 14)
-	statusDotRing.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	statusDotRing.BackgroundTransparency = 0.78
-	statusDotRing.BorderSizePixel = 0
-	statusDotRing.ZIndex = 3
-	statusDotRing.Parent = headerBar
-
-	local ringCorner = Instance.new("UICorner")
-	ringCorner.CornerRadius = UDim.new(1, 0)
-	ringCorner.Parent = statusDotRing
+	headerBar.ZIndex = 4
+	headerBar.Parent = mainCard
 
 	local statusDot = Instance.new("Frame")
 	statusDot.Name = "StatusDot"
-	statusDot.AnchorPoint = Vector2.new(0.5, 0.5)
-	statusDot.Position = UDim2.new(0, 22, 0.5, 0)
-	statusDot.Size = UDim2.new(0, 7, 0, 7)
+	statusDot.AnchorPoint = Vector2.new(0, 0.5)
+	statusDot.Position = UDim2.new(0, 18, 0.5, 0)
+	statusDot.Size = UDim2.new(0, 8, 0, 8)
 	statusDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	statusDot.BorderSizePixel = 0
-	statusDot.ZIndex = 4
+	statusDot.ZIndex = 5
 	statusDot.Parent = headerBar
 
-	local dotCorner = Instance.new("UICorner")
-	dotCorner.CornerRadius = UDim.new(1, 0)
-	dotCorner.Parent = statusDot
+	local statusDotCorner = Instance.new("UICorner")
+	statusDotCorner.CornerRadius = UDim.new(1, 0)
+	statusDotCorner.Parent = statusDot
+
+	local statusDotStroke = Instance.new("UIStroke")
+	statusDotStroke.Thickness = 2
+	statusDotStroke.Color = Color3.fromRGB(255, 255, 255)
+	statusDotStroke.Transparency = 0.6
+	statusDotStroke.Parent = statusDot
 
 	local titleLabel = Instance.new("TextLabel")
-	titleLabel.Name = "BrandTitle"
-	titleLabel.Position = UDim2.new(0, 36, 0, 0)
-	titleLabel.Size = UDim2.new(0, 140, 1, 0)
+	titleLabel.Name = "TitleLabel"
+	titleLabel.Size = UDim2.new(1, -100, 0, 20)
+	titleLabel.Position = UDim2.new(0, 34, 0, 7)
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.Font = Enum.Font.GothamBlack
 	titleLabel.Text = "CORE.XYZ"
-	titleLabel.TextSize = 15
 	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLabel.TextSize = 15
+	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-	titleLabel.ZIndex = 4
+	titleLabel.ZIndex = 5
 	titleLabel.Parent = headerBar
 
-	local authBadge = Instance.new("Frame")
-	authBadge.Name = "FlowAuthBadge"
-	authBadge.AnchorPoint = Vector2.new(1, 0.5)
-	authBadge.Position = UDim2.new(1, -48, 0.5, 0)
-	authBadge.Size = UDim2.new(0, 86, 0, 22)
-	authBadge.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-	authBadge.BorderSizePixel = 0
-	authBadge.ZIndex = 4
-	authBadge.Parent = headerBar
-
-	local authBadgeCorner = Instance.new("UICorner")
-	authBadgeCorner.CornerRadius = UDim.new(0, 6)
-	authBadgeCorner.Parent = authBadge
-
-	local authBadgeStroke = Instance.new("UIStroke")
-	authBadgeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	authBadgeStroke.Thickness = 1
-	authBadgeStroke.Color = Color3.fromRGB(255, 255, 255)
-	authBadgeStroke.Transparency = 0.55
-	authBadgeStroke.Parent = authBadge
-
-	local authBadgeText = Instance.new("TextLabel")
-	authBadgeText.Size = UDim2.new(1, 0, 1, 0)
-	authBadgeText.BackgroundTransparency = 1
-	authBadgeText.Font = Enum.Font.GothamBold
-	authBadgeText.Text = "FLOWAUTH"
-	authBadgeText.TextSize = 10
-	authBadgeText.TextColor3 = Color3.fromRGB(240, 242, 250)
-	authBadgeText.ZIndex = 5
-	authBadgeText.Parent = authBadge
+	local subtitleLabel = Instance.new("TextLabel")
+	subtitleLabel.Name = "SubtitleLabel"
+	subtitleLabel.Size = UDim2.new(1, -100, 0, 14)
+	subtitleLabel.Position = UDim2.new(0, 34, 0, 25)
+	subtitleLabel.BackgroundTransparency = 1
+	subtitleLabel.Text = "FlowAuth Security Gateway"
+	subtitleLabel.TextColor3 = Color3.fromRGB(155, 155, 168)
+	subtitleLabel.TextSize = 11
+	subtitleLabel.Font = Enum.Font.GothamMedium
+	subtitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	subtitleLabel.ZIndex = 5
+	subtitleLabel.Parent = headerBar
 
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Name = "CloseButton"
 	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
-	closeBtn.Position = UDim2.new(1, -15, 0.5, 0)
-	closeBtn.Size = UDim2.new(0, 26, 0, 26)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+	closeBtn.Position = UDim2.new(1, -14, 0.5, 0)
+	closeBtn.Size = UDim2.new(0, 28, 0, 28)
+	closeBtn.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
 	closeBtn.BorderSizePixel = 0
-	closeBtn.AutoButtonColor = false
+	closeBtn.Text = "×"
+	closeBtn.TextColor3 = Color3.fromRGB(185, 185, 195)
+	closeBtn.TextSize = 18
 	closeBtn.Font = Enum.Font.GothamBold
-	closeBtn.Text = "X"
-	closeBtn.TextSize = 11
-	closeBtn.TextColor3 = Color3.fromRGB(210, 214, 225)
-	closeBtn.ZIndex = 4
+	closeBtn.AutoButtonColor = false
+	closeBtn.ZIndex = 5
 	closeBtn.Parent = headerBar
 
 	local closeCorner = Instance.new("UICorner")
-	closeCorner.CornerRadius = UDim.new(0, 7)
+	closeCorner.CornerRadius = UDim.new(0, 8)
 	closeCorner.Parent = closeBtn
 
 	local closeStroke = Instance.new("UIStroke")
 	closeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	closeStroke.Thickness = 1
 	closeStroke.Color = Color3.fromRGB(255, 255, 255)
-	closeStroke.Transparency = 0.6
+	closeStroke.Transparency = 0.84
 	closeStroke.Parent = closeBtn
 
-	local headerDivider = Instance.new("Frame")
-	headerDivider.Name = "HeaderDivider"
-	headerDivider.Position = UDim2.new(0, 18, 0, 50)
-	headerDivider.Size = UDim2.new(1, -36, 0, 1)
-	headerDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	headerDivider.BackgroundTransparency = 0.65
-	headerDivider.BorderSizePixel = 0
-	headerDivider.ZIndex = 3
-	headerDivider.Parent = mainFrame
+	local divider = Instance.new("Frame")
+	divider.Name = "HeaderDivider"
+	divider.Size = UDim2.new(1, -36, 0, 1)
+	divider.Position = UDim2.new(0, 18, 0, 48)
+	divider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	divider.BackgroundTransparency = 0.88
+	divider.BorderSizePixel = 0
+	divider.ZIndex = 4
+	divider.Parent = mainCard
 
-	local divGrad = Instance.new("UIGradient")
-	divGrad.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.15, 0.15),
-		NumberSequenceKeypoint.new(0.85, 0.15),
-		NumberSequenceKeypoint.new(1, 1),
+	local dividerGradient = Instance.new("UIGradient")
+	dividerGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.8),
+		NumberSequenceKeypoint.new(0.5, 0.1),
+		NumberSequenceKeypoint.new(1, 0.8),
 	})
-	divGrad.Parent = headerDivider
+	dividerGradient.Parent = divider
 
-	local bodyFrame = Instance.new("Frame")
-	bodyFrame.Name = "Body"
-	bodyFrame.Position = UDim2.new(0, 0, 0, 51)
-	bodyFrame.Size = UDim2.new(1, 0, 1, -51)
-	bodyFrame.BackgroundTransparency = 1
-	bodyFrame.BorderSizePixel = 0
-	bodyFrame.ZIndex = 3
-	bodyFrame.Parent = mainFrame
+	local contentArea = Instance.new("Frame")
+	contentArea.Name = "ContentArea"
+	contentArea.Size = UDim2.new(1, 0, 1, -50)
+	contentArea.Position = UDim2.new(0, 0, 0, 50)
+	contentArea.BackgroundTransparency = 1
+	contentArea.ZIndex = 4
+	contentArea.Parent = mainCard
 
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "StatusLabel"
+	statusLabel.Size = UDim2.new(1, -36, 0, 28)
 	statusLabel.Position = UDim2.new(0, 18, 0, 12)
-	statusLabel.Size = UDim2.new(1, -36, 0, 30)
 	statusLabel.BackgroundTransparency = 1
+	statusLabel.Text = "Enter your FlowAuth key below or click Get Key to claim a 24h key."
+	statusLabel.TextColor3 = Color3.fromRGB(190, 190, 202)
+	statusLabel.TextSize = 12
 	statusLabel.Font = Enum.Font.GothamMedium
-	statusLabel.Text = initialStatusText
-	statusLabel.TextSize = 13
-	statusLabel.TextWrapped = true
-	statusLabel.TextColor3 = initialStatusColor
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 	statusLabel.TextYAlignment = Enum.TextYAlignment.Center
-	statusLabel.ZIndex = 4
-	statusLabel.Parent = bodyFrame
+	statusLabel.TextWrapped = true
+	statusLabel.ZIndex = 5
+	statusLabel.Parent = contentArea
 
 	local inputHolder = Instance.new("Frame")
 	inputHolder.Name = "InputHolder"
 	inputHolder.AnchorPoint = Vector2.new(0.5, 0)
 	inputHolder.Position = UDim2.new(0.5, 0, 0, 50)
-	inputHolder.Size = UDim2.new(1, -36, 0, 44)
-	inputHolder.BackgroundTransparency = 1
+	inputHolder.Size = UDim2.new(1, -36, 0, 42)
+	inputHolder.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 	inputHolder.BorderSizePixel = 0
-	inputHolder.ZIndex = 4
-	inputHolder.Parent = bodyFrame
+	inputHolder.ZIndex = 5
+	inputHolder.Parent = contentArea
 
-	local inputScale = Instance.new("UIScale")
-	inputScale.Scale = 1
-	inputScale.Parent = inputHolder
+	local inputCorner = Instance.new("UICorner")
+	inputCorner.CornerRadius = UDim.new(0, 9)
+	inputCorner.Parent = inputHolder
+
+	local inputStroke = Instance.new("UIStroke")
+	inputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	inputStroke.Thickness = 1.2
+	inputStroke.Color = Color3.fromRGB(255, 255, 255)
+	inputStroke.Transparency = 0.76
+	inputStroke.Parent = inputHolder
 
 	local keyBox = Instance.new("TextBox")
-	keyBox.Name = "KeyInput"
-	keyBox.Position = UDim2.new(0, 0, 0, 0)
-	keyBox.Size = UDim2.new(1, 0, 1, 0)
-	keyBox.BackgroundColor3 = Color3.fromRGB(11, 11, 15)
-	keyBox.BorderSizePixel = 0
-	keyBox.Font = Enum.Font.Code
+	keyBox.Name = "KeyInputBox"
+	keyBox.Size = UDim2.new(1, -24, 1, 0)
+	keyBox.Position = UDim2.new(0, 12, 0, 0)
+	keyBox.BackgroundTransparency = 1
 	keyBox.Text = ""
 	keyBox.PlaceholderText = "Paste your FlowAuth key here..."
-	keyBox.PlaceholderColor3 = Color3.fromRGB(120, 124, 138)
+	keyBox.PlaceholderColor3 = Color3.fromRGB(105, 105, 118)
 	keyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-	keyBox.TextSize = 14
+	keyBox.TextSize = 13
+	keyBox.Font = Enum.Font.GothamMedium
 	keyBox.TextXAlignment = Enum.TextXAlignment.Left
 	keyBox.ClearTextOnFocus = false
-	keyBox.ClipsDescendants = true
-	keyBox.ZIndex = 5
+	keyBox.ZIndex = 6
 	keyBox.Parent = inputHolder
-
-	local keyBoxCorner = Instance.new("UICorner")
-	keyBoxCorner.CornerRadius = UDim.new(0, 9)
-	keyBoxCorner.Parent = keyBox
-
-	local keyBoxPadding = Instance.new("UIPadding")
-	keyBoxPadding.PaddingLeft = UDim.new(0, 14)
-	keyBoxPadding.PaddingRight = UDim.new(0, 14)
-	keyBoxPadding.Parent = keyBox
-
-	local keyBoxStroke = Instance.new("UIStroke")
-	keyBoxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	keyBoxStroke.Thickness = 1.2
-	keyBoxStroke.Color = Color3.fromRGB(255, 255, 255)
-	keyBoxStroke.Transparency = 0.62
-	keyBoxStroke.Parent = keyBox
-
-	local focusBar = Instance.new("Frame")
-	focusBar.Name = "FocusBar"
-	focusBar.AnchorPoint = Vector2.new(0.5, 1)
-	focusBar.Position = UDim2.new(0.5, 0, 1, 0)
-	focusBar.Size = UDim2.new(0, 0, 0, 2)
-	focusBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	focusBar.BackgroundTransparency = 0.08
-	focusBar.BorderSizePixel = 0
-	focusBar.ZIndex = 6
-	focusBar.Parent = inputHolder
-
-	local focusBarCorner = Instance.new("UICorner")
-	focusBarCorner.CornerRadius = UDim.new(1, 0)
-	focusBarCorner.Parent = focusBar
-
-	local focusInInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-	local focusOutInfo = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-
-	keyBox.Focused:Connect(function()
-		TweenService:Create(keyBox, focusInInfo, { BackgroundColor3 = Color3.fromRGB(17, 17, 23) }):Play()
-		TweenService:Create(keyBoxStroke, focusInInfo, { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.08, Thickness = 1.5 }):Play()
-		TweenService:Create(inputScale, focusInInfo, { Scale = 1.012 }):Play()
-		TweenService:Create(focusBar, focusInInfo, { Size = UDim2.new(1, -18, 0, 2) }):Play()
-	end)
-
-	keyBox.FocusLost:Connect(function()
-		TweenService:Create(keyBox, focusOutInfo, { BackgroundColor3 = Color3.fromRGB(11, 11, 15) }):Play()
-		TweenService:Create(keyBoxStroke, focusOutInfo, { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.62, Thickness = 1.2 }):Play()
-		TweenService:Create(inputScale, focusOutInfo, { Scale = 1 }):Play()
-		TweenService:Create(focusBar, focusOutInfo, { Size = UDim2.new(0, 0, 0, 2) }):Play()
-	end)
 
 	local buttonRow = Instance.new("Frame")
 	buttonRow.Name = "ButtonRow"
+	buttonRow.Size = UDim2.new(1, -36, 0, 40)
 	buttonRow.Position = UDim2.new(0, 18, 0, 108)
-	buttonRow.Size = UDim2.new(1, -36, 0, 44)
 	buttonRow.BackgroundTransparency = 1
-	buttonRow.BorderSizePixel = 0
-	buttonRow.ZIndex = 4
-	buttonRow.Parent = bodyFrame
+	buttonRow.ZIndex = 5
+	buttonRow.Parent = contentArea
 
 	local submitBtn = Instance.new("TextButton")
 	submitBtn.Name = "SubmitButton"
-	submitBtn.AnchorPoint = Vector2.new(0.5, 0.5)
-	submitBtn.Position = UDim2.new(0.25, -5, 0.5, 0)
-	submitBtn.Size = UDim2.new(0.5, -10, 1, 0)
-	submitBtn.BackgroundColor3 = Color3.fromRGB(250, 250, 255)
+	submitBtn.Size = UDim2.new(0.5, -6, 1, 0)
+	submitBtn.Position = UDim2.new(0, 0, 0, 0)
+	submitBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
 	submitBtn.BorderSizePixel = 0
+	submitBtn.Text = "Submit"
+	submitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	submitBtn.TextSize = 13
+	submitBtn.Font = Enum.Font.GothamBold
 	submitBtn.AutoButtonColor = false
 	submitBtn.ClipsDescendants = true
-	submitBtn.Font = Enum.Font.GothamBold
-	submitBtn.Text = "Submit"
-	submitBtn.TextSize = 13
-	submitBtn.TextColor3 = Color3.fromRGB(8, 8, 12)
-	submitBtn.ZIndex = 5
+	submitBtn.ZIndex = 6
 	submitBtn.Parent = buttonRow
 
 	local submitCorner = Instance.new("UICorner")
@@ -943,44 +951,40 @@ flow_init(function(currentKey)
 
 	local submitStroke = Instance.new("UIStroke")
 	submitStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	submitStroke.Thickness = 1.25
+	submitStroke.Thickness = 1.3
 	submitStroke.Color = Color3.fromRGB(255, 255, 255)
-	submitStroke.Transparency = 0.1
+	submitStroke.Transparency = 0.25
 	submitStroke.Parent = submitBtn
+
+	local submitScale = Instance.new("UIScale")
+	submitScale.Scale = 1
+	submitScale.Parent = submitBtn
 
 	local submitSheen = Instance.new("Frame")
 	submitSheen.Name = "Sheen"
-	submitSheen.Position = UDim2.new(-0.45, 0, 0, 0)
-	submitSheen.Size = UDim2.new(0.35, 0, 1, 0)
+	submitSheen.AnchorPoint = Vector2.new(0.5, 0.5)
+	submitSheen.Position = UDim2.new(-0.35, 0, 0.5, 0)
+	submitSheen.Size = UDim2.new(0, 26, 2.2, 0)
+	submitSheen.Rotation = 25
 	submitSheen.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	submitSheen.BackgroundTransparency = 0.55
+	submitSheen.BackgroundTransparency = 0.86
 	submitSheen.BorderSizePixel = 0
-	submitSheen.ZIndex = 6
+	submitSheen.ZIndex = 7
 	submitSheen.Parent = submitBtn
-
-	local submitSheenGrad = Instance.new("UIGradient")
-	submitSheenGrad.Rotation = 20
-	submitSheenGrad.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.5, 0.12),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	submitSheenGrad.Parent = submitSheen
 
 	local getKeyBtn = Instance.new("TextButton")
 	getKeyBtn.Name = "GetKeyButton"
-	getKeyBtn.AnchorPoint = Vector2.new(0.5, 0.5)
-	getKeyBtn.Position = UDim2.new(0.75, 5, 0.5, 0)
-	getKeyBtn.Size = UDim2.new(0.5, -10, 1, 0)
+	getKeyBtn.Size = UDim2.new(0.5, -6, 1, 0)
+	getKeyBtn.Position = UDim2.new(0.5, 6, 0, 0)
 	getKeyBtn.BackgroundColor3 = Color3.fromRGB(13, 13, 18)
 	getKeyBtn.BorderSizePixel = 0
+	getKeyBtn.Text = "Get Key"
+	getKeyBtn.TextColor3 = Color3.fromRGB(230, 230, 240)
+	getKeyBtn.TextSize = 13
+	getKeyBtn.Font = Enum.Font.GothamBold
 	getKeyBtn.AutoButtonColor = false
 	getKeyBtn.ClipsDescendants = true
-	getKeyBtn.Font = Enum.Font.GothamBold
-	getKeyBtn.Text = "Get Key"
-	getKeyBtn.TextSize = 13
-	getKeyBtn.TextColor3 = Color3.fromRGB(248, 248, 255)
-	getKeyBtn.ZIndex = 5
+	getKeyBtn.ZIndex = 6
 	getKeyBtn.Parent = buttonRow
 
 	local getKeyCorner = Instance.new("UICorner")
@@ -989,346 +993,324 @@ flow_init(function(currentKey)
 
 	local getKeyStroke = Instance.new("UIStroke")
 	getKeyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	getKeyStroke.Thickness = 1.25
+	getKeyStroke.Thickness = 1.2
 	getKeyStroke.Color = Color3.fromRGB(255, 255, 255)
-	getKeyStroke.Transparency = 0.45
+	getKeyStroke.Transparency = 0.62
 	getKeyStroke.Parent = getKeyBtn
+
+	local getKeyScale = Instance.new("UIScale")
+	getKeyScale.Scale = 1
+	getKeyScale.Parent = getKeyBtn
 
 	local getKeySheen = Instance.new("Frame")
 	getKeySheen.Name = "Sheen"
-	getKeySheen.Position = UDim2.new(-0.45, 0, 0, 0)
-	getKeySheen.Size = UDim2.new(0.35, 0, 1, 0)
+	getKeySheen.AnchorPoint = Vector2.new(0.5, 0.5)
+	getKeySheen.Position = UDim2.new(-0.35, 0, 0.5, 0)
+	getKeySheen.Size = UDim2.new(0, 26, 2.2, 0)
+	getKeySheen.Rotation = 25
 	getKeySheen.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	getKeySheen.BackgroundTransparency = 0.72
+	getKeySheen.BackgroundTransparency = 0.88
 	getKeySheen.BorderSizePixel = 0
-	getKeySheen.ZIndex = 6
+	getKeySheen.ZIndex = 7
 	getKeySheen.Parent = getKeyBtn
 
-	local getKeySheenGrad = Instance.new("UIGradient")
-	getKeySheenGrad.Rotation = 20
-	getKeySheenGrad.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.5, 0.2),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	getKeySheenGrad.Parent = getKeySheen
+	local bottomProgress = Instance.new("Frame")
+	bottomProgress.Name = "BottomProgress"
+	bottomProgress.AnchorPoint = Vector2.new(0, 1)
+	bottomProgress.Position = UDim2.new(0, 0, 1, 0)
+	bottomProgress.Size = UDim2.new(0, 0, 0, 2)
+	bottomProgress.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	bottomProgress.BackgroundTransparency = 0.15
+	bottomProgress.BorderSizePixel = 0
+	bottomProgress.ZIndex = 8
+	bottomProgress.Parent = mainCard
 
-	local function sweepButtonSheen(sheenObj)
-		if not sheenObj or not sheenObj.Parent then
-			return
-		end
-		sheenObj.Position = UDim2.new(-0.45, 0, 0, 0)
-		TweenService:Create(
-			sheenObj,
-			TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-			{ Position = UDim2.new(1.15, 0, 0, 0) }
-		):Play()
-	end
-
-	local function attachStyledButton(button, strokeObj, sheenObj, styleCfg)
-		local btnScale = Instance.new("UIScale")
-		btnScale.Scale = 1
-		btnScale.Parent = button
-
-		local hoverInfo = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-		local pressInfo = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		local releaseInfo = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-
-		local isHovered = false
-		local cTween, stTween, scTween, rotTween
-
-		local function playColors(bg, txt, brd, brdTrans)
-			if cTween then
-				cTween:Cancel()
-			end
-			cTween = TweenService:Create(button, hoverInfo, {
-				BackgroundColor3 = bg,
-				TextColor3 = txt,
-			})
-			cTween:Play()
-			if strokeObj and brd then
-				if stTween then
-					stTween:Cancel()
-				end
-				stTween = TweenService:Create(strokeObj, hoverInfo, {
-					Color = brd,
-					Transparency = brdTrans or 0.1,
-				})
-				stTween:Play()
-			end
-		end
-
-		local function playScale(target, info)
-			if scTween then
-				scTween:Cancel()
-			end
-			scTween = TweenService:Create(btnScale, info or hoverInfo, { Scale = target })
-			scTween:Play()
-		end
-
-		button.MouseEnter:Connect(function()
-			isHovered = true
-			playScale(styleCfg.HoverScale or 1.025, hoverInfo)
-			playColors(styleCfg.HoverBg, styleCfg.HoverText, styleCfg.HoverBorder, styleCfg.HoverBorderTrans)
-			if sheenObj then
-				sweepButtonSheen(sheenObj)
-			end
-			if styleCfg.RotateOnHover then
-				if rotTween then
-					rotTween:Cancel()
-				end
-				rotTween = TweenService:Create(button, hoverInfo, { Rotation = 90 })
-				rotTween:Play()
-			end
-		end)
-
-		button.MouseLeave:Connect(function()
-			isHovered = false
-			playScale(1, hoverInfo)
-			playColors(styleCfg.RestBg, styleCfg.RestText, styleCfg.RestBorder, styleCfg.RestBorderTrans)
-			if styleCfg.RotateOnHover then
-				if rotTween then
-					rotTween:Cancel()
-				end
-				rotTween = TweenService:Create(button, hoverInfo, { Rotation = 0 })
-				rotTween:Play()
-			end
-		end)
-
-		button.MouseButton1Down:Connect(function()
-			playScale(0.95, pressInfo)
-			playColors(styleCfg.PressBg, styleCfg.PressText, styleCfg.HoverBorder, styleCfg.HoverBorderTrans)
-		end)
-
-		button.MouseButton1Up:Connect(function()
-			playScale(isHovered and (styleCfg.HoverScale or 1.025) or 1, releaseInfo)
-			if isHovered then
-				playColors(styleCfg.HoverBg, styleCfg.HoverText, styleCfg.HoverBorder, styleCfg.HoverBorderTrans)
-			else
-				playColors(styleCfg.RestBg, styleCfg.RestText, styleCfg.RestBorder, styleCfg.RestBorderTrans)
-			end
-		end)
-	end
-
-	attachStyledButton(submitBtn, submitStroke, submitSheen, {
-		RestBg = Color3.fromRGB(250, 250, 255),
-		RestText = Color3.fromRGB(8, 8, 12),
-		RestBorder = Color3.fromRGB(255, 255, 255),
-		RestBorderTrans = 0.1,
-		HoverBg = Color3.fromRGB(255, 255, 255),
-		HoverText = Color3.fromRGB(0, 0, 0),
-		HoverBorder = Color3.fromRGB(255, 255, 255),
-		HoverBorderTrans = 0,
-		PressBg = Color3.fromRGB(218, 220, 230),
-		PressText = Color3.fromRGB(0, 0, 0),
-		HoverScale = 1.025,
-	})
-
-	attachStyledButton(getKeyBtn, getKeyStroke, getKeySheen, {
-		RestBg = Color3.fromRGB(13, 13, 18),
-		RestText = Color3.fromRGB(248, 248, 255),
-		RestBorder = Color3.fromRGB(255, 255, 255),
-		RestBorderTrans = 0.45,
-		HoverBg = Color3.fromRGB(255, 255, 255),
-		HoverText = Color3.fromRGB(8, 8, 12),
-		HoverBorder = Color3.fromRGB(255, 255, 255),
-		HoverBorderTrans = 0.05,
-		PressBg = Color3.fromRGB(218, 220, 230),
-		PressText = Color3.fromRGB(0, 0, 0),
-		HoverScale = 1.025,
-	})
-
-	attachStyledButton(closeBtn, closeStroke, nil, {
-		RestBg = Color3.fromRGB(14, 14, 18),
-		RestText = Color3.fromRGB(210, 214, 225),
-		RestBorder = Color3.fromRGB(255, 255, 255),
-		RestBorderTrans = 0.6,
-		HoverBg = Color3.fromRGB(255, 86, 96),
-		HoverText = Color3.fromRGB(255, 255, 255),
-		HoverBorder = Color3.fromRGB(255, 130, 140),
-		HoverBorderTrans = 0.1,
-		PressBg = Color3.fromRGB(215, 65, 75),
-		PressText = Color3.fromRGB(255, 255, 255),
-		HoverScale = 1.06,
-		RotateOnHover = true,
-	})
-
-	local dragging = false
-	local dragInput = nil
-	local dragStart = nil
-	local startPos = nil
-	local dragTween = nil
-	local dragTweenInfo = TweenInfo.new(0.075, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-
-	local dragInputBeganConn = headerBar.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragInput = input
-			dragStart = input.Position
-			startPos = rootHolder.Position
-		end
-	end)
-
-	local dragInputChangedConn = UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input == dragInput or input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			local delta = input.Position - dragStart
-			local targetUDim = UDim2.new(
-				startPos.X.Scale,
-				startPos.X.Offset + delta.X,
-				startPos.Y.Scale,
-				startPos.Y.Offset + delta.Y
-			)
-			if dragTween then
-				dragTween:Cancel()
-			end
-			dragTween = TweenService:Create(rootHolder, dragTweenInfo, { Position = targetUDim })
-			dragTween:Play()
-		end
-	end)
-
-	local dragInputEndedConn = UserInputService.InputEnded:Connect(function(input)
-		if input == dragInput or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-			dragInput = nil
-		end
-	end)
-
+	local connections = {}
 	local guiAlive = true
-	local animClock = 0
-	local sheenTimer = 0
-	local animConn = RunService.Heartbeat:Connect(function(dt)
-		if not guiAlive then
-			return
-		end
-		animClock = animClock + dt
-		sheenTimer = sheenTimer + dt
-		topAccentGrad.Offset = Vector2.new(math.sin(animClock * 1.85) * 0.48, 0)
-		borderStrokeGrad.Rotation = (animClock * 42) % 360
-		outerGlowGrad.Rotation = -(animClock * 36) % 360
+	local isChecking = false
+	local verifiedKeyResult = nil
+	local uiClosed = false
+	local copyResetToken = 0
 
-		local pulse = (math.sin(animClock * 3.2) + 1) * 0.5
-		statusDotRing.Size = UDim2.new(0, 12 + pulse * 5, 0, 12 + pulse * 5)
-		statusDotRing.BackgroundTransparency = 0.72 + pulse * 0.2
-		outerGlowStroke.Transparency = 0.65 + pulse * 0.16
-
-		if sheenTimer >= 4.2 then
-			sheenTimer = 0
-			sweepButtonSheen(submitSheen)
+	local function trackConnection(conn)
+		if conn then
+			connections[#connections + 1] = conn
 		end
-	end)
-
-	screenGui.Destroying:Connect(function()
-		guiAlive = false
-		uiClosed = true
-		if animConn then
-			animConn:Disconnect()
-		end
-		if dragInputBeganConn then
-			dragInputBeganConn:Disconnect()
-		end
-		if dragInputChangedConn then
-			dragInputChangedConn:Disconnect()
-		end
-		if dragInputEndedConn then
-			dragInputEndedConn:Disconnect()
-		end
-	end)
-
-	local shakeToken = 0
-	local function shakeInputBox()
-		shakeToken = shakeToken + 1
-		local currentToken = shakeToken
-		task.spawn(function()
-			local offsets = { -9, 9, -6, 6, -3, 3, 0 }
-			local shakeStepInfo = TweenInfo.new(0.035, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-			TweenService:Create(keyBoxStroke, TweenInfo.new(0.08), { Color = Color3.fromRGB(255, 92, 92), Transparency = 0.1 }):Play()
-			TweenService:Create(focusBar, TweenInfo.new(0.08), { BackgroundColor3 = Color3.fromRGB(255, 92, 92), Size = UDim2.new(1, -18, 0, 2) }):Play()
-			for _, xOffset in ipairs(offsets) do
-				if not guiAlive or shakeToken ~= currentToken then
-					return
-				end
-				local twn = TweenService:Create(keyBox, shakeStepInfo, { Position = UDim2.new(0, xOffset, 0, 0) })
-				twn:Play()
-				twn.Completed:Wait()
-			end
-			if guiAlive and shakeToken == currentToken then
-				keyBox.Position = UDim2.new(0, 0, 0, 0)
-				local isFoc = keyBox:IsFocused()
-				TweenService:Create(keyBoxStroke, TweenInfo.new(0.22), {
-					Color = Color3.fromRGB(255, 255, 255),
-					Transparency = isFoc and 0.08 or 0.62,
-				}):Play()
-				TweenService:Create(focusBar, TweenInfo.new(0.22), {
-					BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-					Size = isFoc and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 0, 0, 2),
-				}):Play()
-			end
-		end)
+		return conn
 	end
 
-	local function setStatus(text, color)
-		if guiAlive and statusLabel then
-			local targetCol = color or Color3.fromRGB(245, 245, 255)
-			statusLabel.Text = text
-			statusLabel.Position = UDim2.new(0, 22, 0, 12)
-			TweenService:Create(statusLabel, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-				Position = UDim2.new(0, 18, 0, 12),
-				TextColor3 = targetCol,
-			}):Play()
-			TweenService:Create(statusDot, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				BackgroundColor3 = targetCol,
-			}):Play()
-			TweenService:Create(statusDotRing, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				BackgroundColor3 = targetCol,
-			}):Play()
-		end
-	end
-
-	local function fadeOutAndDestroy(waitCompletion)
-		if not guiAlive then
-			return
-		end
-		guiAlive = false
-		if animConn then
-			animConn:Disconnect()
-			animConn = nil
-		end
-		local outInfo = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-		local scaleTween = TweenService:Create(mainScale, outInfo, { Scale = 0.88 })
-		TweenService:Create(rootHolder, outInfo, { Position = UDim2.new(rootHolder.Position.X.Scale, rootHolder.Position.X.Offset, rootHolder.Position.Y.Scale, rootHolder.Position.Y.Offset + 8) }):Play()
-		scaleTween:Play()
-
-		for _, desc in ipairs(rootHolder:GetDescendants()) do
-			if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-				TweenService:Create(desc, outInfo, { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
-			elseif desc:IsA("Frame") then
-				TweenService:Create(desc, outInfo, { BackgroundTransparency = 1 }):Play()
-			elseif desc:IsA("UIStroke") then
-				TweenService:Create(desc, outInfo, { Transparency = 1 }):Play()
-			end
-		end
-
-		if waitCompletion then
-			scaleTween.Completed:Wait()
-			if screenGui then
-				screenGui:Destroy()
-			end
-			uiClosed = true
-		else
-			scaleTween.Completed:Connect(function()
-				if screenGui then
-					screenGui:Destroy()
-				end
-				uiClosed = true
+	local function cleanupAllConnections()
+		for i = #connections, 1, -1 do
+			local c = connections[i]
+			connections[i] = nil
+			pcall(function()
+				c:Disconnect()
 			end)
 		end
 	end
 
-	local isChecking = false
-	local copyResetToken = 0
+	local function sweepButtonSheen(sheenFrame)
+		if not guiAlive or not sheenFrame then
+			return
+		end
+		sheenFrame.Position = UDim2.new(-0.35, 0, 0.5, 0)
+		TweenService:Create(
+			sheenFrame,
+			TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Position = UDim2.new(1.35, 0, 0.5, 0) }
+		):Play()
+	end
+
+	local glowAngle = 0
+	local pulseClock = 0
+	trackConnection(RunService.RenderStepped:Connect(function(dt)
+		if not guiAlive then
+			return
+		end
+		glowAngle = (glowAngle + dt * 95) % 360
+		pulseClock = pulseClock + dt * 3.2
+		local wave = (math.sin(pulseClock) + 1) * 0.5
+
+		strokeGradient.Rotation = glowAngle
+		outerGlowGradient.Rotation = (glowAngle + 180) % 360
+
+		outerGlowStroke.Transparency = 0.65 + (wave * 0.20)
+		midGlowStroke.Transparency = 0.40 + (wave * 0.22)
+		statusDotStroke.Transparency = 0.35 + (wave * 0.45)
+	end))
+
+	do
+		local dragging = false
+		local dragInput = nil
+		local dragStart = nil
+		local startPos = nil
+
+		trackConnection(headerBar.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = true
+				dragStart = input.Position
+				startPos = rootHolder.Position
+
+				local endedConn
+				endedConn = input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then
+						dragging = false
+						if endedConn then
+							endedConn:Disconnect()
+						end
+					end
+				end)
+				trackConnection(endedConn)
+			end
+		end))
+
+		trackConnection(headerBar.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+				dragInput = input
+			end
+		end))
+
+		trackConnection(UserInputService.InputChanged:Connect(function(input)
+			if input == dragInput and dragging and dragStart and startPos then
+				local delta = input.Position - dragStart
+				TweenService:Create(
+					rootHolder,
+					TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{
+						Position = UDim2.new(
+							startPos.X.Scale,
+							startPos.X.Offset + delta.X,
+							startPos.Y.Scale,
+							startPos.Y.Offset + delta.Y
+						),
+					}
+				):Play()
+			end
+		end))
+	end
+
+	local fastHoverInfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local pressInfo = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	keyBox.Focused:Connect(function()
+		if not guiAlive then
+			return
+		end
+		TweenService:Create(inputStroke, fastHoverInfo, {
+			Transparency = 0.12,
+			Thickness = 1.6,
+		}):Play()
+		TweenService:Create(inputHolder, fastHoverInfo, {
+			BackgroundColor3 = Color3.fromRGB(16, 16, 22),
+		}):Play()
+	end)
+
+	keyBox.FocusLost:Connect(function()
+		if not guiAlive then
+			return
+		end
+		TweenService:Create(inputStroke, fastHoverInfo, {
+			Transparency = 0.76,
+			Thickness = 1.2,
+		}):Play()
+		TweenService:Create(inputHolder, fastHoverInfo, {
+			BackgroundColor3 = Color3.fromRGB(12, 12, 16),
+		}):Play()
+	end)
+
+	local function bindButtonAnimations(btn, strokeObj, scaleObj, defaultBg, hoverBg, defaultStrokeTrans, hoverStrokeTrans, sheenObj)
+		btn.MouseEnter:Connect(function()
+			if not guiAlive then
+				return
+			end
+			TweenService:Create(btn, fastHoverInfo, { BackgroundColor3 = hoverBg }):Play()
+			TweenService:Create(strokeObj, fastHoverInfo, { Transparency = hoverStrokeTrans }):Play()
+			TweenService:Create(scaleObj, fastHoverInfo, { Scale = 1.02 }):Play()
+			if sheenObj then
+				sweepButtonSheen(sheenObj)
+			end
+		end)
+
+		btn.MouseLeave:Connect(function()
+			if not guiAlive then
+				return
+			end
+			TweenService:Create(btn, fastHoverInfo, { BackgroundColor3 = defaultBg }):Play()
+			TweenService:Create(strokeObj, fastHoverInfo, { Transparency = defaultStrokeTrans }):Play()
+			TweenService:Create(scaleObj, fastHoverInfo, { Scale = 1 }):Play()
+		end)
+
+		btn.MouseButton1Down:Connect(function()
+			if not guiAlive then
+				return
+			end
+			TweenService:Create(scaleObj, pressInfo, { Scale = 0.96 }):Play()
+		end)
+
+		btn.MouseButton1Up:Connect(function()
+			if not guiAlive then
+				return
+			end
+			TweenService:Create(scaleObj, fastHoverInfo, { Scale = 1.02 }):Play()
+		end)
+	end
+
+	bindButtonAnimations(
+		submitBtn,
+		submitStroke,
+		submitScale,
+		Color3.fromRGB(20, 20, 26),
+		Color3.fromRGB(30, 30, 40),
+		0.25,
+		0.0,
+		submitSheen
+	)
+
+	bindButtonAnimations(
+		getKeyBtn,
+		getKeyStroke,
+		getKeyScale,
+		Color3.fromRGB(13, 13, 18),
+		Color3.fromRGB(22, 22, 30),
+		0.62,
+		0.18,
+		getKeySheen
+	)
+
+	closeBtn.MouseEnter:Connect(function()
+		if not guiAlive then
+			return
+		end
+		TweenService:Create(closeBtn, fastHoverInfo, {
+			BackgroundColor3 = Color3.fromRGB(28, 28, 36),
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+		}):Play()
+		TweenService:Create(closeStroke, fastHoverInfo, { Transparency = 0.25 }):Play()
+	end)
+
+	closeBtn.MouseLeave:Connect(function()
+		if not guiAlive then
+			return
+		end
+		TweenService:Create(closeBtn, fastHoverInfo, {
+			BackgroundColor3 = Color3.fromRGB(16, 16, 22),
+			TextColor3 = Color3.fromRGB(185, 185, 195),
+		}):Play()
+		TweenService:Create(closeStroke, fastHoverInfo, { Transparency = 0.84 }):Play()
+	end)
+
+	local function setStatus(text, color)
+		if not guiAlive then
+			return
+		end
+		statusLabel.Text = text
+		TweenService:Create(statusLabel, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			TextColor3 = color or Color3.fromRGB(190, 190, 202),
+		}):Play()
+	end
+
+	local function shakeInputBox()
+		if not guiAlive then
+			return
+		end
+		local basePos = UDim2.new(0.5, 0, 0, 50)
+		TweenService:Create(inputStroke, TweenInfo.new(0.08), {
+			Color = Color3.fromRGB(255, 90, 90),
+			Transparency = 0.1,
+		}):Play()
+
+		local offsets = { -8, 8, -6, 6, -3, 3, 0 }
+		for _, offset in ipairs(offsets) do
+			if not guiAlive then
+				break
+			end
+			inputHolder.Position = UDim2.new(0.5, offset, 0, 50)
+			task.wait(0.025)
+		end
+		if guiAlive then
+			inputHolder.Position = basePos
+			TweenService:Create(inputStroke, TweenInfo.new(0.25), {
+				Color = Color3.fromRGB(255, 255, 255),
+				Transparency = 0.76,
+			}):Play()
+		end
+	end
+
+	local function fadeOutAndDestroy(onDone)
+		if not guiAlive then
+			return
+		end
+		guiAlive = false
+		cleanupAllConnections()
+
+		local exitTween = TweenService:Create(
+			mainScale,
+			TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+			{ Scale = 0.86 }
+		)
+		TweenService:Create(
+			rootHolder,
+			TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{ Position = UDim2.new(0.5, 0, 0.5, 16) }
+		):Play()
+		TweenService:Create(mainCard, TweenInfo.new(0.16), { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(mainStroke, TweenInfo.new(0.16), { Transparency = 1 }):Play()
+		TweenService:Create(outerGlow, TweenInfo.new(0.16), { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(outerGlowStroke, TweenInfo.new(0.16), { Transparency = 1 }):Play()
+		TweenService:Create(midGlowStroke, TweenInfo.new(0.16), { Transparency = 1 }):Play()
+
+		exitTween:Play()
+		if onDone then
+			exitTween.Completed:Wait()
+		end
+		pcall(function()
+			screenGui:Destroy()
+		end)
+	end
 
 	closeBtn.MouseButton1Click:Connect(function()
 		fadeOutAndDestroy(false)
+		uiClosed = true
 	end)
 
 	local function handleSubmit()
@@ -1338,26 +1320,28 @@ flow_init(function(currentKey)
 
 		local enteredKey = trim(keyBox.Text)
 		if enteredKey == "" then
+			setStatus("Please paste your key before clicking Submit.", Color3.fromRGB(255, 110, 110))
 			shakeInputBox()
-			setStatus("Please enter a key first.", Color3.fromRGB(255, 100, 100))
 			return
 		end
 
 		isChecking = true
-		submitBtn.Text = "Checking..."
-		setStatus("Verifying key with FlowAuth...", Color3.fromRGB(220, 224, 235))
+		submitBtn.Text = "Verifying..."
+		setStatus("Verifying key with FlowAuth...", Color3.fromRGB(235, 235, 245))
+		sweepButtonSheen(submitSheen)
 
-		bottomProgress.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		bottomProgress.Size = UDim2.new(0, 0, 0, 2)
-		TweenService:Create(bottomProgress, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		bottomProgress.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		TweenService:Create(bottomProgress, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Size = UDim2.new(0.65, 0, 0, 2),
 		}):Play()
 
 		task.spawn(function()
-			local isValid, sessionOrErr = verifyFlowAuthKey(enteredKey)
-			if isValid == true then
+			local valid, sessionOrErr = verifyFlowAuthKey(enteredKey)
+			if valid then
 				safeWriteFile(KEY_FILE, enteredKey)
-				persistKeySession(enteredKey)
+				persistKeySession(enteredKey, targetScriptUrl)
+
 				local timeTag = "Active"
 				if type(sessionOrErr) == "table" then
 					if sessionOrErr.isLifetime then
@@ -1366,6 +1350,7 @@ flow_init(function(currentKey)
 						timeTag = formatRemainingTime(sessionOrErr.remainingSeconds, false) .. " left"
 					end
 				end
+
 				if guiAlive then
 					setStatus("Key Valid (" .. timeTag .. ")! Loading script...", Color3.fromRGB(90, 255, 150))
 					TweenService:Create(bottomProgress, TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
@@ -1375,6 +1360,7 @@ flow_init(function(currentKey)
 					task.wait(0.18)
 					fadeOutAndDestroy(true)
 				end
+
 				verifiedKeyResult = enteredKey
 			else
 				if guiAlive then
@@ -1392,6 +1378,7 @@ flow_init(function(currentKey)
 	end
 
 	submitBtn.MouseButton1Click:Connect(handleSubmit)
+
 	keyBox.FocusLost:Connect(function(enterPressed)
 		if enterPressed then
 			handleSubmit()
@@ -1474,141 +1461,23 @@ flow_init(function(currentKey)
 		end)
 	else
 		screenGui:Destroy()
-		return ""
+		error("Core.xyz: Could not display Key System UI.", 0)
 	end
 
 	repeat
-		task.wait(0.1)
+		task.wait(0.08)
 	until verifiedKeyResult ~= nil or uiClosed
 
-	return verifiedKeyResult or ""
+	if type(verifiedKeyResult) ~= "string" or verifiedKeyResult == "" then
+		error("Core.xyz: Key verification cancelled.", 0)
+	end
+
 end)
 
 -------------------------------------------------------------------------------
 --! Post-Authentication Protected Game Loader (Executes after FlowAuth or Direct)
 -------------------------------------------------------------------------------
-local SUPPORTED_GAMES = {
-	[9294074907] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
-	[10766620257] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
-	[9641502068] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
-	[10770730129] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
-}
-
-local SUPPORTED_PLACES = {
-	[90568084448279] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
-	[74023858073178] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
-	[112731528776884] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
-	[106931373443671] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
-}
-
-local StarterGui = game:GetService("StarterGui")
-local HttpService = game:GetService("HttpService")
-
-local function sendNotification(title, text, duration)
-	pcall(function()
-		StarterGui:SetCore("SendNotification", {
-			Title = title,
-			Text = text,
-			Duration = duration or 5,
-		})
-	end)
-end
-
--- Sync FlowAuth injected runtime globals (LRM_*) into __CoreXYZ_KeySession & CoreXYZ_KeyMeta.json
-pcall(function()
-	local envTbl = (type(getgenv) == "function" and getgenv()) or _G
-	local now = os.time()
-	local existingSession = type(envTbl.__CoreXYZ_KeySession) == "table" and envTbl.__CoreXYZ_KeySession or {}
-
-	local lrmTier = (type(LRM_KeyTier) == "string" and LRM_KeyTier ~= "" and LRM_KeyTier) or existingSession.tier or "free"
-	local lrmSec = tonumber(LRM_SecondsLeft)
-	local isLife = existingSession.isLifetime == true
-	local expAt = existingSession.expiresAt
-
-	if lrmSec ~= nil then
-		if lrmSec == math.huge or lrmSec > 315360000 then
-			isLife = true
-			expAt = nil
-		elseif lrmSec > 0 then
-			isLife = false
-			expAt = now + math.floor(lrmSec)
-		end
-	end
-
-	local syncedSession = {
-		provider = "FlowAuth",
-		projectId = 10959,
-		loaderHash = "5aadc1854f782322ada05d461c2cb0cd",
-		apiToken = "adb858e40cf5dc946478beaa63d0693f51ad4b83ac4bef78",
-		key = existingSession.key or (type(readfile) == "function" and pcall(readfile, "CoreXYZ_Key.txt") and select(2, pcall(readfile, "CoreXYZ_Key.txt"))) or "",
-		keyId = existingSession.keyId,
-		tier = lrmTier,
-		isLifetime = isLife,
-		expiresAt = expAt,
-		remainingSeconds = isLife and math.huge or (expAt and math.max(0, expAt - now) or 86400),
-		hasServerExpiry = true,
-		activatedAt = existingSession.activatedAt or now,
-		verifiedAt = now,
-		note = (type(LRM_UserNote) == "string" and LRM_UserNote) or existingSession.note or "",
-		claimedBy = (type(LRM_LinkedDiscordID) == "string" and LRM_LinkedDiscordID) or existingSession.claimedBy or "",
-	}
-
-	envTbl.__CoreXYZ_KeySession = syncedSession
-	if type(writefile) == "function" then
-		pcall(writefile, "CoreXYZ_KeyMeta.json", HttpService:JSONEncode({
-			provider = "FlowAuth",
-			projectId = 10959,
-			key = syncedSession.key,
-			keyId = syncedSession.keyId,
-			tier = syncedSession.tier,
-			isLifetime = syncedSession.isLifetime,
-			activatedAt = syncedSession.activatedAt,
-			expiresAt = syncedSession.expiresAt,
-			hasServerExpiry = true,
-			verifiedAt = now,
-		}))
-	end
-end)
-
-local targetUrl = SUPPORTED_GAMES[game.GameId] or SUPPORTED_PLACES[game.PlaceId]
-if not targetUrl then
-	return
-end
-
-local fRequest = request
-	or http_request
-	or syn_request
-	or (type(syn) == "table" and syn.request)
-	or (type(http) == "table" and http.request)
-	or (type(fluxus) == "table" and fluxus.request)
-
-local okFetch, source = pcall(function()
-	return game:HttpGet(targetUrl)
-end)
-
-if (not okFetch or type(source) ~= "string" or source == "") and type(fRequest) == "function" then
-	local okReq, res = pcall(fRequest, { Url = targetUrl, Method = "GET" })
-	if okReq and type(res) == "table" and (res.StatusCode == 200 or res.status_code == 200) then
-		local body = res.Body or res.body
-		if type(body) == "string" and body ~= "" then
-			okFetch = true
-			source = body
-		end
-	end
-end
-
-if not okFetch or type(source) ~= "string" or source == "" then
-	sendNotification("Core.xyz", "Failed to download script payload.", 5)
-	return
-end
-
-local fn, compileErr = loadstring(source)
-if type(fn) ~= "function" then
-	sendNotification("Core.xyz", "Failed to compile script: " .. tostring(compileErr), 5)
-	return
-end
-
-local okExec, execErr = pcall(fn)
-if not okExec then
-	sendNotification("Core.xyz", "Runtime error: " .. tostring(execErr), 5)
+local envTbl = (type(getgenv) == "function" and getgenv()) or _G
+if type(envTbl.__CoreXYZ_LaunchGame) == "function" then
+	envTbl.__CoreXYZ_LaunchGame()
 end
