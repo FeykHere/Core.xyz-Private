@@ -9026,288 +9026,201 @@ do
     UI.HomeUserValue = createProfileRow(1, "User", userStr, "Info_User")
     UI.HomeExecutorValue = createProfileRow(2, "Executor", getDetectedExecutorName(), "Info_Executor")
     UI.HomeUserIdValue = createProfileRow(3, "User ID", tostring(LocalPlayer.UserId or 0), "Info_UserId")
-    UI.HomeAccessValue = createProfileRow(4, "Key Duration", "Checking...", "Info_KeyDuration")
+    UI.HomeAccessValue = createProfileRow(4, "Key Time", "Checking...", "Info_KeyDuration")
     do
         local durationLabel = UI.HomeAccessValue
-        local PLATO_SERVICE_ID = 36271
-        local PLATO_SECRET = "993b9964-e0c4-4c5d-878b-82cf17ddef9f"
+        local FLOWAUTH_PROJECT_ID = 10959
+        local FLOWAUTH_API_TOKEN = "adb858e40cf5dc946478beaa63d0693f51ad4b83ac4bef78"
         local KEY_FILE_NAME = "CoreXYZ_Key.txt"
         local KEY_META_NAME = "CoreXYZ_KeyMeta.json"
         local DEFAULT_DURATION = 86400
-
-        local sha256Hex
-        do
-            local M32 = 2 ^ 32
-            local M32M1 = M32 - 1
-            local lshiftFn
-            local function bxor(a, b)
-                local r, p = 0, 1
-                while a ~= 0 or b ~= 0 do
-                    r = r + (((a % 2) + (b % 2)) % 2) * p
-                    a = math.floor(a / 2)
-                    b = math.floor(b / 2)
-                    p = p * 2
-                end
-                return r % M32
-            end
-            local function xorN(a, b, c, ...)
-                if b then
-                    local m = bxor(a % M32, b % M32)
-                    return c and xorN(m, c, ...) or m
-                end
-                return a and (a % M32) or 0
-            end
-            local function bandN(a, b, c, ...)
-                if b then
-                    a, b = a % M32, b % M32
-                    local m = (a + b - bxor(a, b)) / 2
-                    return c and bandN(m, c, ...) or m
-                end
-                return a and (a % M32) or M32M1
-            end
-            local function rshiftFn(x, n)
-                if n < 0 then return lshiftFn(x, -n) end
-                if n > 31 then return 0 end
-                return math.floor((x % M32) / (2 ^ n))
-            end
-            lshiftFn = function(x, n)
-                if n < 0 then return rshiftFn(x, -n) end
-                return (x * (2 ^ n)) % M32
-            end
-            local function rrotate(x, n)
-                x = x % M32
-                n = n % 32
-                return rshiftFn(x, n) + lshiftFn(bandN(x, 2 ^ n - 1), 32 - n)
-            end
-            local K = {
-                0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-                0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-                0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-                0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-                0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-                0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-                0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-                0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-            }
-            local function numToBytes(n, len)
-                local s = ""
-                for _ = 1, len do
-                    local b = n % 256
-                    s = string.char(b) .. s
-                    n = (n - b) / 256
-                end
-                return s
-            end
-            sha256Hex = function(msg)
-                local len = #msg
-                local pad = 64 - (len + 9) % 64
-                msg = msg .. "\128" .. string.rep("\0", pad) .. numToBytes(8 * len, 8)
-                local H = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 }
-                for blk = 1, #msg, 64 do
-                    local W = {}
-                    for m = 1, 16 do
-                        local val = 0
-                        local base = blk + (m - 1) * 4
-                        for idx = base, base + 3 do
-                            val = val * 256 + string.byte(msg, idx)
-                        end
-                        W[m] = val
-                    end
-                    for m = 17, 64 do
-                        local n15, n2 = W[m - 15], W[m - 2]
-                        local s0 = xorN(rrotate(n15, 7), rrotate(n15, 18), rshiftFn(n15, 3))
-                        local s1 = xorN(rrotate(n2, 17), rrotate(n2, 19), rshiftFn(n2, 10))
-                        W[m] = (W[m - 16] + s0 + W[m - 7] + s1) % M32
-                    end
-                    local a, b, c, d, e, f, g, h = H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8]
-                    for i = 1, 64 do
-                        local S1 = xorN(rrotate(e, 6), rrotate(e, 11), rrotate(e, 25))
-                        local ch = xorN(bandN(e, f), bandN(M32M1 - e, g))
-                        local t1 = (h + S1 + ch + K[i] + W[i]) % M32
-                        local S0 = xorN(rrotate(a, 2), rrotate(a, 13), rrotate(a, 22))
-                        local maj = xorN(bandN(a, b), bandN(a, c), bandN(b, c))
-                        local t2 = (S0 + maj) % M32
-                        h, g, f, e, d, c, b, a = g, f, e, (d + t1) % M32, c, b, a, (t1 + t2) % M32
-                    end
-                    H[1], H[2], H[3], H[4] = (H[1] + a) % M32, (H[2] + b) % M32, (H[3] + c) % M32, (H[4] + d) % M32
-                    H[5], H[6], H[7], H[8] = (H[5] + e) % M32, (H[6] + f) % M32, (H[7] + g) % M32, (H[8] + h) % M32
-                end
-                local raw = numToBytes(H[1], 4) .. numToBytes(H[2], 4) .. numToBytes(H[3], 4) .. numToBytes(H[4], 4)
-                    .. numToBytes(H[5], 4) .. numToBytes(H[6], 4) .. numToBytes(H[7], 4) .. numToBytes(H[8], 4)
-                return (string.gsub(raw, ".", function(ch)
-                    return string.format("%02x", string.byte(ch))
-                end))
-            end
-        end
 
         local function trimStr(s)
             if type(s) ~= "string" then return "" end
             return (s:gsub("^%s+", ""):gsub("%s+$", ""))
         end
 
-        local function urlEnc(s)
-            return (tostring(s):gsub("[^%w%-_%.~]", function(ch)
-                return string.format("%%%02X", string.byte(ch))
-            end))
-        end
-
-        local function parseTs(raw)
-            if type(raw) == "number" then
-                if raw > 1e12 then return math.floor(raw / 1000) end
-                if raw > 1e9 then return math.floor(raw) end
-            elseif type(raw) == "string" and raw ~= "" then
-                local n = tonumber(raw)
-                if n then return parseTs(n) end
-                if type(DateTime) == "table" and type(DateTime.fromIsoDate) == "function" then
-                    local okDt, dtObj = pcall(DateTime.fromIsoDate, raw)
-                    if okDt and dtObj and dtObj.UnixTimestamp then
-                        return dtObj.UnixTimestamp
+        local function safeReadFile(path)
+            if type(Env.isfile) == "function" and type(Env.readfile) == "function" then
+                local okExists, exists = pcall(Env.isfile, path)
+                if okExists and exists then
+                    local okRead, content = pcall(Env.readfile, path)
+                    if okRead and type(content) == "string" then
+                        return content
                     end
                 end
-                local yr, mo, dy, hr, mn, sc = raw:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[T ](%d%d):(%d%d):(%d%d)")
-                if yr then
-                    local okT, ts = pcall(os.time, {
-                        year = tonumber(yr), month = tonumber(mo), day = tonumber(dy),
-                        hour = tonumber(hr), min = tonumber(mn), sec = tonumber(sc),
-                    })
-                    if okT and ts then return ts end
-                end
             end
             return nil
         end
 
-        local function extractExpiry(decoded)
-            if type(decoded) ~= "table" then return nil end
-            local now = os.time()
-            local srcs = {}
-            if type(decoded.data) == "table" then table.insert(srcs, decoded.data) end
-            table.insert(srcs, decoded)
-            for _, tbl in ipairs(srcs) do
-                for _, k in ipairs({
-                    "expiresAt", "expires_at", "expireAt", "expire_at",
-                    "expiration", "expiry", "validUntil", "valid_until", "resetAt", "reset_at",
-                }) do
-                    local ts = parseTs(tbl[k])
-                    if ts and ts > (now - 60) then return ts end
-                end
-                for _, k in ipairs({ "secondsLeft", "seconds_left", "remainingSeconds", "ttl", "remaining", "timeLeft", "time_left" }) do
-                    local v = tonumber(tbl[k])
-                    if v and v > 0 then return now + math.floor(v) end
-                end
-                for _, k in ipairs({ "minutesLeft", "minutes_left", "remainingMinutes" }) do
-                    local v = tonumber(tbl[k])
-                    if v and v > 0 then return now + math.floor(v * 60) end
-                end
-                for _, k in ipairs({ "hoursLeft", "hours_left", "durationHours" }) do
-                    local v = tonumber(tbl[k])
-                    if v and v > 0 then return now + math.floor(v * 3600) end
-                end
+        local function safeWriteFile(path, content)
+            if type(Env.writefile) == "function" then
+                pcall(Env.writefile, path, content)
             end
-            return nil
         end
 
-        local function genNonce()
-            local s = ""
-            for _ = 1, 16 do
-                s = s .. string.char(math.floor(math.random() * 26) + 97)
-            end
-            return s
+        local function safeJsonDecode(raw)
+            if type(raw) ~= "string" or raw == "" then return nil end
+            local ok, res = pcall(function() return HttpService:JSONDecode(raw) end)
+            return ok and res or nil
         end
 
-        local function getHwidStr()
-            local ok, res = pcall(function()
-                if type(Env.gethwid) == "function" then return Env.gethwid() end
-                return LocalPlayer and LocalPlayer.UserId or 0
-            end)
-            if ok and res ~= nil and tostring(res) ~= "" then
-                return tostring(res)
-            end
-            return LocalPlayer and tostring(LocalPlayer.UserId) or "0"
+        local function safeJsonEncode(tbl)
+            local ok, res = pcall(function() return HttpService:JSONEncode(tbl) end)
+            return ok and res or "{}"
         end
 
         local keyState = {
             key = "",
-            host = "https://api.platoboost.com",
+            keyId = nil,
+            tier = "premium",
+            isLifetime = false,
             expiresAt = nil,
             isValid = nil,
+            statusText = nil,
             lastSync = 0,
         }
 
-        -- Load session passed from Loader.lua or persisted CoreXYZ_KeyMeta.json / CoreXYZ_Key.txt
-        pcall(function()
-            local genvTbl = (type(getgenv) == "function" and getgenv()) or _G
-            local s = type(genvTbl) == "table" and genvTbl.__CoreXYZ_KeySession
-            if type(s) == "table" then
-                if type(s.key) == "string" and s.key ~= "" then keyState.key = trimStr(s.key) end
-                if type(s.host) == "string" and s.host ~= "" then keyState.host = s.host end
-                if tonumber(s.expiresAt) then keyState.expiresAt = tonumber(s.expiresAt) end
+        local genvTbl = (type(getgenv) == "function" and getgenv()) or _G
+        local s = type(genvTbl) == "table" and genvTbl.__CoreXYZ_KeySession
+        if type(s) == "table" then
+            if type(s.key) == "string" and s.key ~= "" then
+                keyState.key = trimStr(s.key)
+            end
+            if s.keyId then
+                keyState.keyId = s.keyId
+            end
+            if type(s.tier) == "string" and s.tier ~= "" then
+                keyState.tier = s.tier
+            end
+            if s.isLifetime == true then
+                keyState.isLifetime = true
+                keyState.isValid = true
+            elseif tonumber(s.expiresAt) then
+                keyState.expiresAt = tonumber(s.expiresAt)
                 keyState.isValid = true
             end
-        end)
-
-        if keyState.key == "" and safeIsFile(KEY_FILE_NAME) then
-            keyState.key = trimStr(safeReadFile(KEY_FILE_NAME) or "")
         end
-        if safeIsFile(KEY_META_NAME) then
-            local meta = safeJsonDecode(safeReadFile(KEY_META_NAME))
+
+        if type(genvTbl) == "table" and genvTbl.LRM_SecondsLeft ~= nil and keyState.isValid == nil then
+            local secLeft = tonumber(genvTbl.LRM_SecondsLeft)
+            if secLeft == math.huge then
+                keyState.isLifetime = true
+                keyState.isValid = true
+            elseif secLeft and secLeft > 0 then
+                keyState.expiresAt = os.time() + math.floor(secLeft)
+                keyState.isValid = true
+            end
+        end
+
+        if keyState.key == "" then
+            local savedKey = safeReadFile(KEY_FILE_NAME)
+            if savedKey then
+                keyState.key = trimStr(savedKey)
+            end
+        end
+
+        local savedMetaRaw = safeReadFile(KEY_META_NAME)
+        if savedMetaRaw then
+            local meta = safeJsonDecode(savedMetaRaw)
             if type(meta) == "table" then
                 if keyState.key == "" and type(meta.key) == "string" then
                     keyState.key = trimStr(meta.key)
                 end
-                if keyState.expiresAt == nil and tonumber(meta.expiresAt) and (meta.key == nil or meta.key == keyState.key) then
-                    keyState.expiresAt = tonumber(meta.expiresAt)
+                if (meta.key == nil or trimStr(tostring(meta.key)) == keyState.key) then
+                    if meta.isLifetime == true then
+                        keyState.isLifetime = true
+                        keyState.isValid = true
+                    elseif keyState.expiresAt == nil and tonumber(meta.expiresAt) then
+                        keyState.expiresAt = tonumber(meta.expiresAt)
+                        keyState.isValid = true
+                    end
                 end
             end
         end
 
-        local function queryPlatoboostExpiry()
-            if type(Env.request) ~= "function" then
+        local function queryFlowAuthExpiry()
+            if type(Env.request) ~= "function" or keyState.key == "" then
                 return
             end
-            local hwidHash = sha256Hex(getHwidStr())
-            local nonce = genNonce()
-            local qKey = keyState.key ~= "" and ("&key=" .. urlEnc(keyState.key)) or ""
-            local hosts = { keyState.host }
-            if keyState.host ~= "https://api.platoboost.com" then
-                table.insert(hosts, "https://api.platoboost.com")
-            else
-                table.insert(hosts, "https://api.platoboost.net")
-            end
-
-            for _, hUrl in ipairs(hosts) do
-                local endpoint = hUrl .. "/public/whitelist/" .. tostring(PLATO_SERVICE_ID)
-                    .. "?identifier=" .. hwidHash .. qKey .. "&nonce=" .. nonce
-                local okReq, res = pcall(Env.request, { Url = endpoint, Method = "GET" })
-                if okReq and type(res) == "table" and (res.StatusCode == 200 or res.status_code == 200) then
-                    keyState.host = hUrl
-                    local decoded = safeJsonDecode(res.Body or res.body)
-                    if type(decoded) == "table" and decoded.success == true and type(decoded.data) == "table" then
-                        if decoded.data.valid == true and decoded.data.hash == sha256Hex("true-" .. nonce .. "-" .. PLATO_SECRET) then
+            local endpoint = string.format("https://flowauth.net/v1/projects/%d/keys/lookup", FLOWAUTH_PROJECT_ID)
+            local okReq, res = pcall(Env.request, {
+                Url = endpoint,
+                Method = "POST",
+                Headers = {
+                    ["Authorization"] = "Bearer " .. FLOWAUTH_API_TOKEN,
+                    ["Content-Type"] = "application/json",
+                },
+                Body = safeJsonEncode({ key_value = keyState.key }),
+            })
+            if okReq and type(res) == "table" then
+                local code = tonumber(res.StatusCode or res.status_code or res.status) or 0
+                if code == 200 then
+                    local data = safeJsonDecode(res.Body or res.body)
+                    if type(data) == "table" and data.id then
+                        keyState.keyId = data.id
+                        keyState.tier = tostring(data.tier or "premium")
+                        local effStatus = tostring(data.effective_status or data.status or "")
+                        if data.blacklist_id ~= nil then
+                            keyState.isValid = false
+                            keyState.statusText = "Blacklisted"
+                        elseif effStatus == "paused" then
+                            keyState.isValid = false
+                            keyState.statusText = "Paused"
+                        elseif effStatus == "expired" then
+                            keyState.isValid = false
+                            keyState.statusText = "Expired"
+                            keyState.expiresAt = os.time()
+                        elseif effStatus == "active" then
                             keyState.isValid = true
-                            local srvExp = extractExpiry(decoded)
-                            if srvExp then
-                                keyState.expiresAt = srvExp
-                            elseif not keyState.expiresAt then
-                                keyState.expiresAt = os.time() + DEFAULT_DURATION
+                            keyState.statusText = nil
+                            local now = os.time()
+                            local dur = type(data.duration) == "table" and data.duration or {}
+                            local isLife = (dur.is_lifetime == true) or (dur.state == "lifetime")
+                            keyState.isLifetime = isLife
+                            if isLife then
+                                keyState.expiresAt = nil
+                            else
+                                local remMs = tonumber(dur.remaining_ms) or tonumber(data.expires_after_ms)
+                                if remMs and remMs > 0 then
+                                    keyState.expiresAt = now + math.floor(remMs / 1000)
+                                elseif tonumber(data.expires_at) then
+                                    local expVal = tonumber(data.expires_at)
+                                    if expVal > 1e12 then
+                                        local evalMs = tonumber(dur.evaluated_at) or (now * 1000)
+                                        keyState.expiresAt = now + math.max(0, math.floor((expVal - evalMs) / 1000))
+                                    else
+                                        keyState.expiresAt = expVal
+                                    end
+                                elseif not keyState.expiresAt then
+                                    keyState.expiresAt = now + DEFAULT_DURATION
+                                end
                             end
                             safeWriteFile(KEY_META_NAME, safeJsonEncode({
+                                provider = "FlowAuth",
+                                projectId = FLOWAUTH_PROJECT_ID,
                                 key = keyState.key,
-                                serviceId = PLATO_SERVICE_ID,
+                                keyId = keyState.keyId,
+                                tier = keyState.tier,
+                                isLifetime = keyState.isLifetime,
                                 expiresAt = keyState.expiresAt,
-                                verifiedAt = os.time(),
+                                verifiedAt = now,
                             }))
-                        elseif decoded.data.valid == false then
+                        else
                             keyState.isValid = false
-                            keyState.expiresAt = os.time()
-                            pcall(function()
-                                if type(delfile) == "function" then
-                                    pcall(delfile, KEY_FILE_NAME)
-                                    pcall(delfile, KEY_META_NAME)
-                                end
-                            end)
+                            keyState.statusText = "Inactive"
                         end
                     end
-                    break
+                elseif code == 404 then
+                    keyState.isValid = false
+                    keyState.statusText = "Invalid Key"
+                    keyState.expiresAt = os.time()
+                    pcall(function()
+                        if type(delfile) == "function" then
+                            pcall(delfile, KEY_FILE_NAME)
+                            pcall(delfile, KEY_META_NAME)
+                        end
+                    end)
                 end
             end
             keyState.lastSync = os.time()
@@ -9334,8 +9247,14 @@ do
                 return
             end
             if keyState.isValid == false then
-                durationLabel.Text = (keyState.key == "") and "No Active Key" or "Expired"
+                durationLabel.Text = keyState.statusText or ((keyState.key == "") and "No Active Key" or "Expired")
                 durationLabel.TextColor3 = Theme.Error
+                return
+            end
+            if keyState.isLifetime then
+                local tierPrefix = (keyState.tier and keyState.tier ~= "") and (string.upper(string.sub(keyState.tier, 1, 1)) .. string.sub(keyState.tier, 2) .. " · ") or ""
+                durationLabel.Text = tierPrefix .. "Lifetime"
+                durationLabel.TextColor3 = Theme.Success
                 return
             end
             if keyState.expiresAt then
@@ -9352,14 +9271,14 @@ do
                     end
                 end
             else
-                durationLabel.Text = "Verifying..."
-                durationLabel.TextColor3 = Theme.Silver
+                durationLabel.Text = (keyState.key == "") and "No Active Key" or "Verifying..."
+                durationLabel.TextColor3 = (keyState.key == "") and Theme.Error or Theme.Silver
             end
         end
 
         renderKeyDuration()
         task.spawn(function()
-            queryPlatoboostExpiry()
+            queryFlowAuthExpiry()
             renderKeyDuration()
             while durationLabel and durationLabel.Parent do
                 task.wait(1)
@@ -9367,8 +9286,8 @@ do
                     break
                 end
                 local now = os.time()
-                if (now - keyState.lastSync) >= 60 or (keyState.isValid == true and keyState.expiresAt and (keyState.expiresAt - now) <= 0) then
-                    queryPlatoboostExpiry()
+                if (now - keyState.lastSync) >= 60 or (keyState.isValid == true and not keyState.isLifetime and keyState.expiresAt and (keyState.expiresAt - now) <= 0) then
+                    queryFlowAuthExpiry()
                 end
                 renderKeyDuration()
             end
