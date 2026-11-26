@@ -10057,7 +10057,13 @@ function MystrixHub.Functions.InstallMaxPower()
             if (state and state.Enabled) or (pc and pc.InstantCharge) then
                 return 1
             end
-            return callOrig(value)
+            local base = callOrig(value)
+            if pc and pc.PowerMultEnabled and type(base) == "number" then
+                local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
+                local t = math.clamp((pMult - 1.0) / 1.5, 0, 1)
+                return math.clamp(math.max(base * pMult, 0.55 + 0.45 * t), 0, 1)
+            end
+            return base
         end
     end)
     return MP.Hooked == true
@@ -10329,8 +10335,13 @@ function MystrixHub.Functions.StopNoCooldown()
         end
         NC.Conns = nil
     end
-    if NC.Tuning and NC.SlideDefault then
-        NC.Tuning.Slide.Cooldown = NC.SlideDefault
+    if NC.Tuning then
+        if NC.SlideDefault and type(NC.Tuning.Slide) == "table" then
+            NC.Tuning.Slide.Cooldown = NC.SlideDefault
+        end
+        if NC.PokeDefault and type(NC.Tuning.Poke) == "table" then
+            NC.Tuning.Poke.Cooldown = NC.PokeDefault
+        end
     end
 end
 
@@ -10340,14 +10351,20 @@ function MystrixHub.Functions.StartNoCooldown()
     local ok, tuning = pcall(function()
         return require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
     end)
-    if ok and type(tuning) == "table" and type(tuning.Slide) == "table" then
+    if ok and type(tuning) == "table" then
         NC.Tuning = tuning
-        NC.SlideDefault = NC.SlideDefault or tuning.Slide.Cooldown
-        tuning.Slide.Cooldown = 0
+        if type(tuning.Slide) == "table" then
+            NC.SlideDefault = NC.SlideDefault or tuning.Slide.Cooldown
+            tuning.Slide.Cooldown = 0
+        end
+        if type(tuning.Poke) == "table" and tuning.Poke.Cooldown ~= nil then
+            NC.PokeDefault = NC.PokeDefault or tuning.Poke.Cooldown
+            tuning.Poke.Cooldown = 0
+        end
     end
     local conns = {}
     NC.Conns = conns
-    for _, name in ipairs({ "SlideReadyAt", "SlideCooldown", "PokeReadyAt" }) do
+    for _, name in ipairs({ "SlideReadyAt", "SlideCooldown", "PokeReadyAt", "PokeCooldown" }) do
         local function clear()
             if not NC.Enabled then return end
             local v = LocalPlayer:GetAttribute(name)
@@ -10484,10 +10501,10 @@ function MystrixHub.Functions.PokeOpportunity(target, range)
     local aim = bp + Vector3.new(bv.X, 0, bv.Z) * 0.14 - root.Position
     local flat = Vector3.new(aim.X, 0, aim.Z)
     local dist = flat.Magnitude
-    if dist < 0.8 or dist > math.min(range, 7.4) then return false end
+    if dist < 0.6 or dist > math.min(range, 12.0) then return false end
     local look = root.CFrame.LookVector
     local face = Vector3.new(look.X, 0, look.Z)
-    if face.Magnitude < 0.01 or face.Unit:Dot(flat.Unit) < -0.17 then return false end
+    if face.Magnitude < 0.01 or face.Unit:Dot(flat.Unit) < -0.25 then return false end
     if math.abs(bp.Y - root.Position.Y) > 6 then return false end
     return true
 end
@@ -10504,13 +10521,16 @@ function MystrixHub.Functions.StopAutoPoke()
             pcall(function() state.Binding:Destroy() end)
         end
     end
+    if MystrixHub.PokeBinding then
+        pcall(function() MystrixHub.PokeBinding:Fire(false) end)
+    end
 end
 
 function MystrixHub.Functions.StartAutoPoke()
     local F = MystrixHub.Functions
     F.StopAutoPoke()
-    F.GetPokeBinding()
-    local st = { Acc = 0, Next = 0, Target = nil, Seen = 0 }
+    local binding = F.GetPokeBinding()
+    local st = { Acc = 0, Next = 0, Target = nil, Seen = 0, Binding = binding }
     MystrixHub.AutoPoke = st
     st.Conn = RunService.Heartbeat:Connect(function(dt)
         st.Acc += dt
@@ -10528,7 +10548,7 @@ function MystrixHub.Functions.StartAutoPoke()
         local readyAt = LocalPlayer:GetAttribute("PokeReadyAt")
         if type(readyAt) == "number" and readyAt > workspace:GetServerTimeNow() + 0.03 then return end
         local target, distance = F.FindPokeTarget()
-        if not target or not distance or distance > math.min(cfg.Range + 1, 9) then
+        if not target or not distance or distance > math.min((cfg.Range or 6) + 1.5, 13.5) then
             st.Target, st.Seen = nil, 0
             return
         end
@@ -10697,30 +10717,55 @@ function MystrixHub.Functions.SilentAimModules()
         SA.Flight = Kick.Flight
         SA.Families = Kick.Families
         SA.KeeperRules = require(sharedGame:WaitForChild("KeeperRules"))
-        if SA.Flight and not SA.Flight.__coreDragHooked then
-            SA.Flight.__coreDragHooked = true
-            local origAirStep = SA.Flight.airStep
-            if type(origAirStep) == "function" then
-                SA.Flight.airStep = function(pos, v, s, dt, params)
-                    local np, nv, ns = origAirStep(pos, v, s, dt, params)
-                    local pc = getgenv().MystrixPowerCurve
-                    if pc and pc.PowerMultEnabled and pc.LastStrikeAt and (os.clock() - pc.LastStrikeAt) < 1.8 and typeof(v) == "Vector3" and typeof(nv) == "Vector3" then
-                        local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
-                        if pMult > 1.02 then
-                            local keep = math.clamp(1 - (1 / (pMult * 1.35)), 0.15, 0.78)
-                            nv = Vector3.new(
-                                nv.X + (v.X - nv.X) * keep,
-                                nv.Y,
-                                nv.Z + (v.Z - nv.Z) * keep
-                            )
-                        end
-                    end
-                    return np, nv, ns
-                end
-            end
-        end
     end)
     return SA.BallView ~= nil and SA.Flight ~= nil and SA.Families ~= nil
+end
+
+function MystrixHub.Functions.GetFamilyMaxSpeed(family)
+    local SA = getgenv().MystrixSilentAim
+    local fam = SA and SA.Families and type(family) == "string" and SA.Families[family] or nil
+    if fam and type(fam.speed) == "table" then
+        local top = math.max(tonumber(fam.speed[2]) or 0, type(fam.shotSpeed) == "table" and (tonumber(fam.shotSpeed[2]) or 0) or 0)
+        if top > 0 then
+            return top * (fam.header and 1 or 1.05) * 0.994, top
+        end
+    end
+    return 128, 122
+end
+
+function MystrixHub.Functions.ApplyPowerCurveVel(vel, spin, family, isRedirected)
+    local PC = getgenv().MystrixPowerCurve
+    if not PC then return vel, spin end
+    local maxAllowed, topBase = MystrixHub.Functions.GetFamilyMaxSpeed(family)
+    if PC.PowerMultEnabled and typeof(vel) == "Vector3" then
+        local pMult = math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
+        if not isRedirected then
+            local t = math.clamp((pMult - 1.0) / 1.5, 0, 1)
+            local vx = vel.X * pMult
+            local vz = vel.Z * pMult
+            -- Compensate vertical loft so faster horizontal shots stay flat and don't overshoot the crossbar
+            local vy = vel.Y * math.clamp(1.0 - t * 0.18, 0.78, 1.0)
+            local boosted = Vector3.new(vx, vy, vz)
+            local mag = boosted.Magnitude
+            local minFloor = math.min(maxAllowed, topBase * (0.78 + 0.22 * t))
+            if mag > maxAllowed and mag > 0.001 then
+                boosted = boosted * (maxAllowed / mag)
+            elseif mag > 1 and mag < minFloor then
+                boosted = boosted * (minFloor / mag)
+            end
+            vel = boosted
+        else
+            local mag = vel.Magnitude
+            if mag > maxAllowed and mag > 0.001 then
+                vel = vel * (maxAllowed / mag)
+            end
+        end
+    end
+    if PC.CurveMultEnabled and typeof(spin) == "Vector3" and not isRedirected then
+        local cMult = math.clamp(tonumber(PC.CurveMult) or 1.5, 1.0, 3.0)
+        spin = spin * cMult
+    end
+    return vel, spin
 end
 
 function MystrixHub.Functions.SilentAimGoalCompute()
@@ -10871,6 +10916,7 @@ function MystrixHub.Functions.PlanSyncCopy(plan)
     if saOn then
         local ok, vel, spin = pcall(MystrixHub.Functions.SilentAimPlan, plan)
         if ok and vel then
+            vel, spin = MystrixHub.Functions.ApplyPowerCurveVel(vel, spin, plan.family, true)
             local copy = table.clone(plan)
             if (pc and (pc.PowerMultEnabled or pc.InstantCharge)) or (getgenv().MystrixMaxPower and getgenv().MystrixMaxPower.Enabled) then
                 copy.power = 1
@@ -10890,18 +10936,12 @@ function MystrixHub.Functions.PlanSyncCopy(plan)
     end
     if pcOn then
         local copy = table.clone(plan)
-        if pc.PowerMultEnabled then
+        if pc.PowerMultEnabled and type(copy.power) == "number" then
             local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
-            if typeof(copy.vel) == "Vector3" then
-                copy.vel = Vector3.new(copy.vel.X * pMult, copy.vel.Y * math.sqrt(pMult), copy.vel.Z * pMult)
-            end
-            if type(copy.power) == "number" then
-                copy.power = 1
-            end
+            copy.power = math.clamp(math.max(copy.power * pMult, 0.85), 0, 1)
         end
-        if pc.CurveMultEnabled and typeof(copy.spin) == "Vector3" then
-            local cMult = math.clamp(tonumber(pc.CurveMult) or 1.5, 1.0, 3.0)
-            copy.spin = copy.spin * cMult
+        if typeof(copy.vel) == "Vector3" or typeof(copy.spin) == "Vector3" then
+            copy.vel, copy.spin = MystrixHub.Functions.ApplyPowerCurveVel(copy.vel, copy.spin, plan.family, false)
         end
         return copy
     end
@@ -14023,9 +14063,9 @@ function MystrixHub.Functions.DribblePick(speed, p, threats, crowd, last, rare)
 end
 
 function MystrixHub.Functions.ShotGate(from)
-    local T = getgenv().MystrixTarget
-    if T.Enabled and not T.Goal and T.Model then return nil end
-    local goal = MystrixHub.Functions.SilentAimGoal()
+    local F = MystrixHub.Functions
+    if F.CallPassFor(from.X, from.Z) then return nil end
+    local goal = F.SilentAimGoal()
     if not goal then return nil end
     if (from.X - goal.x) * goal.out >= 0 then return nil end
     local dx, dz = goal.x - from.X, goal.z - from.Z
@@ -14036,144 +14076,92 @@ function MystrixHub.Functions.ShotGate(from)
     return goal
 end
 
-function MystrixHub.Functions.TargetCandidates()
+getgenv().MystrixCallPass = getgenv().MystrixCallPass or { Enabled = false, Offside = true, GoalRange = 25 }
+
+function MystrixHub.Functions.CallPassTarget()
     local F = MystrixHub.Functions
+    local cfg = getgenv().MystrixCallPass
+    local now = os.clock()
     local char = LocalPlayer.Character
+    local cache = MystrixHub.CallPassCache
+    if cache and cache.Char == char and now - cache.At < 0.08 then
+        return cache.Root
+    end
     local root = char and char:FindFirstChild("Root")
     local team = char and char:GetAttribute("Team")
-    if not root or type(team) ~= "string" then return {} end
-    local goal = F.SilentAimGoal()
-    local list = {}
-    for _, e in ipairs(F.MannequinSnapshot()) do
-        if e.model ~= char and e.team == team and not e.keeper then
-            local score = goal and math.abs(goal.x - e.pos.X) or (e.pos - root.Position).Magnitude
-            list[#list + 1] = { model = e.model, score = score }
-        end
-    end
-    table.sort(list, function(a, b) return a.score < b.score end)
-    return list
-end
-
-function MystrixHub.Functions.UpdateTargetMarker()
-    local F = MystrixHub.Functions
-    local T = getgenv().MystrixTarget
-    local gui = MystrixHub.TargetGui
-    if not T.Enabled then
-        if gui then gui.Enabled = false end
-        return
-    end
-    if not (gui and gui.Parent) then
-        gui = Instance.new("BillboardGui")
-        gui.Name = "MystrixTarget"
-        gui.AlwaysOnTop = true
-        gui.ResetOnSpawn = false
-        gui.Size = UDim2.fromOffset(90, 26)
-        gui.StudsOffset = Vector3.new(0, 5, 0)
-        local label = Instance.new("TextLabel")
-        label.Name = "Label"
-        label.Size = UDim2.fromScale(1, 1)
-        label.BackgroundColor3 = Color3.fromRGB(43, 255, 172)
-        label.BackgroundTransparency = 0.15
-        label.TextColor3 = Color3.fromRGB(23, 21, 18)
-        label.Font = Enum.Font.GothamBold
-        label.TextScaled = true
-        label.Parent = gui
-        gui.Parent = MystrixHub.PlayerController.PlayerGui
-        MystrixHub.TargetGui = gui
-        MystrixHub.ConnectionController.Insert({ Disconnect = function()
-            gui:Destroy()
-        end })
-    end
-    local adornee, text
-    if T.Goal or not T.Model then
-        local part = MystrixHub.TargetPart
-        if not (part and part.Parent) then
-            part = Instance.new("Part")
-            part.Name = "MystrixTargetPart"
-            part.Anchored = true
-            part.CanCollide = false
-            part.CanQuery = false
-            part.CanTouch = false
-            part.Transparency = 1
-            part.Size = Vector3.new(1, 1, 1)
-            part.Parent = workspace
-            MystrixHub.TargetPart = part
-            MystrixHub.ConnectionController.Insert({ Disconnect = function()
-                part:Destroy()
-            end })
-        end
+    local best
+    if root and type(team) == "string" then
         local goal = F.SilentAimGoal()
-        if goal then
-            part.Position = Vector3.new(goal.x, goal.ground + (goal.top - goal.ground) * 0.5, goal.z)
-        end
-        adornee, text = part, "GOAL"
-    else
-        adornee, text = T.Model:FindFirstChild("Root"), "TARGET"
-    end
-    gui.Adornee = adornee
-    gui.Label.Text = text
-    gui.Enabled = adornee ~= nil
-end
-
-function MystrixHub.Functions.CycleTarget()
-    local F = MystrixHub.Functions
-    local T = getgenv().MystrixTarget
-    if not T.Enabled then return end
-    local list = F.TargetCandidates()
-    local index
-    for i, item in ipairs(list) do
-        if item.model == T.Model then
-            index = i
-            break
-        end
-    end
-    local nextItem = list[(T.Goal and 0 or (index or 0)) + 1]
-    if nextItem then
-        T.Goal = false
-        T.Model = nextItem.model
-    else
-        T.Goal = true
-        T.Model = nil
-    end
-    F.UpdateTargetMarker()
-end
-
-function MystrixHub.Functions.SetTargeting(state)
-    local F = MystrixHub.Functions
-    local T = getgenv().MystrixTarget
-    T.Enabled = state == true
-    T.Goal = true
-    T.Model = nil
-    if MystrixHub.TargetConn then
-        MystrixHub.TargetConn:Disconnect()
-        MystrixHub.TargetConn = nil
-    end
-    if T.Enabled then
-        local acc = 0
-        MystrixHub.TargetConn = RunService.Heartbeat:Connect(function(dt)
-            acc += dt
-            if acc < 0.25 then return end
-            acc = 0
-            local t = getgenv().MystrixTarget
-            if not t.Goal and not (t.Model and t.Model.Parent) then
-                t.Goal = true
-                t.Model = nil
+        local ball = F.GetBall()
+        local line
+        if cfg.Offside and goal then
+            local ballPos = ball and ball.Position or root.Position
+            local top1, top2 = -math.huge, -math.huge
+            for _, e in ipairs(F.MannequinSnapshot()) do
+                if e.model ~= char and type(e.team) == "string" and e.team ~= team then
+                    local p = e.pos.X * goal.out
+                    if p > top1 then
+                        top2 = top1
+                        top1 = p
+                    elseif p > top2 then
+                        top2 = p
+                    end
+                end
             end
-            MystrixHub.Functions.UpdateTargetMarker()
-        end)
-        MystrixHub.ConnectionController.Insert(MystrixHub.TargetConn)
+            line = math.max(top2, ballPos.X * goal.out) + 0.5
+        end
+        local look = root.CFrame.LookVector
+        local face = Vector3.new(look.X, 0, look.Z)
+        face = face.Magnitude > 0.01 and face.Unit or Vector3.new(0, 0, -1)
+        local bestScore = math.huge
+        for _, model in ipairs(Services.CollectionService:GetTagged("MannequinCharacter")) do
+            if model ~= char and model:IsA("Model") and model:GetAttribute("Team") == team then
+                local call = model:GetAttribute("Call")
+                local r = model:FindFirstChild("Root")
+                local state = model:GetAttribute("BodyState")
+                if type(call) == "number" and call ~= 0 and r and r:IsA("BasePart") and (state == nil or state == "Animated") then
+                    local offside = line and goal and r.Position.X * goal.out > line
+                    if not offside then
+                        local diff = r.Position - root.Position
+                        local flat = Vector3.new(diff.X, 0, diff.Z)
+                        local d = flat.Magnitude
+                        if d >= 3 then
+                            local angle = math.acos(math.clamp(face:Dot(flat.Unit), -1, 1))
+                            local score = angle * 12 + d * 0.08
+                            if score < bestScore then
+                                bestScore = score
+                                best = r
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
-    F.UpdateTargetMarker()
+    MystrixHub.CallPassCache = { At = now, Char = char, Root = best }
+    return best
 end
 
-function MystrixHub.Functions.TargetDir(x, z)
-    local T = getgenv().MystrixTarget
-    if not T.Enabled or T.Goal or not T.Model then return nil end
-    local root = T.Model:FindFirstChild("Root")
-    if not (root and root.Parent) then return nil end
-    local v = root.AssemblyLinearVelocity
-    local dx = root.Position.X + v.X * 0.5 - x
-    local dz = root.Position.Z + v.Z * 0.5 - z
+function MystrixHub.Functions.CallPassFor(x, z)
+    local F = MystrixHub.Functions
+    local cfg = getgenv().MystrixCallPass
+    if not cfg.Enabled then return nil end
+    local r = F.CallPassTarget()
+    if not (r and r.Parent) then return nil end
+    local goal = F.SilentAimGoal()
+    if goal then
+        local gx, gz = goal.x - x, goal.z - z
+        if gx * gx + gz * gz <= cfg.GoalRange * cfg.GoalRange then return nil end
+    end
+    return r
+end
+
+function MystrixHub.Functions.CallPassDir(x, z)
+    local r = MystrixHub.Functions.CallPassFor(x, z)
+    if not r then return nil end
+    local v = r.AssemblyLinearVelocity
+    local dx = r.Position.X + v.X * 0.5 - x
+    local dz = r.Position.Z + v.Z * 0.5 - z
     local m = math.sqrt(dx * dx + dz * dz)
     if m < 1.5 then return nil end
     return Vector3.new(dx / m, 0, dz / m)
@@ -14181,12 +14169,8 @@ end
 
 function MystrixHub.Functions.KickAimDir(x, z, intent)
     local F = MystrixHub.Functions
-    local T = getgenv().MystrixTarget
-    if T.Enabled then
-        if T.Goal then return F.KickGoalDir(x, z) end
-        local dir = F.TargetDir(x, z)
-        if dir then return dir end
-    end
+    local dir = F.CallPassDir(x, z)
+    if dir then return dir end
     local state = getgenv().MystrixSilentAim
     if state.Enabled and state.OnlyGoalShots ~= true and (intent == "Shoot" or intent == "Lob") then
         return F.KickGoalDir(x, z)
@@ -14409,13 +14393,13 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
     local pitchY = gy - radius
     local fam = SA.Families[family]
     local cap = 125
+    local PC = getgenv().MystrixPowerCurve
+    local pMult = (PC and PC.PowerMultEnabled) and math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5) or 1.0
+    local pRatio = math.clamp((pMult - 1.0) / 1.5, 0, 1)
     if fam and fam.speed then
         local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
-        cap = top * (fam.header and 1 or 1.05) * 0.97
-    end
-    local PC = getgenv().MystrixPowerCurve
-    if PC and PC.PowerMultEnabled then
-        cap = cap * math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
+        local legalMult = (fam.header and 1 or 1.05) * (0.97 + 0.025 * pRatio)
+        cap = top * legalMult
     end
     local dxg, dzg = goal.x - from.X, goal.z - from.Z
     local flatD = math.sqrt(dxg * dxg + dzg * dzg)
@@ -14425,7 +14409,7 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
         speed = math.clamp(math.sqrt(params.gravity * math.max(flatD, 12)) * factor, 22, cap)
     end
     local minA = minAngle or (lob and 0.35 or -0.9)
-    local maxA = lob and 1.3 or ((PC and PC.PowerMultEnabled) and math.max(0.24, 0.8 / math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.2)) or 0.8)
+    local maxA = lob and 1.3 or (0.8 - 0.38 * pRatio)
     local kit = F.KeeperKit()
     local keeperNow = F.SilentAimKeeper(goal)
     local kpos = keeperNow and F.KeeperAt(goal, from, keeperNow, kit) or nil
@@ -14502,7 +14486,7 @@ vel, spin, miss, ft, blocked, c = F.ShotSolve(env, gy, from, p, speed, curve, mi
         local penalty = 1
         if blocked then penalty *= 0.1 end
         if framed then penalty *= 0.05 end
-        local score = pg * penalty * 100 + math.min(gap, 3) * 1.5 + math.min(edge, 1.5) * 2 - ft - miss * 8
+        local score = pg * penalty * 100 + math.min(gap, 3) * 1.5 + math.min(edge, 1.5) * 2 - ft * (1 + pRatio * 2.2) - miss * 8
         return {
             vel = vel,
             spin = spin,
@@ -14670,9 +14654,12 @@ function MystrixHub.Functions.ShotFallback(from, family, lob)
     local env = F.ShotEnv()
     local fam = SA.Families and SA.Families[family]
     local cap = 125
+    local PC = getgenv().MystrixPowerCurve
+    local pMult = (PC and PC.PowerMultEnabled) and math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5) or 1.0
+    local pRatio = math.clamp((pMult - 1.0) / 1.5, 0, 1)
     if fam and fam.speed then
         local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
-        cap = top * (fam.header and 1 or 1.05) * 0.97
+        cap = top * (fam.header and 1 or 1.05) * (0.97 + 0.025 * pRatio)
     end
     local PC = getgenv().MystrixPowerCurve
     if PC and PC.PowerMultEnabled then
@@ -15084,12 +15071,24 @@ function MystrixHub.Functions.InstallPickTrack()
                     if not root then return end
                     local p = root.Position
                     local dir = H.Functions.KickAimDir(p.X, p.Z, self.intent)
-                    if dir then
+                    local pc = getgenv().MystrixPowerCurve
+                    if dir or (pc and pc.PowerMultEnabled) then
                         local copy = table.clone(self)
-                        copy.aimDir = dir
-                        copy.travel = dir
-                        copy.facing = dir
-                        copy.sideStepping = false
+                        if dir then
+                            copy.aimDir = dir
+                            copy.travel = dir
+                            copy.facing = dir
+                            copy.sideStepping = false
+                        end
+                        if pc and pc.PowerMultEnabled then
+                            local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
+                            if type(copy.power) == "number" then
+                                copy.power = math.clamp(math.max(copy.power * pMult, 0.85), 0, 1)
+                            end
+                            if type(copy.charge) == "number" then
+                                copy.charge = math.clamp(math.max(copy.charge * pMult, 0.85), 0, 1)
+                            end
+                        end
                         input = copy
                     end
                 end)
@@ -15159,23 +15158,8 @@ function MystrixHub.Functions.InstallSilentAim()
                             end
                         end
                         local PC = getgenv().MystrixPowerCurve
-                        if PC then
-                            if not redirected then
-                                if PC.PowerMultEnabled and typeof(vel) == "Vector3" then
-                                    local pMult = math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
-                                    vel = Vector3.new(vel.X * pMult, vel.Y * math.sqrt(pMult), vel.Z * pMult)
-                                end
-                                if PC.CurveMultEnabled and typeof(spin) == "Vector3" then
-                                    local cMult = math.clamp(tonumber(PC.CurveMult) or 1.5, 1.0, 3.0)
-                                    spin = spin * cMult
-                                end
-                            end
-                            if (PC.PowerMultEnabled or PC.CurveMultEnabled) and typeof(from) == "Vector3" and typeof(vel) == "Vector3" then
-                                PC.LastStrikeAt = os.clock()
-                                PC.LastFrom = from
-                                PC.LastVel = vel
-                                PC.LastSpin = typeof(spin) == "Vector3" and spin or Vector3.zero
-                            end
+                        if PC and (PC.PowerMultEnabled or PC.CurveMultEnabled) then
+                            vel, spin = F.ApplyPowerCurveVel(vel, spin, family, redirected)
                         end
                         return callOrig(from, vel, spin, family, t)
                     end
@@ -16619,48 +16603,7 @@ do
         local myChar, myRoot, ctrlMgr = getLocalCharAndRoot()
         local ball = getLiveBall()
 
-        -- Sustain Multiplied Shot Velocity & Curve across Server BallEvent Checkpoint Replication!
-        local PC = getgenv().MystrixPowerCurve
-        if PC and (PC.PowerMultEnabled or PC.CurveMultEnabled) and PC.LastStrikeAt and (now - PC.LastStrikeAt) < 1.85 then
-            pcall(function()
-                local SA = getgenv().MystrixSilentAim
-                local BV = SA and SA.BallView
-                if BV and type(BV.freeSim) == "function" then
-                    local state, _, ev, cp = BV.freeSim()
-                    if cp and ev and PC.LastFrom and typeof(cp.pos) == "Vector3" and (cp.pos - PC.LastFrom).Magnitude < 14 then
-                        if PC.PowerMultEnabled and PC.LastVel then
-                            if not cp.__coreVelSustained then
-                                cp.__coreVelSustained = true
-                                cp.vel = PC.LastVel
-                            end
-                            if not ev.__coreVelSustained then
-                                ev.__coreVelSustained = true
-                                ev.vel = PC.LastVel
-                            end
-                            if state and typeof(state.vel) == "Vector3" and (now - PC.LastStrikeAt) < 0.95 then
-                                local curSpd = state.vel.Magnitude
-                                local wantSpd = PC.LastVel.Magnitude * math.max(0.72, 1 - (now - PC.LastStrikeAt) * 0.25)
-                                if curSpd > 4 and curSpd < wantSpd then
-                                    state.vel = state.vel.Unit * wantSpd
-                                end
-                            end
-                        end
-                        if PC.CurveMultEnabled and PC.LastSpin then
-                            cp.spin = PC.LastSpin
-                            ev.spin = PC.LastSpin
-                            if state then state.spin = PC.LastSpin end
-                        end
-                    end
-                end
-                if ball and ball:IsA("BasePart") and PC.PowerMultEnabled and PC.LastVel and (now - PC.LastStrikeAt) < 0.95 then
-                    local bVel = ball.AssemblyLinearVelocity
-                    local wantSpd = PC.LastVel.Magnitude * math.max(0.72, 1 - (now - PC.LastStrikeAt) * 0.25)
-                    if bVel.Magnitude > 5 and bVel.Magnitude < wantSpd and bVel:Dot(PC.LastVel) > 0 then
-                        ball.AssemblyLinearVelocity = bVel.Unit * wantSpd
-                    end
-                end
-            end)
-        end
+
 
         if myChar and myRoot then
             local myDribbleId = tonumber(myChar:GetAttribute("DribbleId")) or -999
@@ -17312,6 +17255,7 @@ do
         ConfigState.ShootPowerMult = val
         local PC = getgenv().MystrixPowerCurve
         PC.PowerMultEnabled = val
+        pcall(MystrixHub.Functions.InstallMaxPower)
         pcall(MystrixHub.Functions.InstallSilentAim)
         MystrixHub.ShotCache = {}
         MystrixHub.PreviewCache = nil
@@ -17368,6 +17312,28 @@ do
 
     createSlider(shootSec, "Shoot Distance", 10, 150, 60, 1, " st", function(val)
         getgenv().MystrixAutoShoot.Range = val
+    end)
+
+    -- LEFT COLUMN — SECTION 3: CALL PASS ASSIST
+    local callPassSec = UI.createSectionBox(MainTab, "Call Pass", "Left")
+
+    createToggle(callPassSec, "Call Pass", false, function(val)
+        local CP = getgenv().MystrixCallPass
+        if val and not MystrixHub.Functions.InstallSilentAim() then
+            CP.Enabled = false
+            return
+        end
+        CP.Enabled = val
+        MystrixHub.CallPassCache = nil
+    end)
+
+    createToggle(callPassSec, "Offside Check", true, function(val)
+        getgenv().MystrixCallPass.Offside = val
+        MystrixHub.CallPassCache = nil
+    end)
+
+    createSlider(callPassSec, "Goal Priority Range", 0, 100, 25, 1, " st", function(val)
+        getgenv().MystrixCallPass.GoalRange = val
     end)
 
     -- RIGHT COLUMN — SECTION 1: TRICKS (A-Z SORTED)
@@ -17552,7 +17518,7 @@ do
     -- RIGHT COLUMN — SECTION 1: MODIFIER
     local modSec = UI.createSectionBox(DefenceTab, "Modifier", "Right")
 
-    createToggle(modSec, "Auto-Poke", false, function(val)
+    createToggle(modSec, "Auto Poke", false, function(val)
         local AP = getgenv().MystrixAutoPoke
         AP.Enabled = val
         if val then
@@ -17562,7 +17528,7 @@ do
         end
     end)
 
-    createSlider(modSec, "Poke Range Slider", 3.0, 12.0, 6.0, 0.5, " st", function(val)
+    createSlider(modSec, "Poke Range", 3.0, 12.0, 6.0, 0.1, " st", function(val)
         getgenv().MystrixAutoPoke.Range = val
     end)
 
@@ -17597,9 +17563,7 @@ do
         ConfigState.TackleSpeedVal = val
     end)
 
-    createToggle(modSec, "Auto-Call Pass", false, function(val)
-        ConfigState.AutoCallPass = val
-    end)
+
 end
 
 --------------------------------------------------------------------------------
