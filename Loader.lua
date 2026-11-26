@@ -16,14 +16,10 @@ flow_preinit(function()
 		RewardUrl = "https://flowauth.net/reward/5aadc1854f782322ada05d461c2cb0cd",
 		SupportedGames = {
 			[9294074907] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
-			[10766620257] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
-			[9641502068] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
 			[10770730129] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
 		},
 		SupportedPlaces = {
 			[90568084448279] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
-			[74023858073178] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/BikeForEgg.lua",
-			[112731528776884] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Knife.Duels",
 			[106931373443671] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
 		},
 	}
