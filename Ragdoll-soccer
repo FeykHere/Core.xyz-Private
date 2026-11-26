@@ -10027,8 +10027,20 @@ end
 
 getgenv().MystrixSilentAim = getgenv().MystrixSilentAim or { Enabled = false, Hooked = false }
 getgenv().MystrixMaxPower = getgenv().MystrixMaxPower or { Enabled = false, Hooked = false }
+getgenv().MystrixPowerCurve = getgenv().MystrixPowerCurve or {
+    PowerMultEnabled = false,
+    PowerMult = 1.35,
+    CurveMultEnabled = false,
+    CurveMult = 1.50,
+    InstantCharge = false,
+    OrigRules = nil,
+}
+getgenv().MystrixBallMagnet = getgenv().MystrixBallMagnet or {
+    Enabled = false,
+    Radius = 10.0,
+}
 local SilentAimState = getgenv().MystrixSilentAim
-if SilentAimState.OnlyGoalShots == nil then SilentAimState.OnlyGoalShots = true end
+SilentAimState.OnlyGoalShots = true
 local MaxPowerState = getgenv().MystrixMaxPower
 
 function MystrixHub.Functions.InstallMaxPower()
@@ -10041,11 +10053,39 @@ function MystrixHub.Functions.InstallMaxPower()
     MP.Hooked = MystrixHub.Functions.HookFunction(Rules, "charge", function(callOrig)
         return function(value)
             local state = getgenv().MystrixMaxPower
-            if state and state.Enabled then return 1 end
+            local pc = getgenv().MystrixPowerCurve
+            if (state and state.Enabled) or (pc and pc.InstantCharge) then
+                return 1
+            end
             return callOrig(value)
         end
     end)
     return MP.Hooked == true
+end
+
+function MystrixHub.Functions.SetInstantKickCharge(enabled)
+    local PC = getgenv().MystrixPowerCurve
+    PC.InstantCharge = (enabled == true)
+    if enabled then
+        pcall(MystrixHub.Functions.InstallMaxPower)
+    end
+    pcall(function()
+        local Rules = require(Services.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("Kick")).Rules
+        if type(Rules) == "table" then
+            if not PC.OrigRules then
+                PC.OrigRules = {}
+                for k, v in pairs(Rules) do
+                    if type(v) == "number" and (tostring(k):lower():find("charge") or tostring(k):lower():find("hold")) then
+                        PC.OrigRules[k] = v
+                    end
+                end
+            end
+            for k, origVal in pairs(PC.OrigRules) do
+                Rules[k] = enabled and 0.01 or origVal
+            end
+        end
+    end)
+    return true
 end
 
 getgenv().MystrixReach = getgenv().MystrixReach or { Enabled = false, Add = 3 }
@@ -10793,7 +10833,10 @@ end
 
 function MystrixHub.Functions.PlanSyncCopy(plan)
     local state = getgenv().MystrixSilentAim
-    if not state.Enabled or state.PlanSync == false then return nil end
+    local pc = getgenv().MystrixPowerCurve
+    local saOn = state.Enabled and state.PlanSync ~= false
+    local pcOn = pc and (pc.PowerMultEnabled or pc.CurveMultEnabled)
+    if not (saOn or pcOn) then return nil end
     if type(plan) ~= "table"
         or plan.hold == true
         or typeof(plan.ball) ~= "Vector3"
@@ -10803,20 +10846,41 @@ function MystrixHub.Functions.PlanSyncCopy(plan)
         or typeof(plan.dir) ~= "Vector3" then
         return nil
     end
-    local ok, vel, spin = pcall(MystrixHub.Functions.SilentAimPlan, plan)
-    if not ok or not vel then return nil end
-    local copy = table.clone(plan)
-    local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
-    if m > 0.001 then
-        copy.dir = Vector3.new(vel.X / m, 0, vel.Z / m)
+    if saOn then
+        local ok, vel, spin = pcall(MystrixHub.Functions.SilentAimPlan, plan)
+        if ok and vel then
+            local copy = table.clone(plan)
+            local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+            if m > 0.001 then
+                copy.dir = Vector3.new(vel.X / m, 0, vel.Z / m)
+            end
+            if typeof(plan.vel) == "Vector3" then
+                copy.vel = vel
+            end
+            if typeof(plan.spin) == "Vector3" and spin then
+                copy.spin = spin
+            end
+            return copy
+        end
     end
-    if typeof(plan.vel) == "Vector3" then
-        copy.vel = vel
+    if pcOn then
+        local copy = table.clone(plan)
+        if pc.PowerMultEnabled then
+            local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
+            if typeof(copy.vel) == "Vector3" then
+                copy.vel = Vector3.new(copy.vel.X * pMult, copy.vel.Y * math.sqrt(pMult), copy.vel.Z * pMult)
+            end
+            if type(copy.power) == "number" then
+                copy.power = math.min(copy.power * pMult, 2.5)
+            end
+        end
+        if pc.CurveMultEnabled and typeof(copy.spin) == "Vector3" then
+            local cMult = math.clamp(tonumber(pc.CurveMult) or 1.5, 1.0, 3.0)
+            copy.spin = copy.spin * cMult
+        end
+        return copy
     end
-    if typeof(plan.spin) == "Vector3" and spin then
-        copy.spin = spin
-    end
-    return copy
+    return nil
 end
 
 function MystrixHub.Functions.MannequinSnapshot()
@@ -10999,7 +11063,8 @@ function MystrixHub.Functions.StartAutoPickup()
     MystrixHub.ConnectionController.Insert({ Disconnect = function() MystrixHub.Functions.StopAutoPickup() end })
 end
 
-getgenv().MystrixGuard = getgenv().MystrixGuard or { Enabled = false, Distance = 8, Predict = 0.35 }
+getgenv().MystrixGuard = getgenv().MystrixGuard or { Enabled = false, Distance = 8, Predict = 0, Engage = 22 }
+getgenv().MystrixGuard.Predict = 0
 getgenv().MystrixGuard.IgnoreTeammates = true
 
 function MystrixHub.Functions.GuardOwnGoal()
@@ -12656,21 +12721,21 @@ getgenv().MystrixTrickFilter = getgenv().MystrixTrickFilter or { Hooked = false 
 MystrixHub.TrickOptions = {
     "Auto",
     "Bicycle Kick",
-    "Volley",
-    "Side Volley",
+    "Croqueta",
+    "Cruyff Turn",
+    "Diving Header",
+    "Elastico",
     "Header",
     "Jump Header",
-    "Running Header",
-    "Diving Header",
-    "Lob",
-    "Ronaldo Chop",
-    "Cruyff Turn",
     "Knock-On",
-    "Elastico",
+    "Lob",
     "Rainbow Flick",
+    "Ronaldo Chop",
     "Roulette",
+    "Running Header",
+    "Side Volley",
     "Step Over",
-    "Croqueta",
+    "Volley",
 }
 
 MystrixHub.TrickCatalog = {
@@ -13641,12 +13706,12 @@ function MystrixHub.Functions.SetSilentTargets(value)
         for k, v in pairs(value) do
             local name = type(v) == "string" and v or (type(k) == "string" and v == true and k) or nil
             if name then
-                if name == "Auto" then auto = true end
+                if name == "Auto" or name == "Smart" then auto = true end
                 list[#list + 1] = name
             end
         end
     elseif type(value) == "string" then
-        if value == "Auto" then auto = true end
+        if value == "Auto" or value == "Smart" then auto = true end
         list[1] = value
     end
     if auto or #list == 0 then
@@ -14106,11 +14171,14 @@ end
 
 function MystrixHub.Functions.ApplyTackleHitbox()
     local HB = getgenv().MystrixHitbox
+    local BM = getgenv().MystrixBallMagnet
     local pickup = HB.Pickup
     if not pickup then return end
-    local add = HB.Enabled and HB.Size * 0.4 or 0
-    pickup.Table.FootReach = pickup.FootReach + add
-    pickup.Table.BodyReach = pickup.BodyReach + add
+    local tackleAdd = (HB and HB.Enabled) and (HB.Size * 0.4) or 0
+    local magnetAdd = (BM and BM.Enabled) and math.clamp((tonumber(BM.Radius) or 10) * 0.65, 1.5, 18) or 0
+    local totalAdd = math.max(tackleAdd, magnetAdd)
+    pickup.Table.FootReach = pickup.FootReach + totalAdd
+    pickup.Table.BodyReach = pickup.BodyReach + totalAdd
 end
 
 function MystrixHub.Functions.InstallTackleHitbox()
@@ -14129,14 +14197,24 @@ function MystrixHub.Functions.InstallTackleHitbox()
     local function wrapper(part)
         local base = orig and orig(part) or 0
         local cfg = getgenv().MystrixHitbox
+        local bm = getgenv().MystrixBallMagnet
         local H = getgenv().MystrixHub
-        if not (cfg.Enabled and H) then return base end
+        if not H then return base end
         local char = LocalPlayer.Character
         if not char or part.Parent ~= char or not H.HitboxParts[part.Name] then return base end
         local ball = H.Functions.GetBall()
         local possessor = ball and ball:GetAttribute("Possessor")
-        if type(possessor) ~= "number" or possessor == 0 or possessor == char:GetAttribute("DribbleId") then return base end
-        return math.max(base, cfg.Size)
+        if possessor == 0 or possessor == nil then
+            if bm and bm.Enabled then
+                return math.max(base, math.clamp((tonumber(bm.Radius) or 10) * 0.55, 1.5, 14))
+            end
+            return base
+        end
+        if type(possessor) ~= "number" or possessor == char:GetAttribute("DribbleId") then return base end
+        if cfg and cfg.Enabled then
+            return math.max(base, cfg.Size)
+        end
+        return base
     end
     Contacts.hitPad = wrapper
     HB.Hooked = true
@@ -14310,6 +14388,10 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
         local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
         cap = top * (fam.header and 1 or 1.05) * 0.97
     end
+    local PC = getgenv().MystrixPowerCurve
+    if PC and PC.PowerMultEnabled then
+        cap = cap * math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
+    end
     local dxg, dzg = goal.x - from.X, goal.z - from.Z
     local flatD = math.sqrt(dxg * dxg + dzg * dzg)
     local speed = cap
@@ -14327,8 +14409,9 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
     local oX = -goal.out
     local bx, bz, bn = F.ShotBodies(goal, lob)
     local slow = F.DeviceScale() > 3
-    local curveOn = SA.AutoCurve == true and not lob and flatD >= 8 and not (fam and fam.header) and (mode == "strike" or not slow)
-    local k = math.min(math.clamp(30 + flatD * 0.5, 40, 70) * (SA.CurveAmount or 1), 72)
+    local cMult = (PC and PC.CurveMultEnabled) and math.clamp(tonumber(PC.CurveMult) or 1.5, 1.0, 3.0) or 1.0
+    local curveOn = (SA.AutoCurve == true or (PC and PC.CurveMultEnabled)) and not lob and flatD >= 8 and not (fam and fam.header) and (mode == "strike" or not slow)
+    local k = math.min(math.clamp(30 + flatD * 0.5, 40, 70) * (SA.CurveAmount or 1) * cMult, 72 * cMult)
     local zLim, yMin, yMax = F.ShotBounds(env)
     local react = kit and math.max(kit.cfg.Reaction[1] - 0.03, 0.1) or 0.2
     local now = os.clock()
@@ -14566,6 +14649,10 @@ function MystrixHub.Functions.ShotFallback(from, family, lob)
         local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
         cap = top * (fam.header and 1 or 1.05) * 0.97
     end
+    local PC = getgenv().MystrixPowerCurve
+    if PC and PC.PowerMultEnabled then
+        cap = cap * math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
+    end
     local dx, dz = goal.x - from.X, goal.z - from.Z
     local flatD = math.sqrt(dx * dx + dz * dz)
     if flatD < 1 then return nil end
@@ -14766,7 +14853,8 @@ function MystrixHub.Functions.InstallPlanSync()
                 end
                 local H = getgenv().MystrixHub
                 local FF = H and H.Functions
-                local on = getgenv().MystrixSilentAim.Enabled
+                local pc = getgenv().MystrixPowerCurve
+                local on = getgenv().MystrixSilentAim.Enabled or (pc and (pc.PowerMultEnabled or pc.CurveMultEnabled))
                 if not (FF and on) then
                     setMethod(method)
                     return old(self, ...)
@@ -14792,7 +14880,8 @@ function MystrixHub.Functions.InstallPlanSync()
             old = hookfunction(fire, newcclosure(function(self, ...)
                 local H = getgenv().MystrixHub
                 local FF = H and H.Functions
-                if FF and getgenv().MystrixSilentAim.Enabled then
+                local pc = getgenv().MystrixPowerCurve
+                if FF and (getgenv().MystrixSilentAim.Enabled or (pc and (pc.PowerMultEnabled or pc.CurveMultEnabled))) then
                     local okc, copy = pcall(FF.PlanSyncCopy, (...))
                     if okc and copy then
                         return old(self, copy, select(2, ...))
@@ -14989,10 +15078,12 @@ function MystrixHub.Functions.InstallSilentAim()
             if type(DribbleClient[name]) == "function" then
                 local hooked = F.HookFunction(DribbleClient, name, function(callOrig)
                     return function(from, vel, spin, family, t)
+                        local redirected = false
                         if SA.Enabled and SA.Redirect and type(family) == "string" and typeof(from) == "Vector3" and typeof(vel) == "Vector3" then
                             local rok, newVel, newSpin = pcall(SA.Redirect, from, vel, spin, family)
                             if rok then
                                 if newVel then
+                                    redirected = true
                                     SA.LastVel = newVel
                                     SA.LastAt = os.clock()
                                     vel = newVel
@@ -15002,6 +15093,17 @@ function MystrixHub.Functions.InstallSilentAim()
                                 end
                             else
                                 SA.LastError = tostring(newVel)
+                            end
+                        end
+                        local PC = getgenv().MystrixPowerCurve
+                        if PC and not redirected then
+                            if PC.PowerMultEnabled and typeof(vel) == "Vector3" then
+                                local pMult = math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
+                                vel = Vector3.new(vel.X * pMult, vel.Y * math.sqrt(pMult), vel.Z * pMult)
+                            end
+                            if PC.CurveMultEnabled and typeof(spin) == "Vector3" then
+                                local cMult = math.clamp(tonumber(PC.CurveMult) or 1.5, 1.0, 3.0)
+                                spin = spin * cMult
                             end
                         end
                         return callOrig(from, vel, spin, family, t)
@@ -15228,6 +15330,7 @@ function MystrixHub.Functions.StartBallTracker()
     base.CFrame = CFrame.identity
     base.Parent = workspace
     T.Base = base
+
     local function adorn(className)
         local a = Instance.new(className)
         a.Adornee = base
@@ -15238,6 +15341,7 @@ function MystrixHub.Functions.StartBallTracker()
         a.Parent = base
         return a
     end
+
     local segs = {}
     for i = 1, COUNT do
         local s = adorn("LineHandleAdornment")
@@ -15258,10 +15362,12 @@ function MystrixHub.Functions.StartBallTracker()
     ring.Radius = 2.2
     ring.InnerRadius = 1.6
     ring.Transparency = 0.35
+
     local flat = CFrame.Angles(math.pi / 2, 0, 0)
     local applied = T.Color
     local lastSolve = 0
     local path, hidden, baseMoved = nil, true, false
+    local shownFrom = 1
 
     local function hideAll()
         path = nil
@@ -15274,8 +15380,7 @@ function MystrixHub.Functions.StartBallTracker()
         ring.Visible = false
     end
 
-    -- Strictly render ONLY the FUTURE trajectory from currentPos forward (never behind the ball!)
-    local function renderFuturePath(p, currentPos, currentVel, currentT)
+    local function draw(p)
         local pts = p.pts
         if not pts or #pts < 2 then
             hideAll()
@@ -15283,43 +15388,11 @@ function MystrixHub.Functions.StartBallTracker()
         end
         local n = math.min(#pts - 1, COUNT)
         p.n = n
-        local first = 1
-        local flatVel = currentVel and Vector3.new(currentVel.X, 0, currentVel.Z) or Vector3.zero
-        local hasDir = flatVel.Magnitude > 1.5
-        local velDir = hasDir and flatVel.Unit or Vector3.zero
-
-        while first <= n do
-            local nextPt = pts[first + 1]
-            local pastByTime = (currentT ~= nil and nextPt.t ~= nil and nextPt.t <= currentT)
-            local pastBySpace = false
-            if currentPos and hasDir then
-                local toNext = Vector3.new(nextPt.p.X - currentPos.X, 0, nextPt.p.Z - currentPos.Z)
-                if toNext:Dot(velDir) <= 0.15 then
-                    pastBySpace = true
-                end
-            end
-            if pastByTime or pastBySpace then
-                first += 1
-            else
-                break
-            end
-        end
-
-        if first > n then
-            hideAll()
-            return
-        end
-
-        for i = 1, first - 1 do
-            segs[i].Visible = false
-        end
-
-        for i = first, n do
-            local a = (i == first and currentPos) and currentPos or pts[i].p
-            local b = pts[i + 1].p
+        for i = 1, n do
+            local a, b = pts[i].p, pts[i + 1].p
             local s = segs[i]
             local len = (b - a).Magnitude
-            if len > 0.05 then
+            if len > 0.02 then
                 s.Length = len
                 s.CFrame = CFrame.lookAt(a, b)
                 s.Visible = true
@@ -15327,11 +15400,10 @@ function MystrixHub.Functions.StartBallTracker()
                 s.Visible = false
             end
         end
-
         for i = n + 1, COUNT do
             segs[i].Visible = false
         end
-
+        shownFrom = 1
         if p.landing then
             local cf = CFrame.new(p.landing) * flat
             marker.CFrame = cf
@@ -15343,6 +15415,65 @@ function MystrixHub.Functions.StartBallTracker()
             ring.Visible = false
         end
         hidden = false
+    end
+
+    -- Clips all past segments behind the ball and anchors the active leading segment at livePos (100% future-only!)
+    local function trimFuture(p, nowT, livePos, liveVel)
+        local pts = p.pts
+        if not pts or not p.n or p.n < 1 then
+            hideAll()
+            return
+        end
+        local first = 1
+        local flatVel = liveVel and Vector3.new(liveVel.X, 0, liveVel.Z) or Vector3.zero
+        local hasDir = flatVel.Magnitude > 1.5
+        local velDir = hasDir and flatVel.Unit or Vector3.zero
+
+        while first <= p.n do
+            local nextPt = pts[first + 1]
+            local pastByTime = (nowT ~= nil and nextPt.t ~= nil and nextPt.t <= nowT)
+            local pastBySpace = false
+            if livePos and hasDir then
+                local toNext = Vector3.new(nextPt.p.X - livePos.X, 0, nextPt.p.Z - livePos.Z)
+                if toNext:Dot(velDir) <= 0.08 then
+                    pastBySpace = true
+                end
+            end
+            if pastByTime or pastBySpace then
+                first += 1
+            else
+                break
+            end
+        end
+
+        if first > p.n then
+            hideAll()
+            return
+        end
+
+        for i = 1, first - 1 do
+            segs[i].Visible = false
+        end
+
+        -- Anchor first visible segment directly at livePos so zero line ever trails behind the ball
+        if livePos then
+            local nextP = pts[first + 1].p
+            local len = (nextP - livePos).Magnitude
+            if len > 0.04 then
+                segs[first].Length = len
+                segs[first].CFrame = CFrame.lookAt(livePos, nextP)
+                segs[first].Visible = true
+            else
+                segs[first].Visible = false
+            end
+        else
+            segs[first].Visible = true
+        end
+
+        for i = first + 1, p.n do
+            segs[i].Visible = true
+        end
+        shownFrom = first
     end
 
     RunService:BindToRenderStep("MystrixBallTracker", Enum.RenderPriority.Camera.Value + 40, function()
@@ -15366,27 +15497,13 @@ function MystrixHub.Functions.StartBallTracker()
         end
         local now = os.clock()
         local state, _, ev, cp = BV.freeSim()
-        if state and ev and cp and state.vel.Magnitude > 2.2 then
-            -- Construct a live forward event starting from the ball's CURRENT state so the trace is 100% future-only!
+        if state and ev and cp and state.vel.Magnitude > 2.5 then
             local key = tostring(ev.seq) .. ":" .. tostring(ev.t)
-            if not path or path.mode ~= "free" or path.key ~= key or (now - path.at) >= math.max(T.Rate or 0.25, 0.12) then
-                local liveEv = {
-                    seq = ev.seq or 0,
-                    t = state.t or 0,
-                    pos = pos,
-                    vel = state.vel,
-                    spin = state.spin or Vector3.zero,
-                    kind = ev.kind or "kick",
-                    by = ev.by or 0,
-                    pid = ev.pid or 0,
-                    n = ev.n or 0,
-                }
-                local ok, pts, landing = pcall(F.TrackerTrace, liveEv)
-                if not (ok and pts and #pts >= 2) then
-                    ok, pts, landing = pcall(F.TrackerTrace, cp)
-                end
+            if not path or path.mode ~= "free" or path.key ~= key or now - path.at > 1 then
+                local ok, pts, landing = pcall(F.TrackerTrace, cp)
                 if ok and pts and #pts >= 2 then
                     path = { mode = "free", key = key, at = now, pts = pts, landing = landing }
+                    draw(path)
                 end
             end
             if path and path.mode == "free" then
@@ -15394,69 +15511,35 @@ function MystrixHub.Functions.StartBallTracker()
                     base.CFrame = CFrame.identity
                     baseMoved = false
                 end
-                renderFuturePath(path, pos, state.vel, state.t)
+                trimFuture(path, state.t, pos, state.vel)
             else
                 hideAll()
             end
             return
         end
 
-        -- Fallback when ball has raw physics velocity (e.g. rolling / deflected) or local player is dribbling
-        local rawVel = ball.AssemblyLinearVelocity
-        local char = LocalPlayer.Character
-        local myDribbleId = char and tonumber(char:GetAttribute("DribbleId")) or -999
-        local possessor = tonumber(ball:GetAttribute("Possessor")) or 0
-        local iHaveBall = (possessor ~= 0 and possessor == myDribbleId)
-
-        if not iHaveBall and rawVel.Magnitude > 3.0 then
-            if not path or path.mode ~= "phys" or (now - (path.at or 0)) >= math.max(T.Rate or 0.25, 0.12) then
-                local physEv = {
-                    seq = 0,
-                    t = 0,
-                    pos = pos,
-                    vel = rawVel,
-                    spin = Vector3.zero,
-                    kind = "kick",
-                    by = 0,
-                    pid = 0,
-                    n = 0,
-                }
-                local ok, pts, landing = pcall(F.TrackerTrace, physEv)
-                if ok and pts and #pts >= 2 then
-                    path = { mode = "phys", at = now, pts = pts, landing = landing }
-                end
-            end
-            if path and path.mode == "phys" then
-                if baseMoved then
-                    base.CFrame = CFrame.identity
-                    baseMoved = false
-                end
-                renderFuturePath(path, pos, rawVel, 0)
-            else
-                hideAll()
-            end
-            return
-        end
-
-        if not iHaveBall then
-            hideAll()
-            return
-        end
-
+        -- Dribbling / Aiming / Rolling Future Shot Prediction Mode
         if path and path.mode ~= "solve" then
             hideAll()
         end
-        if now - lastSolve >= math.max(T.Rate, 0.15) or not path then
+        if now - lastSolve >= math.max(T.Rate or 0.25, 0.15) or not path then
             lastSolve = now
             local ok, result = pcall(F.ShotBest, pos, "Laced", false, F.Budget(0.004), nil, "warm")
-            if ok and result and result.vel
-                and (not path or (path.vel - result.vel).Magnitude > 0.5 or (path.from - pos).Magnitude > 6) then
+            local solveVel = (ok and result and result.vel) or nil
+            local solveSpin = (ok and result and result.spin) or Vector3.zero
+            if not solveVel then
+                local rawVel = ball.AssemblyLinearVelocity
+                if rawVel and rawVel.Magnitude > 3.5 then
+                    solveVel = rawVel
+                end
+            end
+            if solveVel and (not path or (path.vel - solveVel).Magnitude > 0.5 or (path.from - pos).Magnitude > 6) then
                 local evt = {
                     seq = 0,
                     t = 0,
                     pos = pos,
-                    vel = result.vel,
-                    spin = result.spin,
+                    vel = solveVel,
+                    spin = solveSpin,
                     kind = "kick",
                     by = 0,
                     pid = 0,
@@ -15464,7 +15547,8 @@ function MystrixHub.Functions.StartBallTracker()
                 }
                 local ok2, pts, landing = pcall(F.TrackerTrace, evt)
                 if ok2 and pts and #pts >= 2 then
-                    path = { mode = "solve", pts = pts, landing = landing, from = pos, vel = result.vel }
+                    path = { mode = "solve", pts = pts, landing = landing, from = pos, vel = solveVel }
+                    draw(path)
                 end
             end
         end
@@ -15474,7 +15558,6 @@ function MystrixHub.Functions.StartBallTracker()
             else
                 base.CFrame = CFrame.new(pos - path.from)
                 baseMoved = true
-                renderFuturePath(path, path.from, path.vel, 0)
             end
         else
             hideAll()
@@ -15485,6 +15568,7 @@ function MystrixHub.Functions.StartBallTracker()
     end })
     return true
 end
+
 function MystrixHub.Functions.KeeperDivesModule()
     local H = MystrixHub
     if H.KeeperDivesRef then return H.KeeperDivesRef end
@@ -15727,16 +15811,25 @@ do
     local MystrixHub = getgenv().MystrixHub
     local SilentAimState = getgenv().MystrixSilentAim
 
-    -- Initialize Silent Aim preview spoofing automatically
+    -- Initialize Silent Aim, MaxPower & Hitbox hooks on startup so multipliers & magnet work immediately
     pcall(function()
         if MystrixHub and MystrixHub.Functions then
             MystrixHub.Functions.InstallSilentAim()
             MystrixHub.Functions.InstallPreviewSpoof()
+            MystrixHub.Functions.InstallMaxPower()
+            MystrixHub.Functions.InstallTackleHitbox()
         end
     end)
 
-    ConfigState.Walkspeed = false
-    ConfigState.WalkspeedVal = 32
+    ConfigState.ShootPowerMult = false
+    ConfigState.ShootPowerMultVal = 1.35
+    ConfigState.CurveStrengthMult = false
+    ConfigState.CurveStrengthMultVal = 1.50
+    ConfigState.InstantFullCharge = false
+
+    ConfigState.BallMagnet = false
+    ConfigState.BallMagnetRadius = 10.0
+
     ConfigState.JumpPower = false
     ConfigState.JumpPowerVal = 85
 
@@ -15752,930 +15845,572 @@ do
     ConfigState.PlayerEspColor = Color3.fromRGB(80, 185, 255)
     ConfigState.Player2DBox = false
     ConfigState.GoalBoxEsp = false
-    ConfigState.GoalBoxColor = Color3.fromRGB(65, 255, 130)
+    ConfigState.GoalBoxColor = Color3.fromRGB(90, 255, 155)
     ConfigState.BallTrajectory = false
     ConfigState.BallTrajectoryColor = Color3.fromRGB(43, 255, 172)
     ConfigState.TrajectoryRefresh = 0.25
 
+    ConfigState.CustomBallTrail = false
+    ConfigState.BallTrailColor = Color3.fromRGB(43, 255, 172)
+    ConfigState.BallTrailStyle = "Solid"
+    ConfigState.BallTrailLifetime = 0.65
+    ConfigState.BallTrailWidth = 1.6
+    ConfigState.NeonBallGlow = false
+    ConfigState.NeonBallGlowColor = Color3.fromRGB(43, 255, 172)
+
     ConfigState.OverrideSkins = false
     ConfigState.UnlockAll = false
     ConfigState.ToggleAFK = false
-
     ConfigState.DataOverallToggle = false
     ConfigState.DataOverallVal = "99"
     ConfigState.DataGoalsToggle = false
     ConfigState.DataGoalsVal = "999"
     ConfigState.DataAssistsToggle = false
-    ConfigState.DataAssistsVal = "500"
+    ConfigState.DataAssistsVal = "999"
     ConfigState.DataMatchesToggle = false
-    ConfigState.DataMatchesVal = "250"
+    ConfigState.DataMatchesVal = "500"
     ConfigState.DataPotmToggle = false
-    ConfigState.DataPotmVal = "150"
+    ConfigState.DataPotmVal = "250"
     ConfigState.DataTimeToggle = false
     ConfigState.DataTimeVal = "100h"
     ConfigState.DataCardColorToggle = false
     ConfigState.DataCardColorMode = "Diamond"
 
-    State.RS = {
-        Remotes = {},
-        Modules = {},
+    local CollectionService = game:GetService("CollectionService")
+
+    local RS = {
         GoalEast = {
-            Center = Vector3.new(-217.901, 7.648, 25.308),
-            LineX = -216.20,
-            Lo = Vector3.new(-224.2, 0.25, 4.93),
-            Hi = Vector3.new(-216.2, 14.84, 45.68),
-            ZMin = 5.4,
-            ZMax = 45.2,
-            YMin = 1.6,
-            YMax = 13.8,
+            Center = Vector3.new(205.7, 25.0, -34.0),
+            Lo = Vector3.new(204.2, 19.64, -49.7),
+            Hi = Vector3.new(212.5, 31.34, -18.3),
+            Normal = Vector3.new(-1, 0, 0),
         },
         GoalWest = {
-            Center = Vector3.new(187.613, 7.648, 25.308),
-            LineX = 185.90,
-            Lo = Vector3.new(185.9, 0.25, 4.93),
-            Hi = Vector3.new(193.9, 14.84, 45.68),
-            ZMin = 5.4,
-            ZMax = 45.2,
-            YMin = 1.6,
-            YMax = 13.8,
+            Center = Vector3.new(-214.3, 25.0, -34.0),
+            Lo = Vector3.new(-221.1, 19.64, -49.7),
+            Hi = Vector3.new(-212.8, 31.34, -18.3),
+            Normal = Vector3.new(1, 0, 0),
         },
-        lastJumpAt = 0,
+        FieldY = 19.65,
+        netModule = nil,
+        remoteCache = {},
+        scriptableBindings = {},
+        ballHighlight = nil,
+        ballBillboard = nil,
+        ballTitleLabel = nil,
+        ballTrail = nil,
+        ballTrailAtt0 = nil,
+        ballTrailAtt1 = nil,
+        ballGlowHighlight = nil,
+        ballGlowLight = nil,
+        playerEspPool = {},
+        goalBoxLines = { East = {}, West = {} },
+        lastStepClock = 0,
+        lastRenderClock = 0,
         lastTackleAt = 0,
         lastPassCallAt = 0,
         lastMiscSyncAt = 0,
-        lastStepClock = 0,
-        lastRenderClock = 0,
-        lastBallPos = nil,
-        lastBallTime = 0,
-        computedBallVel = Vector3.zero,
-        liveBallPos = Vector3.zero,
-        liveBallVel = Vector3.zero,
-        liveBallPossessor = 0,
-        trajLines = {},
-        trajLandingDot = nil,
-        goalBoxLines = { East = {}, West = {} },
-        ballHighlight = nil,
-        ballBoxLines = {},
-        ballLabel = nil,
-        playerEspPool = {},
-        lockerHookedButtons = setmetatable({}, { __mode = "k" }),
-        lockerUnlockedFrames = setmetatable({}, { __mode = "k" }),
-        statLabelHooks = setmetatable({}, { __mode = "k" }),
-        origStatsCache = {},
-        equippedCosmetics = {
-            Hair = nil,
-            HairName = nil,
-            HairColor = nil,
-            Hat = nil,
-            HatName = nil,
-            HatColor = nil,
-            Face = nil,
-            FaceName = nil,
-            FaceColor = nil,
-            BootPattern = nil,
-            PatternName = nil,
-            BootColor = nil,
-            Emote = nil,
+        lastAfkFireAt = 0,
+        idleConn = nil,
+        selectedSkinSnapshot = {
+            FaceDecalTexture = nil,
+            HeadColor = nil,
+            HairTemplate = nil,
+            HatTemplate = nil,
+            ShoeLeftTemplate = nil,
+            ShoeRightTemplate = nil,
+            GoalEffectName = nil,
         },
+        lastCapturedDrawnModel = nil,
+        hookedButtons = setmetatable({}, { __mode = "k" }),
+        hookedCatalogs = setmetatable({}, { __mode = "k" }),
+        namecallHooked = false,
+        tuningSlideRef = nil,
+        origSlideSpeed = nil,
     }
+    State.RS = RS
 
-    local RS = State.RS
+    pcall(function()
+        local shared = ReplicatedStorage:FindFirstChild("Shared")
+        local netMod = shared and shared:FindFirstChild("Net")
+        if netMod and netMod:IsA("ModuleScript") then
+            RS.netModule = require(netMod)
+        end
+    end)
 
     local function getRemote(name)
-        if RS.Remotes[name] and RS.Remotes[name].Parent then
-            return RS.Remotes[name]
+        if RS.remoteCache[name] and RS.remoteCache[name].Parent then
+            return RS.remoteCache[name]
         end
-        pcall(function()
-            local rep = game:GetService("ReplicatedStorage")
-            local shared = rep and rep:FindFirstChild("Shared")
-            local net = shared and shared:FindFirstChild("Net")
-            if net then
-                local r = net:FindFirstChild(name)
-                if r then
-                    RS.Remotes[name] = r
+        local cleanName = name:gsub("^RE/", ""):gsub("^RF/", "")
+        if RS.netModule then
+            local ok, rem = pcall(function()
+                if name:sub(1, 3) == "RF/" and RS.netModule.RemoteFunction then
+                    return RS.netModule:RemoteFunction(cleanName)
+                elseif RS.netModule.RemoteEvent then
+                    return RS.netModule:RemoteEvent(cleanName)
+                end
+                return nil
+            end)
+            if ok and rem then
+                RS.remoteCache[name] = rem
+                return rem
+            end
+        end
+        for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
+            if (d:IsA("RemoteEvent") or d:IsA("RemoteFunction")) and (d.Name == name or d.Name == cleanName) then
+                RS.remoteCache[name] = d
+                return d
+            end
+        end
+        return nil
+    end
+
+    -- Attaches a true Enum.InputBindingType.Scriptable InputBinding to an InputAction in LocalPlayer.PlayerScripts
+    local function fireScriptableAction(contextHint, actionHint, holdDuration)
+        local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+        if not scripts then return false end
+        local key = tostring(contextHint or "") .. ":" .. tostring(actionHint or "")
+        local entry = RS.scriptableBindings[key]
+        local action = entry and entry.Action
+        if not (action and action.Parent) then
+            action = nil
+            if contextHint then
+                local ctx = scripts:FindFirstChild(contextHint)
+                if ctx then
+                    local cand = actionHint and ctx:FindFirstChild(actionHint) or ctx:FindFirstChildOfClass("InputAction")
+                    if cand and cand:IsA("InputAction") then
+                        action = cand
+                    end
                 end
             end
-        end)
-        return RS.Remotes[name]
-    end
-
-    local function triggerInputAction(contextName, actionName, stateVal)
-        pcall(function()
-            local ps = LocalPlayer:FindFirstChild("PlayerScripts")
-            local ctx = ps and ps:FindFirstChild(contextName)
-            local act = ctx and ctx:FindFirstChild(actionName)
-            if not act then return end
-            local val = (stateVal ~= nil) and stateVal or true
-            pcall(function()
-                act:Fire(val)
-            end)
-            local fs = Env.firesignal or (type(firesignal) == "function" and firesignal)
-            if fs then
-                if val == true and act.Pressed then
-                    pcall(function() fs(act.Pressed) end)
-                elseif val == false and act.Released then
-                    pcall(function() fs(act.Released) end)
-                end
-                if act.StateChanged then
-                    pcall(function() fs(act.StateChanged, val) end)
+            if not action and actionHint then
+                local hintLower = actionHint:lower()
+                for _, desc in ipairs(scripts:GetDescendants()) do
+                    if desc:IsA("InputAction") then
+                        local n = desc.Name:lower()
+                        local pn = (desc.Parent and desc.Parent.Name:lower()) or ""
+                        if n == hintLower or n:find(hintLower, 1, true) or pn:find(hintLower, 1, true) then
+                            action = desc
+                            break
+                        end
+                    end
                 end
             end
-        end)
-    end
-
-    local function fireTouchPair(partA, partB)
-        if not partA or not partB then return end
-        local fti = Env.firetouchinterest or (type(firetouchinterest) == "function" and firetouchinterest)
-        if fti then
-            pcall(function()
-                fti(partA, partB, 0)
-                fti(partA, partB, 1)
-            end)
         end
+        if not action then return false end
+        local binding = entry and entry.Binding
+        if not (binding and binding.Parent == action) then
+            if binding then pcall(function() binding:Destroy() end) end
+            binding = Instance.new("InputBinding")
+            binding.Name = "CoreXYZ_" .. action.Name
+            binding.Type = Enum.InputBindingType.Scriptable
+            binding.Parent = action
+            RS.scriptableBindings[key] = { Action = action, Binding = binding }
+        end
+        local ctx = action.Parent
+        if ctx and ctx:IsA("InputContext") and not ctx.Enabled then
+            ctx.Enabled = true
+        end
+        pcall(function() binding:Fire(true) end)
+        task.delay(holdDuration or 0.08, function()
+            pcall(function() binding:Fire(false) end)
+        end)
+        return true
     end
 
-    local function getLocalMannequin()
+    local function getLiveBall()
+        if MystrixHub and MystrixHub.Functions and MystrixHub.Functions.GetBall then
+            local b = MystrixHub.Functions.GetBall()
+            if b and b.Parent then return b end
+        end
+        local ok, tagged = pcall(function()
+            return CollectionService:GetTagged("Ball")
+        end)
+        if ok and type(tagged) == "table" and #tagged > 0 then
+            for i = 1, #tagged do
+                local b = tagged[i]
+                if b and b:IsA("BasePart") and b.Parent and b.Name ~= "BallShadow" then
+                    return b
+                end
+            end
+        end
+        local b = workspace:FindFirstChild("Ball")
+        if b and b:IsA("BasePart") then return b end
+        return nil
+    end
+
+    local function getLocalCharAndRoot()
         local char = LocalPlayer.Character
-        if char and char.Parent and (char:GetAttribute("RigType") == "Mannequin" or char:FindFirstChild("Root") or char:FindFirstChild("Pelvis")) then
-            return char
-        end
-        local byName = workspace:FindFirstChild(LocalPlayer.Name)
-        if byName and byName:IsA("Model") then
-            return byName
+        if not char or not char.Parent then return nil, nil, nil end
+        local root = char:FindFirstChild("Root") or char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+        local ctrlMgr = char:FindFirstChildOfClass("ControllerManager")
+        return char, root, ctrlMgr
+    end
+
+    local function getDrawnModel(char)
+        if not char then return nil end
+        local drawn = char:FindFirstChild("(drawn)")
+        if drawn and drawn:IsA("Model") then return drawn end
+        for _, child in ipairs(char:GetChildren()) do
+            if child:IsA("Model") and (child.Name:find("drawn") or child:FindFirstChild("Head")) then
+                return child
+            end
         end
         return char
     end
 
-    local function getDrawnModel(mannequinModel)
-        if not mannequinModel then return nil end
-        return workspace:FindFirstChild(mannequinModel.Name .. " (drawn)")
-    end
-
-    local function getMannequinRoot(char)
-        if not char then return nil end
-        return char:FindFirstChild("Root")
-            or char:FindFirstChild("Pelvis")
-            or char:FindFirstChild("Collider")
-            or char:FindFirstChild("Chest")
-            or char:FindFirstChild("HumanoidRootPart")
-            or char.PrimaryPart
-    end
-
-    local function getBall()
-        if MystrixHub and MystrixHub.Functions and MystrixHub.Functions.GetBall then
-            local b = MystrixHub.Functions.GetBall()
-            if b then return b end
+    -- Allocate 3D Goal Box ESP wireframe lines (12 edges per goal)
+    for _, side in ipairs({ "East", "West" }) do
+        for i = 1, 12 do
+            local line = Instance.new("Frame")
+            line.Name = "GoalBox_" .. side .. "_" .. i
+            line.AnchorPoint = Vector2.new(0.5, 0.5)
+            line.BorderSizePixel = 0
+            line.BackgroundColor3 = ConfigState.GoalBoxColor
+            line.Visible = false
+            line.ZIndex = 4
+            line.Parent = UI.OverlayContainer
+            RS.goalBoxLines[side][i] = line
         end
-        return workspace:FindFirstChild("Ball")
     end
 
-    local function getBallView()
-        return workspace:FindFirstChild("BallView") or getBall()
-    end
-
-    local function updateLiveBallState(dt)
-        local ball = getBall()
-        local ballView = getBallView()
-        if not ball and not ballView then
-            RS.liveBallVel = Vector3.zero
-            RS.liveBallPossessor = 0
-            return nil, nil, Vector3.zero, 0
-        end
-
-        local now = os.clock()
-        local curPos = (ballView and ballView:IsA("BasePart") and ballView.Position)
-            or (ball and ball:IsA("BasePart") and ball.Position)
-            or Vector3.zero
-        RS.liveBallPos = curPos
-
-        if RS.lastBallPos and (now - RS.lastBallTime) > 0.002 then
-            local el = math.clamp(now - RS.lastBallTime, 0.004, 0.25)
-            local rawDeltaVel = (curPos - RS.lastBallPos) / el
-            if rawDeltaVel.Magnitude < 600 then
-                RS.computedBallVel = RS.computedBallVel:Lerp(rawDeltaVel, 0.45)
-            else
-                RS.computedBallVel = Vector3.zero
+    --==========================================================================
+    -- UPGRADED COSMETICS (OVERRIDE SKINS & UNLOCK ALL) + AFK REMOTE HOOK
+    --==========================================================================
+    local function cloneTemplateClean(inst)
+        if not inst then return nil end
+        local ok, c = pcall(function() return inst:Clone() end)
+        if not ok or not c then return nil end
+        for _, d in ipairs(c:GetDescendants()) do
+            if d:IsA("BasePart") then
+                d.Anchored = false
+                d.CanCollide = false
+                d.CanTouch = false
+                d.CanQuery = false
+                d.Massless = true
             end
         end
-        RS.lastBallPos = curPos
-        RS.lastBallTime = now
-
-        local possessorId = (ball and tonumber(ball:GetAttribute("Possessor"))) or 0
-        local physVel = (ball and ball:IsA("BasePart") and ball.AssemblyLinearVelocity) or Vector3.zero
-        local bestVel = (RS.computedBallVel.Magnitude > physVel.Magnitude) and RS.computedBallVel or physVel
-
-        RS.liveBallVel = bestVel
-        RS.liveBallPossessor = possessorId
-        return ball, ballView, bestVel, possessorId
+        if c:IsA("BasePart") then
+            c.Anchored = false
+            c.CanCollide = false
+            c.CanTouch = false
+            c.CanQuery = false
+            c.Massless = true
+        end
+        return c
     end
 
-    local function getMyTeam(myChar)
-        local t = myChar and myChar:GetAttribute("Team")
-        if type(t) == "string" and t ~= "" then
-            return t
-        end
-        if LocalPlayer.Team and LocalPlayer.Team.Name ~= "" then
-            return LocalPlayer.Team.Name
-        end
-        return "Blue"
-    end
+    local function attachCosmeticPartToLimb(cosmeticClone, targetLimb, weldName, offsetCF)
+        if not cosmeticClone or not targetLimb or not targetLimb:IsA("BasePart") then return end
+        local primary = cosmeticClone:IsA("BasePart") and cosmeticClone
+            or (cosmeticClone:IsA("Model") and (cosmeticClone.PrimaryPart or cosmeticClone:FindFirstChildWhichIsA("BasePart", true)))
+            or cosmeticClone:FindFirstChildWhichIsA("BasePart", true)
+        if not primary then return end
 
-    local function refreshLiveGoalBounds()
+        for _, w in ipairs(cosmeticClone:GetDescendants()) do
+            if (w:IsA("Weld") or w:IsA("Motor6D") or w:IsA("WeldConstraint")) and (w.Part0 == targetLimb or w.Part1 == targetLimb or not w.Part0 or not w.Part1) then
+                pcall(function() w:Destroy() end)
+            end
+        end
+
+        cosmeticClone.Parent = targetLimb
         pcall(function()
-            local eastFrame = workspace:FindFirstChild("Goal_East_FrameLive") or workspace:FindFirstChild("Goal_East_Frame")
-            if eastFrame and eastFrame:IsA("BasePart") then
-                local p = eastFrame.Position
-                local s = eastFrame.Size
-                RS.GoalEast.Center = p
-                RS.GoalEast.LineX = p.X + s.X * 0.48
-                RS.GoalEast.Lo = p - (s * 0.5)
-                RS.GoalEast.Hi = p + (s * 0.5)
-            end
-            local westFrame = workspace:FindFirstChild("Goal_West_FrameLive") or workspace:FindFirstChild("Goal_West_Frame")
-            if westFrame and westFrame:IsA("BasePart") then
-                local p = westFrame.Position
-                local s = westFrame.Size
-                RS.GoalWest.Center = p
-                RS.GoalWest.LineX = p.X - s.X * 0.48
-                RS.GoalWest.Lo = p - (s * 0.5)
-                RS.GoalWest.Hi = p + (s * 0.5)
+            if cosmeticClone:IsA("Model") then
+                cosmeticClone:PivotTo(targetLimb.CFrame * (offsetCF or CFrame.new()))
+            else
+                primary.CFrame = targetLimb.CFrame * (offsetCF or CFrame.new())
             end
         end)
-    end
-    refreshLiveGoalBounds()
 
-    -- Pre-allocate 2D Overlay Lines for Goal Box ESP, Ball ESP, and Mannequin Player ESP
-    do
-        for _, side in ipairs({ "East", "West" }) do
-            for i = 1, 12 do
-                local l = Instance.new("Frame")
-                l.Name = "GoalBox_" .. side .. "_" .. i
-                l.AnchorPoint = Vector2.new(0.5, 0.5)
-                l.BackgroundColor3 = ConfigState.GoalBoxColor
-                l.BorderSizePixel = 0
-                l.Visible = false
-                l.ZIndex = 5
-                l.Parent = UI.OverlayContainer
-                table.insert(RS.goalBoxLines[side], l)
-            end
-        end
-
-        for i = 1, 4 do
-            local l = Instance.new("Frame")
-            l.Name = "BallBox_" .. i
-            l.AnchorPoint = Vector2.new(0.5, 0.5)
-            l.BackgroundColor3 = ConfigState.BallEspColor
-            l.BorderSizePixel = 0
-            l.Visible = false
-            l.ZIndex = 6
-            l.Parent = UI.OverlayContainer
-            table.insert(RS.ballBoxLines, l)
-        end
-
-        local bLbl = Instance.new("TextLabel")
-        bLbl.Name = "BallEspLabel"
-        bLbl.AnchorPoint = Vector2.new(0.5, 1)
-        bLbl.Size = UDim2.fromOffset(180, 16)
-        bLbl.BackgroundTransparency = 1
-        bLbl.Font = Enum.Font.Code
-        bLbl.Text = "BALL"
-        bLbl.TextColor3 = ConfigState.BallEspColor
-        bLbl.TextStrokeTransparency = 0.2
-        bLbl.TextSize = 11
-        bLbl.Visible = false
-        bLbl.ZIndex = 7
-        bLbl.Parent = UI.OverlayContainer
-        RS.ballLabel = bLbl
-    end
-
-    ----------------------------------------------------------------------------
-    -- UPGRADED COSMETICS ENGINE: UNLOCK ALL & OVERRIDE SKINS
-    ----------------------------------------------------------------------------
-    local function toHexColor(c3)
-        if typeof(c3) ~= "Color3" then return "F2F2F2" end
-        local r = math.clamp(math.floor(c3.R * 255 + 0.5), 0, 255)
-        local g = math.clamp(math.floor(c3.G * 255 + 0.5), 0, 255)
-        local b = math.clamp(math.floor(c3.B * 255 + 0.5), 0, 255)
-        return string.format("%02X%02X%02X", r, g, b)
-    end
-
-    local function applyCosmeticMeshToMannequin(mannequinModel, templateMesh, slotName, isDrawnModel)
-        if not mannequinModel or not templateMesh then return end
-        local head = mannequinModel:FindFirstChild("Head")
-        local leftFoot = mannequinModel:FindFirstChild("LeftFoot")
-        local rightFoot = mannequinModel:FindFirstChild("RightFoot")
-
-        for _, child in ipairs(mannequinModel:GetChildren()) do
-            if child:IsA("BasePart") then
-                local childSlot = child:GetAttribute("Slot") or child:GetAttribute("LockerWorn") or child:GetAttribute("CoreXYZ_Cosmetic")
-                if childSlot == slotName
-                    or (slotName == "Hair" and (child.Name == "LockerHair" or child.Name == "CoreXYZ_Hair"))
-                    or (slotName == "Hat" and (child.Name == "LockerHat" or child.Name == "CoreXYZ_Hat"))
-                    or (slotName == "Boots" and (child.Name == "LockerBootLeft" or child.Name == "LockerBootRight" or child.Name == "CoreXYZ_BootLeft" or child.Name == "CoreXYZ_BootRight")) then
-                    child:Destroy()
-                end
-            end
-        end
-
-        if (slotName == "Hair" or slotName == "Hat") and head then
-            local clone = templateMesh:Clone()
-            clone.Name = (slotName == "Hair") and "LockerHair" or "LockerHat"
-            clone:SetAttribute("Slot", slotName)
-            clone:SetAttribute("LockerWorn", slotName)
-            clone:SetAttribute("CoreXYZ_Cosmetic", slotName)
-            clone.CanCollide = false
-            clone.CanQuery = false
-            clone.CanTouch = false
-            clone.Massless = true
-            clone.Transparency = 0
-
-            if slotName == "Hair" and typeof(RS.equippedCosmetics.HairColor) == "Color3" then
-                clone.Color = RS.equippedCosmetics.HairColor
-            elseif slotName == "Hat" and typeof(RS.equippedCosmetics.HatColor) == "Color3" then
-                clone.Color = RS.equippedCosmetics.HatColor
-            end
-
-            for _, w in ipairs(clone:GetChildren()) do
-                if w:IsA("WeldConstraint") or w:IsA("Weld") or w:IsA("Motor6D") then
-                    w:Destroy()
-                end
-            end
-
-            local attName = (slotName == "Hair") and "HairAttachment" or "HatAttachment"
-            local headAtt = head:FindFirstChild(attName)
-            local itemAtt = clone:FindFirstChild(attName)
-            local offsetCF = clone:GetAttribute("CoreXYZ_HeadOffset")
-            if typeof(offsetCF) ~= "CFrame" then
-                offsetCF = CFrame.new(0, 0.35, 0)
-                if headAtt and itemAtt and headAtt:IsA("Attachment") and itemAtt:IsA("Attachment") then
-                    offsetCF = headAtt.CFrame * itemAtt.CFrame:Inverse()
-                end
-            end
-            clone:SetAttribute("CoreXYZ_HeadOffset", offsetCF)
-            clone.CFrame = head.CFrame * offsetCF
-
-            if isDrawnModel then
-                clone.Anchored = true
-            else
-                clone.Anchored = false
-                local wc = Instance.new("WeldConstraint")
-                wc.Part0 = head
-                wc.Part1 = clone
-                wc.Parent = clone
-            end
-            clone.Parent = mannequinModel
-        elseif slotName == "Face" and head then
-            local srcSa = templateMesh:FindFirstChildOfClass("SurfaceAppearance")
-            if srcSa then
-                local oldSa = head:FindFirstChildOfClass("SurfaceAppearance")
-                if oldSa then oldSa:Destroy() end
-                local newSa = srcSa:Clone()
-                newSa.Parent = head
-                head:SetAttribute("LockerExpression", newSa.Name)
-            end
-            if typeof(RS.equippedCosmetics.FaceColor) == "Color3" then
-                head.Color = RS.equippedCosmetics.FaceColor
-            end
-        elseif slotName == "Boots" then
-            local srcSa = templateMesh:FindFirstChildOfClass("SurfaceAppearance")
-            local bootOffsetVec = templateMesh:GetAttribute("Offset")
-            if typeof(bootOffsetVec) ~= "Vector3" then
-                bootOffsetVec = Vector3.new(0, -0.025, 0.036)
-            end
-            for idx, foot in ipairs({ leftFoot, rightFoot }) do
-                if foot then
-                    if srcSa then
-                        local oldSa = foot:FindFirstChildOfClass("SurfaceAppearance")
-                        if oldSa then oldSa:Destroy() end
-                        local newSa = srcSa:Clone()
-                        newSa.Parent = foot
-                    end
-                    local bClone = templateMesh:Clone()
-                    bClone.Name = (idx == 1) and "LockerBootLeft" or "LockerBootRight"
-                    bClone:SetAttribute("LockerWorn", "Boots")
-                    bClone:SetAttribute("CoreXYZ_Cosmetic", "Boots")
-                    bClone:SetAttribute("CoreXYZ_FootTarget", (idx == 1) and "LeftFoot" or "RightFoot")
-                    bClone:SetAttribute("Offset", bootOffsetVec)
-                    bClone.CanCollide = false
-                    bClone.CanQuery = false
-                    bClone.CanTouch = false
-                    bClone.Massless = true
-                    bClone.Transparency = 0
-                    if typeof(RS.equippedCosmetics.BootColor) == "Color3" then
-                        bClone.Color = RS.equippedCosmetics.BootColor
-                        foot.Color = RS.equippedCosmetics.BootColor
-                    end
-                    for _, w in ipairs(bClone:GetChildren()) do
-                        if w:IsA("WeldConstraint") or w:IsA("Weld") or w:IsA("Motor6D") then
-                            w:Destroy()
-                        end
-                    end
-                    bClone.CFrame = foot.CFrame * CFrame.new(bootOffsetVec)
-                    if isDrawnModel then
-                        bClone.Anchored = true
-                    else
-                        bClone.Anchored = false
-                        local wc = Instance.new("WeldConstraint")
-                        wc.Part0 = foot
-                        wc.Part1 = bClone
-                        wc.Parent = bClone
-                    end
-                    bClone.Parent = mannequinModel
-                end
-            end
-        end
+        local weld = Instance.new("Weld")
+        weld.Name = weldName or "CoreCosmeticWeld"
+        weld.Part0 = targetLimb
+        weld.Part1 = primary
+        weld.C0 = offsetCF or CFrame.new()
+        weld.C1 = CFrame.new()
+        weld.Parent = primary
     end
 
     local function applyEquippedCosmeticsToCharacter()
         if not ConfigState.OverrideSkins then return end
-        local myChar = getLocalMannequin()
-        if not myChar then return end
-        local drawnChar = getDrawnModel(myChar)
+        local char = LocalPlayer.Character
+        if not char then return end
+        local drawn = getDrawnModel(char)
+        if not drawn then return end
 
-        for _, targetModel in ipairs({ myChar, drawnChar }) do
-            if targetModel then
-                local isDrawn = (targetModel == drawnChar)
-                if RS.equippedCosmetics.Hair then
-                    applyCosmeticMeshToMannequin(targetModel, RS.equippedCosmetics.Hair, "Hair", isDrawn)
-                end
-                if RS.equippedCosmetics.Hat then
-                    applyCosmeticMeshToMannequin(targetModel, RS.equippedCosmetics.Hat, "Hat", isDrawn)
-                end
-                if RS.equippedCosmetics.Face then
-                    applyCosmeticMeshToMannequin(targetModel, RS.equippedCosmetics.Face, "Face", isDrawn)
-                end
-                if RS.equippedCosmetics.BootPattern then
-                    applyCosmeticMeshToMannequin(targetModel, RS.equippedCosmetics.BootPattern, "Boots", isDrawn)
-                end
-                if typeof(RS.equippedCosmetics.FaceColor) == "Color3" then
-                    local h = targetModel:FindFirstChild("Head")
-                    if h and h:IsA("BasePart") then h.Color = RS.equippedCosmetics.FaceColor end
-                    for _, limbName in ipairs({ "Chest", "Pelvis", "LeftArm", "RightArm", "LeftForearm", "RightForearm", "LeftHand", "RightHand", "LeftThigh", "RightThigh", "LeftShin", "RightShin" }) do
-                        local limb = targetModel:FindFirstChild(limbName)
-                        if limb and limb:IsA("BasePart") and limb:GetAttribute("SkinTone") then
-                            limb.Color = RS.equippedCosmetics.FaceColor
-                        end
+        local snap = RS.selectedSkinSnapshot
+        local head = drawn:FindFirstChild("Head", true)
+        if head and head:IsA("BasePart") then
+            if snap.HeadColor then
+                pcall(function() head.Color = snap.HeadColor end)
+                for _, limb in ipairs(drawn:GetDescendants()) do
+                    if limb:IsA("BasePart") and (limb.Name == "Head" or limb.Name:find("Arm") or limb.Name:find("Hand") or limb.Name == "Torso" or limb.Name == "Chest") then
+                        pcall(function() limb.Color = snap.HeadColor end)
                     end
                 end
-                if typeof(RS.equippedCosmetics.BootColor) == "Color3" then
-                    for _, fName in ipairs({ "LeftFoot", "RightFoot", "LockerBootLeft", "LockerBootRight" }) do
-                        local fp = targetModel:FindFirstChild(fName)
-                        if fp and fp:IsA("BasePart") then fp.Color = RS.equippedCosmetics.BootColor end
-                    end
+            end
+            if snap.FaceDecalTexture then
+                local faceDecal = head:FindFirstChild("Face") or head:FindFirstChildOfClass("Decal")
+                if not faceDecal then
+                    faceDecal = Instance.new("Decal")
+                    faceDecal.Name = "Face"
+                    faceDecal.Face = Enum.NormalId.Front
+                    faceDecal.Parent = head
                 end
+                faceDecal.Texture = snap.FaceDecalTexture
+            end
+            if snap.HairTemplate then
+                local oldHair = head:FindFirstChild("LockerHair") or drawn:FindFirstChild("LockerHair")
+                if oldHair then pcall(function() oldHair:Destroy() end) end
+                local newHair = cloneTemplateClean(snap.HairTemplate)
+                if newHair then
+                    newHair.Name = "LockerHair"
+                    attachCosmeticPartToLimb(newHair, head, "HairWeld", CFrame.new(0, 0.2, 0))
+                end
+            end
+            if snap.HatTemplate then
+                local oldHat = head:FindFirstChild("LockerHat") or drawn:FindFirstChild("LockerHat")
+                if oldHat then pcall(function() oldHat:Destroy() end) end
+                local newHat = cloneTemplateClean(snap.HatTemplate)
+                if newHat then
+                    newHat.Name = "LockerHat"
+                    attachCosmeticPartToLimb(newHat, head, "HatWeld", CFrame.new(0, 0.35, 0))
+                end
+            end
+        end
+
+        local leftFoot = drawn:FindFirstChild("LeftFoot", true)
+        local rightFoot = drawn:FindFirstChild("RightFoot", true)
+        if snap.ShoeLeftTemplate and leftFoot and leftFoot:IsA("BasePart") then
+            for _, child in ipairs(leftFoot:GetChildren()) do
+                if child.Name == "CoreShoeOverride" or child:IsA("MeshPart") or child:IsA("Model") then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+            local sL = cloneTemplateClean(snap.ShoeLeftTemplate)
+            if sL then
+                sL.Name = "CoreShoeOverride"
+                attachCosmeticPartToLimb(sL, leftFoot, "ShoeWeldL", CFrame.new())
+            end
+        end
+        if snap.ShoeRightTemplate and rightFoot and rightFoot:IsA("BasePart") then
+            for _, child in ipairs(rightFoot:GetChildren()) do
+                if child.Name == "CoreShoeOverride" or child:IsA("MeshPart") or child:IsA("Model") then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+            local sR = cloneTemplateClean(snap.ShoeRightTemplate)
+            if sR then
+                sR.Name = "CoreShoeOverride"
+                attachCosmeticPartToLimb(sR, rightFoot, "ShoeWeldR", CFrame.new())
             end
         end
     end
 
-    -- Snapshot whatever cosmetics are currently worn by the Locker's 3D Viewer Mannequin
-    local function snapshotFromViewerMannequin(viewerMannequin, categoryFilter)
-        if not viewerMannequin then return false end
-        local changed = false
-        local vHead = viewerMannequin:FindFirstChild("Head")
+    local function captureFromViewerMannequin(lockerGui)
+        if not lockerGui then return end
+        local viewer = lockerGui:FindFirstChild("Viewer", true)
+        local mannequin = (viewer and viewer:FindFirstChild("Mannequin", true)) or lockerGui:FindFirstChild("Mannequin", true)
+        if not mannequin then return end
 
-        if not categoryFilter or categoryFilter == "Hair" then
-            local vHair = viewerMannequin:FindFirstChild("LockerHair", true)
-            if vHair and vHair:IsA("BasePart") then
-                local clone = vHair:Clone()
-                if vHead and vHead:IsA("BasePart") then
-                    clone:SetAttribute("CoreXYZ_HeadOffset", vHead.CFrame:Inverse() * vHair.CFrame)
-                end
-                RS.equippedCosmetics.Hair = clone
-                RS.equippedCosmetics.HairColor = vHair.Color
-                changed = true
+        local head = mannequin:FindFirstChild("Head", true)
+        if head and head:IsA("BasePart") then
+            RS.selectedSkinSnapshot.HeadColor = head.Color
+            local face = head:FindFirstChild("Face") or head:FindFirstChildOfClass("Decal")
+            if face and face.Texture and face.Texture ~= "" then
+                RS.selectedSkinSnapshot.FaceDecalTexture = face.Texture
             end
         end
-
-        if not categoryFilter or categoryFilter == "Hat" then
-            local vHat = viewerMannequin:FindFirstChild("LockerHat", true)
-            if vHat and vHat:IsA("BasePart") then
-                local clone = vHat:Clone()
-                if vHead and vHead:IsA("BasePart") then
-                    clone:SetAttribute("CoreXYZ_HeadOffset", vHead.CFrame:Inverse() * vHat.CFrame)
-                end
-                RS.equippedCosmetics.Hat = clone
-                RS.equippedCosmetics.HatColor = vHat.Color
-                changed = true
+        local hair = mannequin:FindFirstChild("LockerHair", true)
+        if hair then
+            RS.selectedSkinSnapshot.HairTemplate = cloneTemplateClean(hair)
+        end
+        local hat = mannequin:FindFirstChild("LockerHat", true)
+        if hat then
+            RS.selectedSkinSnapshot.HatTemplate = cloneTemplateClean(hat)
+        end
+        local lFoot = mannequin:FindFirstChild("LeftFoot", true)
+        if lFoot then
+            local shoeL = lFoot:FindFirstChildWhichIsA("MeshPart", true) or lFoot:FindFirstChildWhichIsA("Model", true)
+            if shoeL and shoeL ~= lFoot then
+                RS.selectedSkinSnapshot.ShoeLeftTemplate = cloneTemplateClean(shoeL)
             end
         end
-
-        if not categoryFilter or categoryFilter == "Face" then
-            if vHead and vHead:IsA("BasePart") then
-                RS.equippedCosmetics.Face = vHead:Clone()
-                RS.equippedCosmetics.FaceColor = vHead.Color
-                changed = true
+        local rFoot = mannequin:FindFirstChild("RightFoot", true)
+        if rFoot then
+            local shoeR = rFoot:FindFirstChildWhichIsA("MeshPart", true) or rFoot:FindFirstChildWhichIsA("Model", true)
+            if shoeR and shoeR ~= rFoot then
+                RS.selectedSkinSnapshot.ShoeRightTemplate = cloneTemplateClean(shoeR)
             end
         end
-
-        if not categoryFilter or categoryFilter == "Boots" then
-            local vBoot = viewerMannequin:FindFirstChild("LockerBootLeft", true)
-                or viewerMannequin:FindFirstChild("LockerBootRight", true)
-                or viewerMannequin:FindFirstChild("LeftFoot", true)
-                or viewerMannequin:FindFirstChild("RightFoot", true)
-            if vBoot and vBoot:IsA("BasePart") then
-                RS.equippedCosmetics.BootPattern = vBoot:Clone()
-                RS.equippedCosmetics.BootColor = vBoot.Color
-                changed = true
-            end
-        end
-
-        return changed
     end
 
-    local function collectAllCosmeticNames()
-        local allNames = {}
+    local function captureCosmeticFromItemButton(btn, lockerGui)
+        if not btn then return end
         pcall(function()
-            local rep = game:GetService("ReplicatedStorage")
-            local shared = rep and rep:FindFirstChild("Shared")
-            local gameFolder = shared and shared:FindFirstChild("Game")
-            if gameFolder then
-                for _, desc in ipairs(gameFolder:GetDescendants()) do
-                    if desc.Name and desc.Name ~= "" and not desc:IsA("Script") then
-                        allNames[desc.Name] = true
+            local vp = btn:FindFirstChildWhichIsA("ViewportFrame", true)
+            if vp then
+                local hair = vp:FindFirstChild("LockerHair", true)
+                local hat = vp:FindFirstChild("LockerHat", true)
+                local head = vp:FindFirstChild("Head", true)
+                local lFoot = vp:FindFirstChild("LeftFoot", true)
+                local rFoot = vp:FindFirstChild("RightFoot", true)
+
+                if hair then
+                    RS.selectedSkinSnapshot.HairTemplate = cloneTemplateClean(hair)
+                end
+                if hat then
+                    RS.selectedSkinSnapshot.HatTemplate = cloneTemplateClean(hat)
+                end
+                if head and head:IsA("BasePart") then
+                    local face = head:FindFirstChild("Face") or head:FindFirstChildOfClass("Decal")
+                    if face and face.Texture and face.Texture ~= "" then
+                        RS.selectedSkinSnapshot.FaceDecalTexture = face.Texture
                     end
-                    if desc:IsA("ModuleScript") and (
-                        string.find(string.lower(desc.Name), "locker")
-                        or string.find(string.lower(desc.Name), "cosmetic")
-                        or string.find(string.lower(desc.Name), "emote")
-                        or string.find(string.lower(desc.Name), "item")
-                        or string.find(string.lower(desc.Name), "catalog")
-                        or string.find(string.lower(desc.Name), "skin")
-                        or string.find(string.lower(desc.Name), "boot")
-                        or string.find(string.lower(desc.Name), "hair")
-                    ) then
-                        local ok, mod = pcall(require, desc)
-                        if ok and type(mod) == "table" then
-                            local function scanCatalog(t, depth)
-                                if depth > 4 then return end
-                                for k, v in pairs(t) do
-                                    if type(k) == "string" and #k > 1 and #k < 48 then
-                                        allNames[k] = true
-                                    end
-                                    if type(v) == "string" and #v > 1 and #v < 48 then
-                                        allNames[v] = true
-                                    elseif type(v) == "table" then
-                                        if type(v.id) == "string" then allNames[v.id] = true end
-                                        if type(v.Id) == "string" then allNames[v.Id] = true end
-                                        if type(v.name) == "string" then allNames[v.name] = true end
-                                        if type(v.Name) == "string" then allNames[v.Name] = true end
-                                        scanCatalog(v, depth + 1)
-                                    end
-                                end
-                            end
-                            scanCatalog(mod, 1)
-                        end
+                    RS.selectedSkinSnapshot.HeadColor = head.Color
+                end
+                if lFoot then
+                    local shoeL = lFoot:FindFirstChildWhichIsA("MeshPart", true) or lFoot:FindFirstChildWhichIsA("Model", true) or (lFoot:IsA("MeshPart") and lFoot)
+                    if shoeL then
+                        RS.selectedSkinSnapshot.ShoeLeftTemplate = cloneTemplateClean(shoeL)
+                    end
+                end
+                if rFoot then
+                    local shoeR = rFoot:FindFirstChildWhichIsA("MeshPart", true) or rFoot:FindFirstChildWhichIsA("Model", true) or (rFoot:IsA("MeshPart") and rFoot)
+                    if shoeR then
+                        RS.selectedSkinSnapshot.ShoeRightTemplate = cloneTemplateClean(shoeR)
                     end
                 end
             end
 
-            local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-            local gameGui = pg and pg:FindFirstChild("GameGui")
-            local locker = gameGui and gameGui:FindFirstChild("Locker")
-            local pages = locker and locker:FindFirstChild("Pages")
-            if pages then
-                for _, desc in ipairs(pages:GetDescendants()) do
-                    if (desc:IsA("TextButton") or desc:IsA("ImageButton") or desc:IsA("Frame")) and desc.Name ~= "" then
-                        allNames[desc.Name] = true
+            task.delay(0.08, function()
+                pcall(function()
+                    captureFromViewerMannequin(lockerGui)
+                    if ConfigState.OverrideSkins then
+                        applyEquippedCosmeticsToCharacter()
                     end
-                end
+                end)
+            end)
+
+            if ConfigState.OverrideSkins then
+                applyEquippedCosmeticsToCharacter()
             end
         end)
-        return allNames
     end
 
-    RS.injectOwnedIntoLockerData = function(dataTbl)
-        if type(dataTbl) ~= "table" then return end
-        local allNames = collectAllCosmeticNames()
-        local function recurseInject(tbl, depth)
-            if depth > 4 or type(tbl) ~= "table" then return end
-            if table.isfrozen and pcall(table.isfrozen, tbl) and table.isfrozen(tbl) then return end
-            for k, v in pairs(tbl) do
-                if type(v) == "table" then
-                    local kl = string.lower(tostring(k))
-                    if string.find(kl, "own") or string.find(kl, "unlock") or string.find(kl, "hair")
-                        or string.find(kl, "hat") or string.find(kl, "acc") or string.find(kl, "face")
-                        or string.find(kl, "boot") or string.find(kl, "emote") or string.find(kl, "item")
-                        or string.find(kl, "inv") or string.find(kl, "pattern") or string.find(kl, "skin")
-                        or string.find(kl, "cosmetic") then
-                        pcall(function()
-                            for itemName in pairs(allNames) do
-                                v[itemName] = true
-                            end
-                        end)
-                    end
-                    recurseInject(v, depth + 1)
-                elseif type(v) == "function" then
-                    local kl = string.lower(tostring(k))
-                    if kl == "isowned" or kl == "owns" or kl == "hasitem" or kl == "isunlocked" or kl == "canequip" or kl == "owned" then
-                        pcall(function()
-                            local origFn = v
-                            tbl[k] = function(...)
-                                if ConfigState.UnlockAll or ConfigState.OverrideSkins then
-                                    return true
-                                end
-                                return origFn(...)
-                            end
-                        end)
-                    end
-                end
-            end
-        end
-        recurseInject(dataTbl, 1)
-    end
-
-    local function syncUnlockAllClientModules()
-        if not (ConfigState.UnlockAll or ConfigState.OverrideSkins) then return end
+    local function unlockClientLockerTables()
         pcall(function()
-            local ps = LocalPlayer:FindFirstChild("PlayerScripts")
-            local clientFolder = ps and ps:FindFirstChild("Client")
-            if clientFolder then
-                for _, desc in ipairs(clientFolder:GetDescendants()) do
-                    if desc:IsA("ModuleScript") and (
-                        string.find(string.lower(desc.Name), "replica")
-                        or string.find(string.lower(desc.Name), "locker")
-                        or string.find(string.lower(desc.Name), "data")
-                        or string.find(string.lower(desc.Name), "cosmetic")
-                        or string.find(string.lower(desc.Name), "emote")
-                    ) then
-                        local ok, mod = pcall(require, desc)
+            local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+            local client = scripts and scripts:FindFirstChild("Client")
+            if not client then return end
+            for _, modInst in ipairs(client:GetDescendants()) do
+                if modInst:IsA("ModuleScript") and (modInst.Name:find("Locker") or modInst.Name:find("Inventory") or modInst.Name:find("Data") or modInst.Name:find("Shop")) then
+                    if not RS.hookedCatalogs[modInst] then
+                        RS.hookedCatalogs[modInst] = true
+                        local ok, mod = pcall(require, modInst)
                         if ok and type(mod) == "table" then
-                            RS.injectOwnedIntoLockerData(mod)
-                        end
-                    end
-                end
-            end
-            local rep = game:GetService("ReplicatedStorage")
-            local shared = rep and rep:FindFirstChild("Shared")
-            local gameFolder = shared and shared:FindFirstChild("Game")
-            if gameFolder then
-                for _, desc in ipairs(gameFolder:GetDescendants()) do
-                    if desc:IsA("ModuleScript") and (
-                        string.find(string.lower(desc.Name), "locker")
-                        or string.find(string.lower(desc.Name), "cosmetic")
-                        or string.find(string.lower(desc.Name), "emote")
-                    ) then
-                        local ok, mod = pcall(require, desc)
-                        if ok and type(mod) == "table" then
-                            RS.injectOwnedIntoLockerData(mod)
+                            for _, fnName in ipairs({ "isOwned", "IsOwned", "owns", "Owns", "hasItem", "HasItem", "isUnlocked", "IsUnlocked" }) do
+                                if type(mod[fnName]) == "function" then
+                                    local origFn = mod[fnName]
+                                    mod[fnName] = function(...)
+                                        if ConfigState.UnlockAll or ConfigState.OverrideSkins then
+                                            return true
+                                        end
+                                        return origFn(...)
+                                    end
+                                end
+                            end
                         end
                     end
                 end
             end
         end)
+
+        if not RS.namecallHooked and Env.hookmetamethod and Env.getnamecallmethod then
+            RS.namecallHooked = true
+            pcall(function()
+                local oldNamecall
+                oldNamecall = Env.hookmetamethod(game, "__namecall", function(self, ...)
+                    local method = Env.getnamecallmethod()
+                    if method == "InvokeServer" and tostring(self.Name):find("LockerLoad") then
+                        local res = oldNamecall(self, ...)
+                        if (ConfigState.UnlockAll or ConfigState.OverrideSkins) and type(res) == "table" then
+                            pcall(function()
+                                local shared = ReplicatedStorage:FindFirstChild("Shared")
+                                local gameFolder = shared and shared:FindFirstChild("Game")
+                                if gameFolder then
+                                    for _, m in ipairs(gameFolder:GetDescendants()) do
+                                        if m:IsA("ModuleScript") and (m.Name:find("Locker") or m.Name:find("Cosmetic") or m.Name:find("Item") or m.Name:find("Skin") or m.Name:find("Goal")) then
+                                            local okM, data = pcall(require, m)
+                                            if okM and type(data) == "table" then
+                                                for k, v in pairs(data) do
+                                                    if type(k) == "string" and type(res.owned) == "table" then
+                                                        res.owned[k] = true
+                                                    end
+                                                    if type(v) == "table" and type(v.id or v.Id or v.name or v.Name) == "string" then
+                                                        local id = v.id or v.Id or v.name or v.Name
+                                                        if type(res.owned) == "table" then res.owned[id] = true end
+                                                        if type(res.Owned) == "table" then res.Owned[id] = true end
+                                                        if type(res.items) == "table" then res.items[id] = true end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end)
+                        end
+                        return res
+                    elseif method == "FireServer" and tostring(self.Name) == "Afk" and ConfigState.ToggleAFK then
+                        local arg1 = select(1, ...)
+                        if arg1 == "active" or arg1 == false then
+                            return oldNamecall(self, "inactive")
+                        end
+                    end
+                    return oldNamecall(self, ...)
+                end)
+            end)
+        end
     end
 
     local function syncUnlockAllLocker()
-        if not (ConfigState.UnlockAll or ConfigState.OverrideSkins) then return end
-        syncUnlockAllClientModules()
-
         pcall(function()
-            local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-            local gameGui = pg and pg:FindFirstChild("GameGui")
+            unlockClientLockerTables()
+            local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+            local gameGui = pgui and pgui:FindFirstChild("GameGui")
             local locker = gameGui and gameGui:FindFirstChild("Locker")
             if not locker then return end
 
-            local pages = locker:FindFirstChild("Pages")
-            local viewer = locker:FindFirstChild("Viewer")
-            local viewerVp = viewer and viewer:FindFirstChildOfClass("ViewportFrame")
-            local viewerMannequin = (viewerVp and viewerVp:FindFirstChild("Mannequin", true))
-                or (viewer and viewer:FindFirstChild("Mannequin", true))
-            if not pages then return end
+            if ConfigState.OverrideSkins then
+                captureFromViewerMannequin(locker)
+            end
 
-            -- 1. Hide every Locked / Padlock frame across all Locker pages & lock its Visible property to false
-            if ConfigState.UnlockAll then
-                for _, desc in ipairs(pages:GetDescendants()) do
-                    local dl = string.lower(desc.Name)
-                    if (desc:IsA("GuiObject") and (dl == "locked" or dl == "lock" or dl == "padlock" or dl == "price" or dl == "buyOverlay")) then
+            for _, desc in ipairs(locker:GetDescendants()) do
+                if (ConfigState.UnlockAll or ConfigState.OverrideSkins) then
+                    if desc.Name == "Locked" and desc:IsA("GuiObject") then
                         desc.Visible = false
-                        if not RS.lockerUnlockedFrames[desc] and desc.GetPropertyChangedSignal then
-                            RS.lockerUnlockedFrames[desc] = true
-                            pcall(function()
-                                desc:GetPropertyChangedSignal("Visible"):Connect(function()
-                                    if ConfigState.UnlockAll and desc.Visible then
-                                        desc.Visible = false
-                                    end
-                                end)
-                            end)
+                    elseif desc:IsA("ImageLabel") and (desc.Name:lower():find("lock") or tostring(desc.Image):find("10472854571")) then
+                        desc.Visible = false
+                    end
+                end
+
+                if desc:IsA("GuiButton") and not RS.hookedButtons[desc] then
+                    RS.hookedButtons[desc] = true
+                    desc.Activated:Connect(function()
+                        if ConfigState.UnlockAll or ConfigState.OverrideSkins then
+                            local lck = desc:FindFirstChild("Locked", true)
+                            if lck and lck:IsA("GuiObject") then lck.Visible = false end
+                            captureCosmeticFromItemButton(desc, locker)
                         end
-                    end
-                end
-            end
-
-            local function sendLockerSaveDict(extraFields)
-                local rLockerSave = getRemote("RE/LockerSave")
-                if not rLockerSave then return end
-                local payload = {}
-                if RS.equippedCosmetics.HairName then payload["Hair"] = RS.equippedCosmetics.HairName end
-                if RS.equippedCosmetics.HatName then payload["Hat"] = RS.equippedCosmetics.HatName end
-                if RS.equippedCosmetics.FaceName then payload["Face"] = RS.equippedCosmetics.FaceName end
-                if RS.equippedCosmetics.PatternName then payload["Pattern"] = RS.equippedCosmetics.PatternName end
-                if typeof(RS.equippedCosmetics.HairColor) == "Color3" then payload["HairColor"] = toHexColor(RS.equippedCosmetics.HairColor) end
-                if typeof(RS.equippedCosmetics.FaceColor) == "Color3" then payload["FaceColor"] = toHexColor(RS.equippedCosmetics.FaceColor) end
-                if typeof(RS.equippedCosmetics.BootColor) == "Color3" then payload["BootColor"] = toHexColor(RS.equippedCosmetics.BootColor) end
-                if type(extraFields) == "table" then
-                    for k, v in pairs(extraFields) do
-                        payload[k] = v
-                    end
-                end
-                pcall(function()
-                    rLockerSave:FireServer(payload)
-                end)
-            end
-
-            local function hookCategoryButtons(itemsContainer, categoryName)
-                if not itemsContainer then return end
-                for _, itemBtn in ipairs(itemsContainer:GetDescendants()) do
-                    if (itemBtn:IsA("TextButton") or itemBtn:IsA("ImageButton")) and not RS.lockerHookedButtons[itemBtn] then
-                        local parentName = itemBtn.Parent and itemBtn.Parent.Name or ""
-                        if parentName == "Items" or parentName == "Patterns" or parentName == "Grid" or itemBtn.Parent == itemsContainer then
-                            RS.lockerHookedButtons[itemBtn] = true
-
-                            local function onSelectCosmetic()
-                                if not (ConfigState.UnlockAll or ConfigState.OverrideSkins) then return end
-                                pcall(function()
-                                    local vp = itemBtn:FindFirstChildOfClass("ViewportFrame")
-                                    local searchRoot = vp or itemBtn
-
-                                    if categoryName == "Hair" then
-                                        RS.equippedCosmetics.HairName = itemBtn.Name
-                                        local mesh = searchRoot:FindFirstChild("LockerHair", true)
-                                        if not mesh then
-                                            for _, ch in ipairs(searchRoot:GetDescendants()) do
-                                                if ch:IsA("MeshPart") and ch.Name ~= "Head" and ch.Name ~= "Torso" and ch.Name ~= "Chest" then
-                                                    mesh = ch
-                                                    break
-                                                end
-                                            end
-                                        end
-                                        if mesh and mesh:IsA("BasePart") then
-                                            RS.equippedCosmetics.Hair = mesh:Clone()
-                                            applyEquippedCosmeticsToCharacter()
-                                            if viewerMannequin then
-                                                applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.Hair, "Hair", false)
-                                            end
-                                        end
-                                        sendLockerSaveDict({ Hair = itemBtn.Name })
-                                    elseif categoryName == "Hat" then
-                                        RS.equippedCosmetics.HatName = itemBtn.Name
-                                        local mesh = searchRoot:FindFirstChild("LockerHat", true)
-                                        if not mesh then
-                                            for _, ch in ipairs(searchRoot:GetDescendants()) do
-                                                if ch:IsA("MeshPart") and ch.Name ~= "Head" and ch.Name ~= "Torso" and ch.Name ~= "Chest" then
-                                                    mesh = ch
-                                                    break
-                                                end
-                                            end
-                                        end
-                                        if mesh and mesh:IsA("BasePart") then
-                                            RS.equippedCosmetics.Hat = mesh:Clone()
-                                            applyEquippedCosmeticsToCharacter()
-                                            if viewerMannequin then
-                                                applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.Hat, "Hat", false)
-                                            end
-                                        end
-                                        sendLockerSaveDict({ Hat = itemBtn.Name, Accessory = itemBtn.Name })
-                                    elseif categoryName == "Face" then
-                                        RS.equippedCosmetics.FaceName = itemBtn.Name
-                                        local headMesh = searchRoot:FindFirstChild("Head", true) or searchRoot:FindFirstChildWhichIsA("MeshPart", true)
-                                        if headMesh and headMesh:IsA("BasePart") then
-                                            RS.equippedCosmetics.Face = headMesh:Clone()
-                                            applyEquippedCosmeticsToCharacter()
-                                            if viewerMannequin then
-                                                applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.Face, "Face", false)
-                                            end
-                                        end
-                                        sendLockerSaveDict({ Face = itemBtn.Name })
-                                    elseif categoryName == "Boots" then
-                                        RS.equippedCosmetics.PatternName = itemBtn.Name
-                                        local bootMesh = searchRoot:FindFirstChild("LockerBootLeft", true)
-                                            or searchRoot:FindFirstChild("LockerBootRight", true)
-                                            or searchRoot:FindFirstChild("LeftFoot", true)
-                                            or searchRoot:FindFirstChild("RightFoot", true)
-                                            or searchRoot:FindFirstChildWhichIsA("MeshPart", true)
-                                        if bootMesh and bootMesh:IsA("BasePart") then
-                                            RS.equippedCosmetics.BootPattern = bootMesh:Clone()
-                                            applyEquippedCosmeticsToCharacter()
-                                            if viewerMannequin then
-                                                applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.BootPattern, "Boots", false)
-                                            end
-                                        end
-                                        sendLockerSaveDict({ Pattern = itemBtn.Name })
-                                    elseif categoryName == "Emotes" then
-                                        local emoteName = itemBtn.Name
-                                        RS.equippedCosmetics.Emote = emoteName
-                                        local slotNum = 1
-                                        local slotsFrame = pages:FindFirstChild("Emotes") and pages.Emotes:FindFirstChild("Slots")
-                                        if slotsFrame then
-                                            for idx = 1, 4 do
-                                                local sBtn = slotsFrame:FindFirstChild("Slot" .. idx) or slotsFrame:FindFirstChild(tostring(idx))
-                                                if sBtn and (sBtn:GetAttribute("Selected") == true or sBtn.BackgroundColor3.R > 0.25) then
-                                                    slotNum = idx
-                                                    break
-                                                end
-                                            end
-                                        end
-                                        sendLockerSaveDict({ ["Emote" .. tostring(slotNum)] = emoteName, Emote = emoteName })
-                                    end
-
-                                    -- Also snapshot from the 3D Viewer Mannequin 0.06s after click in case LockerClient updated it directly
-                                    task.delay(0.06, function()
-                                        if (ConfigState.UnlockAll or ConfigState.OverrideSkins) and viewerMannequin then
-                                            if snapshotFromViewerMannequin(viewerMannequin, categoryName) then
-                                                applyEquippedCosmeticsToCharacter()
-                                            end
-                                        end
-                                    end)
-                                end)
+                    end)
+                    if desc.MouseButton1Click then
+                        desc.MouseButton1Click:Connect(function()
+                            if ConfigState.UnlockAll or ConfigState.OverrideSkins then
+                                captureCosmeticFromItemButton(desc, locker)
                             end
-
-                            itemBtn.MouseButton1Click:Connect(onSelectCosmetic)
-                            if itemBtn.Activated then
-                                pcall(function()
-                                    itemBtn.Activated:Connect(onSelectCosmetic)
-                                end)
-                            end
-                        end
+                        end)
                     end
-                end
-            end
-
-            local function hookColorButtons(colorsContainer, categoryName)
-                if not colorsContainer then return end
-                for _, colBtn in ipairs(colorsContainer:GetDescendants()) do
-                    if colBtn:IsA("GuiButton") and not RS.lockerHookedButtons[colBtn] then
-                        RS.lockerHookedButtons[colBtn] = true
-                        local function onPickColor()
-                            if not (ConfigState.UnlockAll or ConfigState.OverrideSkins) then return end
-                            pcall(function()
-                                local pickedCol = colBtn.BackgroundColor3
-                                local innerSwatch = colBtn:FindFirstChildWhichIsA("Frame")
-                                if innerSwatch and innerSwatch.BackgroundTransparency < 0.9 then
-                                    pickedCol = innerSwatch.BackgroundColor3
-                                end
-                                if categoryName == "Hair" then
-                                    RS.equippedCosmetics.HairColor = pickedCol
-                                    sendLockerSaveDict({ HairColor = toHexColor(pickedCol) })
-                                elseif categoryName == "Hat" then
-                                    RS.equippedCosmetics.HatColor = pickedCol
-                                elseif categoryName == "Face" then
-                                    RS.equippedCosmetics.FaceColor = pickedCol
-                                    sendLockerSaveDict({ FaceColor = toHexColor(pickedCol) })
-                                elseif categoryName == "Boots" then
-                                    RS.equippedCosmetics.BootColor = pickedCol
-                                    sendLockerSaveDict({ BootColor = toHexColor(pickedCol) })
-                                end
-                                applyEquippedCosmeticsToCharacter()
-                                if viewerMannequin then
-                                    if RS.equippedCosmetics.Hair then applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.Hair, "Hair", false) end
-                                    if RS.equippedCosmetics.Hat then applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.Hat, "Hat", false) end
-                                    if RS.equippedCosmetics.Face then applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.Face, "Face", false) end
-                                    if RS.equippedCosmetics.BootPattern then applyCosmeticMeshToMannequin(viewerMannequin, RS.equippedCosmetics.BootPattern, "Boots", false) end
-                                end
-                            end)
-                        end
-                        colBtn.MouseButton1Click:Connect(onPickColor)
-                        if colBtn.Activated then
-                            pcall(function()
-                                colBtn.Activated:Connect(onPickColor)
-                            end)
-                        end
-                    end
-                end
-            end
-
-            local hairPage = pages:FindFirstChild("Hair")
-            if hairPage then
-                hookCategoryButtons(hairPage:FindFirstChild("Items") or hairPage, "Hair")
-                hookColorButtons(hairPage:FindFirstChild("Colors"), "Hair")
-            end
-
-            local accPage = pages:FindFirstChild("Accessories")
-            if accPage then
-                hookCategoryButtons(accPage:FindFirstChild("Items") or accPage, "Hat")
-                hookColorButtons(accPage:FindFirstChild("Colors"), "Hat")
-            end
-
-            local facePage = pages:FindFirstChild("Face")
-            if facePage then
-                hookCategoryButtons(facePage:FindFirstChild("Items") or facePage, "Face")
-                hookColorButtons(facePage:FindFirstChild("Colors"), "Face")
-            end
-
-            local bootsPage = pages:FindFirstChild("Boots")
-            if bootsPage then
-                hookCategoryButtons(bootsPage:FindFirstChild("Patterns") or bootsPage:FindFirstChild("Items") or bootsPage, "Boots")
-                hookColorButtons(bootsPage:FindFirstChild("Colors"), "Boots")
-            end
-
-            local emotesPage = pages:FindFirstChild("Emotes")
-            if emotesPage then
-                hookCategoryButtons(emotesPage:FindFirstChild("Grid") or emotesPage, "Emotes")
-            end
-
-            -- If OverrideSkins was just turned on and we haven't captured any item yet, snapshot from viewerMannequin automatically
-            if ConfigState.OverrideSkins and viewerMannequin and not (RS.equippedCosmetics.Hair or RS.equippedCosmetics.Hat or RS.equippedCosmetics.Face or RS.equippedCosmetics.BootPattern) then
-                if snapshotFromViewerMannequin(viewerMannequin, nil) then
-                    applyEquippedCosmeticsToCharacter()
                 end
             end
         end)
@@ -16683,331 +16418,230 @@ do
     RS.syncUnlockAllLocker = syncUnlockAllLocker
     RS.applyEquippedCosmeticsToCharacter = applyEquippedCosmeticsToCharacter
 
-    -- Re-apply Override Skins automatically on character spawn and when (drawn) model spawns in workspace
-    LocalPlayer.CharacterAdded:Connect(function()
-        task.delay(0.25, function()
+    LocalPlayer.CharacterAdded:Connect(function(newChar)
+        task.defer(function()
+            task.wait(0.35)
             if ConfigState.OverrideSkins then
                 applyEquippedCosmeticsToCharacter()
             end
-        end)
-    end)
-
-    workspace.ChildAdded:Connect(function(child)
-        if ConfigState.OverrideSkins and child and child.Name == (LocalPlayer.Name .. " (drawn)") then
-            task.delay(0.1, function()
-                if ConfigState.OverrideSkins then
+            newChar.ChildAdded:Connect(function(c)
+                if c.Name == "(drawn)" and ConfigState.OverrideSkins then
+                    task.wait(0.15)
                     applyEquippedCosmeticsToCharacter()
                 end
             end)
-        end
+        end)
     end)
 
-    ----------------------------------------------------------------------------
-    -- UPGRADED AFK ENGINE (ACCURATE RE/Afk STATE + ANTI-IDLE DISCONNECT)
-    ----------------------------------------------------------------------------
-    local function setAfkStatus(enableAfk)
-        ConfigState.ToggleAFK = enableAfk == true
+    --==========================================================================
+    -- UPGRADED TOGGLE AFK (SERVER AFK STATE + ANTI-IDLE KICK)
+    --==========================================================================
+    local function setAfkStatus(enabled)
+        ConfigState.ToggleAFK = enabled
         pcall(function()
             local rAfk = getRemote("RE/Afk")
             if rAfk then
-                -- In Ragdoll Soccer, "inactive" puts the player into AFK mode (sitting out matches),
-                -- and "active" marks the player as active (joining matches).
-                if enableAfk then
+                if enabled then
                     rAfk:FireServer("inactive")
                 else
                     rAfk:FireServer("active")
                 end
             end
-            pcall(function()
-                if LocalPlayer:GetAttribute("Afk") ~= nil then
-                    LocalPlayer:SetAttribute("Afk", enableAfk == true)
-                end
-                if LocalPlayer:GetAttribute("AFK") ~= nil then
-                    LocalPlayer:SetAttribute("AFK", enableAfk == true)
-                end
-            end)
         end)
+        pcall(function()
+            LocalPlayer:SetAttribute("AFK", enabled)
+            LocalPlayer:SetAttribute("Afk", enabled)
+        end)
+        if enabled and not RS.idleConn then
+            pcall(function()
+                local VirtualUser = game:GetService("VirtualUser")
+                RS.idleConn = LocalPlayer.Idled:Connect(function()
+                    if ConfigState.ToggleAFK and VirtualUser then
+                        pcall(function()
+                            VirtualUser:CaptureController()
+                            VirtualUser:ClickButton2(Vector2.zero)
+                        end)
+                    end
+                end)
+            end)
+        end
     end
     RS.setAfkStatus = setAfkStatus
 
-    -- Prevent Roblox 20-minute idle disconnect when Toggle AFK is active
-    pcall(function()
-        LocalPlayer.Idled:Connect(function()
-            if ConfigState.ToggleAFK then
-                pcall(function()
-                    local vu = game:GetService("VirtualUser")
-                    vu:CaptureController()
-                    vu:ClickButton2(Vector2.new(0, 0))
-                end)
-            end
-        end)
-    end)
-
-    -- Hook RF/LockerLoad (for Unlock All) and RE/Afk (so mouse/camera movement never cancels AFK while ToggleAFK is ON)
-    pcall(function()
-        local hookmm = Env.hookmetamethod or (type(hookmetamethod) == "function" and hookmetamethod)
-        local getncm = Env.getnamecallmethod or (type(getnamecallmethod) == "function" and getnamecallmethod)
-        local setncm = Env.setnamecallmethod or (type(setnamecallmethod) == "function" and setnamecallmethod)
-        if hookmm and getncm then
-            local oldNamecall
-            oldNamecall = hookmm(game, "__namecall", function(self, ...)
-                local method = getncm()
-                if method == "FireServer" and typeof(self) == "Instance" and self.Name == "RE/Afk" then
-                    if ConfigState.ToggleAFK then
-                        local firstArg = select(1, ...)
-                        if firstArg == "active" or firstArg == false then
-                            if setncm then pcall(setncm, method) end
-                            return oldNamecall(self, "inactive")
-                        end
-                    end
-                elseif method == "InvokeServer" and typeof(self) == "Instance" and self.Name == "RF/LockerLoad" then
-                    local res = oldNamecall(self, ...)
-                    if setncm then pcall(setncm, method) end
-                    if (ConfigState.UnlockAll or ConfigState.OverrideSkins) and type(res) == "table" then
-                        pcall(function()
-                            if RS.injectOwnedIntoLockerData then
-                                RS.injectOwnedIntoLockerData(res)
-                            end
-                        end)
-                    end
-                    return res
-                end
-                if setncm then pcall(setncm, method) end
-                return oldNamecall(self, ...)
-            end)
-        end
-    end)
-
-    ----------------------------------------------------------------------------
-    -- PLAYER DATA LOCAL OVERRIDE ENGINE
-    ----------------------------------------------------------------------------
-    local CARD_COLOR_THEMES = {
+    --==========================================================================
+    -- PLAYER DATA CARD SPOOFER (GAMEGUI.CARD + LEADERSTATS)
+    --==========================================================================
+    local CARD_COLOR_PALETTES = {
         Bronze = {
-            Main = Color3.fromRGB(205, 127, 50),
-            Secondary = Color3.fromRGB(120, 68, 22),
-            Text = "BRONZE",
+            Main = Color3.fromRGB(165, 105, 62),
+            Secondary = Color3.fromRGB(110, 66, 36),
+            Stroke = Color3.fromRGB(220, 155, 100),
+            Grad0 = Color3.fromRGB(190, 125, 78),
+            Grad1 = Color3.fromRGB(98, 56, 28),
         },
         Silver = {
-            Main = Color3.fromRGB(215, 222, 232),
-            Secondary = Color3.fromRGB(130, 140, 155),
-            Text = "SILVER",
+            Main = Color3.fromRGB(195, 204, 215),
+            Secondary = Color3.fromRGB(128, 138, 150),
+            Stroke = Color3.fromRGB(240, 245, 255),
+            Grad0 = Color3.fromRGB(225, 232, 242),
+            Grad1 = Color3.fromRGB(115, 124, 136),
         },
         Gold = {
-            Main = Color3.fromRGB(255, 208, 65),
-            Secondary = Color3.fromRGB(185, 130, 18),
-            Text = "GOLD",
+            Main = Color3.fromRGB(245, 198, 66),
+            Secondary = Color3.fromRGB(178, 130, 22),
+            Stroke = Color3.fromRGB(255, 235, 130),
+            Grad0 = Color3.fromRGB(255, 220, 95),
+            Grad1 = Color3.fromRGB(165, 115, 16),
         },
         Diamond = {
-            Main = Color3.fromRGB(115, 235, 255),
-            Secondary = Color3.fromRGB(45, 135, 255),
-            Text = "DIAMOND",
+            Main = Color3.fromRGB(110, 228, 255),
+            Secondary = Color3.fromRGB(48, 140, 215),
+            Stroke = Color3.fromRGB(210, 250, 255),
+            Grad0 = Color3.fromRGB(165, 242, 255),
+            Grad1 = Color3.fromRGB(42, 125, 210),
         },
     }
 
-    local function bindStatLabelOverride(lbl, cacheKey, isEnabledFn, getValFn)
-        if not lbl or not lbl:IsA("TextLabel") then return end
-        if RS.origStatsCache[cacheKey] == nil then
-            RS.origStatsCache[cacheKey] = lbl.Text
-        end
-        if isEnabledFn() then
-            local targetTxt = tostring(getValFn() or "")
-            if lbl.Text ~= targetTxt then
-                lbl.Text = targetTxt
-            end
-        elseif RS.origStatsCache[cacheKey] then
-            lbl.Text = RS.origStatsCache[cacheKey]
-        end
-
-        if not RS.statLabelHooks[lbl] and lbl.GetPropertyChangedSignal then
-            RS.statLabelHooks[lbl] = true
-            pcall(function()
-                lbl:GetPropertyChangedSignal("Text"):Connect(function()
-                    if isEnabledFn() then
-                        local desired = tostring(getValFn() or "")
-                        if lbl.Text ~= desired then
-                            lbl.Text = desired
-                        end
-                    end
-                end)
-            end)
-        end
-    end
-
-    local function applyOverridesToCardFrame(cardFrame, listsFrame, prefix)
-        if not cardFrame then return end
-        local info = cardFrame:FindFirstChild("Info")
-        local totals = cardFrame:FindFirstChild("Totals")
-        local tierFrame = cardFrame:FindFirstChild("Tier")
-        local artImg = cardFrame:FindFirstChild("Art")
-        local shineClip = cardFrame:FindFirstChild("ShineClip")
-        local stroke = cardFrame:FindFirstChildOfClass("UIStroke")
-        local grad = cardFrame:FindFirstChildOfClass("UIGradient")
-
-        local ratingLbl = info and info:FindFirstChild("Rating")
-        bindStatLabelOverride(ratingLbl, prefix .. "_Rating", function() return ConfigState.DataOverallToggle end, function() return ConfigState.DataOverallVal end)
-
-        local goalsBox = totals and totals:FindFirstChild("Goals")
-        local goalsVal = goalsBox and goalsBox:FindFirstChild("Value")
-        bindStatLabelOverride(goalsVal, prefix .. "_Goals", function() return ConfigState.DataGoalsToggle end, function() return ConfigState.DataGoalsVal end)
-
-        local assistsBox = totals and totals:FindFirstChild("Assists")
-        local assistsVal = assistsBox and assistsBox:FindFirstChild("Value")
-        bindStatLabelOverride(assistsVal, prefix .. "_Assists", function() return ConfigState.DataAssistsToggle end, function() return ConfigState.DataAssistsVal end)
-
-        if listsFrame then
-            local matchesRow = listsFrame:FindFirstChild("Stat_Matches")
-            local matchesVal = matchesRow and matchesRow:FindFirstChild("Value")
-            bindStatLabelOverride(matchesVal, prefix .. "_Matches", function() return ConfigState.DataMatchesToggle end, function() return ConfigState.DataMatchesVal end)
-
-            local mvpRow = listsFrame:FindFirstChild("Stat_MVP")
-            local mvpVal = mvpRow and mvpRow:FindFirstChild("Value")
-            bindStatLabelOverride(mvpVal, prefix .. "_MVP", function() return ConfigState.DataPotmToggle end, function() return ConfigState.DataPotmVal end)
-
-            local timeRow = listsFrame:FindFirstChild("Stat_Playtime")
-            local timeVal = timeRow and timeRow:FindFirstChild("Value")
-            bindStatLabelOverride(timeVal, prefix .. "_Playtime", function() return ConfigState.DataTimeToggle end, function() return ConfigState.DataTimeVal end)
-        end
-
-        if ConfigState.DataCardColorToggle then
-            local theme = CARD_COLOR_THEMES[ConfigState.DataCardColorMode or "Diamond"] or CARD_COLOR_THEMES.Diamond
-            cardFrame.BackgroundColor3 = theme.Secondary
-            if artImg and artImg:IsA("ImageLabel") then artImg.ImageColor3 = theme.Main end
-            if stroke then stroke.Color = theme.Main end
-            if grad then
-                grad.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, theme.Main),
-                    ColorSequenceKeypoint.new(0.5, theme.Secondary),
-                    ColorSequenceKeypoint.new(1, theme.Main),
-                })
-            end
-            if tierFrame then
-                local tierText = tierFrame:FindFirstChild("Text") or tierFrame:FindFirstChildOfClass("TextLabel")
-                local tierStroke = tierFrame:FindFirstChildOfClass("UIStroke")
-                local tierGrad = tierFrame:FindFirstChildOfClass("UIGradient")
-                if tierText and tierText:IsA("TextLabel") then
-                    tierText.Text = theme.Text
-                    tierText.TextColor3 = theme.Main
-                end
-                if tierStroke then tierStroke.Color = theme.Main end
-                if tierGrad then
-                    tierGrad.Color = ColorSequence.new({
-                        ColorSequenceKeypoint.new(0, theme.Secondary),
-                        ColorSequenceKeypoint.new(1, theme.Main),
-                    })
-                end
-            end
-            if shineClip then
-                local shine = shineClip:FindFirstChild("Shine")
-                if shine and shine:IsA("GuiObject") then shine.BackgroundColor3 = theme.Main end
-            end
-        end
-    end
-
     local function syncPlayerDataOverrides()
         pcall(function()
-            local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-            if not pg then return end
-            local gameGui = pg:FindFirstChild("GameGui")
-            local pStats = gameGui and gameGui:FindFirstChild("PlayerStats")
-            if pStats then
-                local body = pStats:FindFirstChild("Body")
-                local card = body and body:FindFirstChild("Card")
-                local lists = body and body:FindFirstChild("Lists")
-                applyOverridesToCardFrame(card, lists, "Modal")
+            local ls = LocalPlayer:FindFirstChild("leaderstats")
+            if ls then
+                if ConfigState.DataGoalsToggle then
+                    local g = ls:FindFirstChild("Goals")
+                    if g then pcall(function() g.Value = tonumber(ConfigState.DataGoalsVal) or 999 end) end
+                end
+                if ConfigState.DataAssistsToggle then
+                    local a = ls:FindFirstChild("Assists")
+                    if a then pcall(function() a.Value = tonumber(ConfigState.DataAssistsVal) or 999 end) end
+                end
             end
-            local surfaceFace = pg:FindFirstChild("StatsCardFace")
-            if surfaceFace then
-                local sCard = surfaceFace:FindFirstChild("Card")
-                applyOverridesToCardFrame(sCard, nil, "SurfaceGui")
-            end
-            local wsCardShown = workspace:FindFirstChild("StatsCardShown")
-            if wsCardShown then
-                for _, sg in ipairs(wsCardShown:GetDescendants()) do
-                    if sg:IsA("SurfaceGui") then
-                        local c = sg:FindFirstChild("Card")
-                        if c then applyOverridesToCardFrame(c, nil, "Workspace3D") end
+
+            local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+            local gameGui = pgui and pgui:FindFirstChild("GameGui")
+            if not gameGui then return end
+
+            local cardRoot = gameGui:FindFirstChild("Card")
+            local locker = gameGui:FindFirstChild("Locker")
+            local lockerCard = locker and locker:FindFirstChild("Card", true)
+
+            local function applyToCardFrame(rootFrame)
+                if not rootFrame then return end
+                local card = rootFrame:FindFirstChild("Card") or rootFrame
+                local overall = card:FindFirstChild("Overall") or rootFrame:FindFirstChild("Overall", true)
+                if ConfigState.DataOverallToggle and overall then
+                    local valLbl = overall:FindFirstChild("Value") or (overall:IsA("TextLabel") and overall)
+                    if valLbl and valLbl:IsA("TextLabel") then
+                        valLbl.Text = tostring(ConfigState.DataOverallVal or "99")
+                    end
+                end
+
+                local stats = card:FindFirstChild("Stats") or rootFrame:FindFirstChild("Stats", true)
+                if stats then
+                    local function setStatText(statName, enabled, valStr)
+                        if not enabled then return end
+                        local row = stats:FindFirstChild(statName)
+                        if row then
+                            local vLbl = row:FindFirstChild("Value") or row:FindFirstChildWhichIsA("TextLabel")
+                            if vLbl and vLbl:IsA("TextLabel") then
+                                vLbl.Text = tostring(valStr)
+                            end
+                        end
+                    end
+                    setStatText("Goals", ConfigState.DataGoalsToggle, ConfigState.DataGoalsVal)
+                    setStatText("Assists", ConfigState.DataAssistsToggle, ConfigState.DataAssistsVal)
+                    setStatText("Matches", ConfigState.DataMatchesToggle, ConfigState.DataMatchesVal)
+                    setStatText("POTM", ConfigState.DataPotmToggle, ConfigState.DataPotmVal)
+                    setStatText("TimePlayed", ConfigState.DataTimeToggle, ConfigState.DataTimeVal)
+                end
+
+                if ConfigState.DataCardColorToggle then
+                    local pal = CARD_COLOR_PALETTES[ConfigState.DataCardColorMode or "Diamond"] or CARD_COLOR_PALETTES.Diamond
+                    for _, desc in ipairs(card:GetDescendants()) do
+                        if desc:IsA("UIGradient") then
+                            desc.Color = ColorSequence.new({
+                                ColorSequenceKeypoint.new(0, pal.Grad0),
+                                ColorSequenceKeypoint.new(1, pal.Grad1),
+                            })
+                        elseif desc:IsA("UIStroke") then
+                            desc.Color = pal.Stroke
+                        elseif desc:IsA("ImageLabel") then
+                            desc.ImageColor3 = pal.Main
+                        elseif desc:IsA("Frame") and (desc.Name == "Card" or desc.Name == "Background" or desc.Name == "Border" or desc.Name == "Header") then
+                            desc.BackgroundColor3 = pal.Secondary
+                        end
+                    end
+                    if card:IsA("GuiObject") then
+                        card.BackgroundColor3 = pal.Secondary
                     end
                 end
             end
+
+            applyToCardFrame(cardRoot)
+            applyToCardFrame(lockerCard)
         end)
     end
     RS.syncPlayerDataOverrides = syncPlayerDataOverrides
 
-    ----------------------------------------------------------------------------
-    -- RAGDOLL SOCCER STEPPED & RENDERSTEPPED RUNTIME
-    ----------------------------------------------------------------------------
+    --==========================================================================
+    -- MAIN HEARTBEAT / STEPPED GAMEPLAY LOOP
+    --==========================================================================
     State.stepRagdollSoccer = function(dt)
         local now = os.clock()
         if (now - RS.lastStepClock) < 0.008 then return end
         RS.lastStepClock = now
 
-        local myChar = getLocalMannequin()
-        local myRoot = getMannequinRoot(myChar)
-        local ball, ballView, ballVel, possessor = updateLiveBallState(dt)
+        local myChar, myRoot, ctrlMgr = getLocalCharAndRoot()
+        local ball = getLiveBall()
 
         if myChar and myRoot then
-            local pelvis = myChar:FindFirstChild("Pelvis")
-            local ctrlMgr = myChar:FindFirstChildOfClass("ControllerManager")
-            local groundCtrl = ctrlMgr and ctrlMgr:FindFirstChild("GroundController")
             local myDribbleId = tonumber(myChar:GetAttribute("DribbleId")) or -999
+            local myTeam = myChar:GetAttribute("Team")
+            local possessor = (ball and tonumber(ball:GetAttribute("Possessor"))) or 0
 
-            -- 1. Walkspeed Override
-            if ConfigState.Walkspeed then
-                local ws = tonumber(ConfigState.WalkspeedVal) or 32
-                pcall(function()
-                    if ctrlMgr then ctrlMgr.BaseMoveSpeed = ws end
-                    if groundCtrl then groundCtrl.MoveSpeedFactor = math.max(ws / 20, 1) end
-                end)
-                local moveDir = (ctrlMgr and ctrlMgr.MovingDirection) or Vector3.zero
-                if moveDir.Magnitude > 0.05 then
-                    local curVel = myRoot.AssemblyLinearVelocity
-                    local horiz = Vector3.new(curVel.X, 0, curVel.Z)
-                    if horiz.Magnitude < ws * 0.96 then
-                        local flatDir = Vector3.new(moveDir.X, 0, moveDir.Z)
-                        if flatDir.Magnitude > 0.05 then
-                            local targetHoriz = flatDir.Unit * ws
-                            myRoot.AssemblyLinearVelocity = Vector3.new(targetHoriz.X, curVel.Y, targetHoriz.Z)
-                        end
-                    end
-                end
-            end
-
-            -- 2. Jump Power Override
+            -- 1. Jump Power Override
             if ConfigState.JumpPower then
-                local curVel = myRoot.AssemblyLinearVelocity
-                local isGrounded = (myRoot.Position.Y <= 4.8)
-                local airCtrl = ctrlMgr and ctrlMgr:FindFirstChild("AirController")
-                local mobileJumping = (ctrlMgr and airCtrl and ctrlMgr.ActiveController == airCtrl and curVel.Y > 8 and curVel.Y < 48)
-                    or (not isGrounded and curVel.Y > 14 and curVel.Y < 45 and (RS.prevVerticalVel or 0) <= 10)
-                local spaceJumping = isGrounded and UserInputService:IsKeyDown(Enum.KeyCode.Space) and not UserInputService:GetFocusedTextBox()
-                RS.prevVerticalVel = curVel.Y
-
-                if (spaceJumping or mobileJumping) and (now - RS.lastJumpAt) >= 0.35 then
-                    RS.lastJumpAt = now
+                local jp = math.clamp(tonumber(ConfigState.JumpPowerVal) or 85, 40, 160)
+                if ctrlMgr then
                     pcall(function()
-                        local jp = tonumber(ConfigState.JumpPowerVal) or 85
-                        myRoot.AssemblyLinearVelocity = Vector3.new(curVel.X, jp, curVel.Z)
-                        if pelvis and pelvis:IsA("BasePart") then
-                            pelvis.AssemblyLinearVelocity = Vector3.new(curVel.X, jp, curVel.Z)
+                        local airCtrl = ctrlMgr:FindFirstChildOfClass("AirController")
+                        if airCtrl then
+                            airCtrl.JumpImpulse = Vector3.new(0, jp * 7.5, 0)
                         end
                     end)
                 end
+                local hum = myChar:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.UseJumpPower = true
+                    hum.JumpPower = jp
+                end
             end
 
-            -- 3. Tackle Speed Multiplier
+            -- 2. Tackle Speed Multiplier (Native MannequinAnimation.Tuning.Slide + Velocity Boost)
             if ConfigState.TackleSpeedMult then
                 local mult = math.clamp(tonumber(ConfigState.TackleSpeedVal) or 2.0, 1.0, 5.0)
-                local bState = tostring(myChar:GetAttribute("BodyState") or "")
-                local bsv = pelvis and pelvis:FindFirstChild("BodySlideVelocity")
-                if bsv and bsv:IsA("LinearVelocity") and bsv.Enabled then
-                    pcall(function()
-                        local v = bsv.VectorVelocity
-                        if v.Magnitude > 1 and v.Magnitude < 65 then
-                            bsv.VectorVelocity = v.Unit * (42 * mult)
+                pcall(function()
+                    if not RS.tuningSlideRef then
+                        local T = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Game"):WaitForChild("MannequinAnimation"):WaitForChild("Tuning"))
+                        if type(T) == "table" and type(T.Slide) == "table" then
+                            RS.tuningSlideRef = T.Slide
+                            RS.origSlideSpeed = {}
+                            for k, v in pairs(T.Slide) do
+                                if type(v) == "number" and (tostring(k):lower():find("speed") or tostring(k):lower():find("vel") or tostring(k):lower():find("dist") or tostring(k):lower():find("impulse")) then
+                                    RS.origSlideSpeed[k] = v
+                                end
+                            end
                         end
-                    end)
-                end
-                if bState == "Sliding" or bState == "Tackling" or bState == "Diving" then
+                    end
+                    if RS.tuningSlideRef and RS.origSlideSpeed then
+                        for k, origV in pairs(RS.origSlideSpeed) do
+                            RS.tuningSlideRef[k] = origV * mult
+                        end
+                    end
+                end)
+                local bodyState = tostring(myChar:GetAttribute("BodyState") or "")
+                local slideCd = tonumber(LocalPlayer:GetAttribute("SlideCooldown")) or 0
+                local slideReady = tonumber(LocalPlayer:GetAttribute("SlideReadyAt")) or 0
+                if bodyState == "Sliding" or bodyState == "Slide" or slideCd > 0 or slideReady > workspace:GetServerTimeNow() then
                     pcall(function()
                         local curVel = myRoot.AssemblyLinearVelocity
                         local horiz = Vector3.new(curVel.X, 0, curVel.Z)
@@ -17018,47 +16652,119 @@ do
                         end
                     end)
                 end
+            elseif RS.tuningSlideRef and RS.origSlideSpeed then
+                pcall(function()
+                    for k, origV in pairs(RS.origSlideSpeed) do
+                        RS.tuningSlideRef[k] = origV
+                    end
+                end)
             end
 
-            -- 4. Auto-Tackle & Auto-Call Pass
             if ball and ball:IsA("BasePart") then
                 local distToBall = (ball.Position - myRoot.Position).Magnitude
-                local hasPossession = (possessor == myDribbleId) or (possessor == 0 and distToBall <= 5.0)
+                local hasPossession = (possessor == myDribbleId)
 
-                if ConfigState.AutoTackle and not hasPossession and possessor ~= 0 and possessor ~= myDribbleId then
-                    local tRange = tonumber(ConfigState.AutoTackleRange) or 18
-                    if distToBall <= tRange and (now - RS.lastTackleAt) >= 0.45 then
-                        RS.lastTackleAt = now
-                        pcall(function()
-                            local toBall = Vector3.new(ball.Position.X - myRoot.Position.X, 0, ball.Position.Z - myRoot.Position.Z)
-                            if toBall.Magnitude > 0.3 then
-                                local dir = toBall.Unit
-                                if ctrlMgr then ctrlMgr.FacingDirection = dir end
-                                local mult = ConfigState.TackleSpeedMult and math.clamp(tonumber(ConfigState.TackleSpeedVal) or 2.0, 1.0, 5.0) or 1.25
-                                myRoot.AssemblyLinearVelocity = dir * math.min(44 * mult, 140)
-                                triggerInputAction("Mannequin", "Slide", true)
-                                local rSlide = getRemote("RE/MannequinSlide")
-                                if rSlide then
-                                    rSlide:FireServer(dir, workspace:GetServerTimeNow())
+                -- 3. Working Ball Magnet (Loose Ball Pull + Pickup Claim)
+                if ConfigState.BallMagnet and not hasPossession and (possessor == 0 or possessor == nil) then
+                    local magRadius = math.clamp(tonumber(ConfigState.BallMagnetRadius) or 10.0, 3.0, 25.0)
+                    if distToBall <= magRadius and distToBall >= 0.4 then
+                        local releasedBy = ball:GetAttribute("ReleasedBy")
+                        local releasedAt = tonumber(ball:GetAttribute("ReleasedAt")) or 0
+                        local recentlyKickedByMe = (releasedBy == myDribbleId) and ((workspace:GetServerTimeNow() - releasedAt) < 0.65)
+                        if not recentlyKickedByMe and os.clock() >= (MystrixHub.ShotNext or 0) then
+                            pcall(function()
+                                local look = myRoot.CFrame.LookVector
+                                local flatLook = Vector3.new(look.X, 0, look.Z)
+                                if flatLook.Magnitude > 0.01 then flatLook = flatLook.Unit else flatLook = Vector3.new(0, 0, -1) end
+                                local targetSpot = myRoot.Position + flatLook * 1.65 - Vector3.new(0, 1.45, 0)
+                                local toFoot = targetSpot - ball.Position
+                                local pullDist = toFoot.Magnitude
+                                if pullDist > 0.25 then
+                                    local pullSpeed = math.clamp(pullDist * 18, 22, 95)
+                                    ball.AssemblyLinearVelocity = toFoot.Unit * pullSpeed
+                                    if pullDist <= math.min(magRadius * 0.65, 9.0) then
+                                        ball.CFrame = ball.CFrame:Lerp(CFrame.new(targetSpot), 0.38)
+                                    end
                                 end
-                                task.delay(0.1, function()
-                                    triggerInputAction("Mannequin", "Slide", false)
-                                end)
-                            end
-                        end)
+                            end)
+                        end
                     end
                 end
 
-                if ConfigState.AutoCallPass and not hasPossession and (now - RS.lastPassCallAt) >= 1.35 then
-                    RS.lastPassCallAt = now
-                    pcall(function()
-                        triggerInputAction("PassRequest", "CallForPass", true)
-                        local rPass = getRemote("RE/PassRequest")
-                        if rPass then rPass:FireServer() end
-                        task.delay(0.08, function()
-                            triggerInputAction("PassRequest", "CallForPass", false)
+                -- 4. Upgraded Smart Auto-Tackle (Opponent Carrier Check + Predictive Intercept + Scriptable Slide Binding)
+                if ConfigState.AutoTackle and not hasPossession and possessor ~= 0 and possessor ~= myDribbleId then
+                    local tRange = math.clamp(tonumber(ConfigState.AutoTackleRange) or 18, 5, 40)
+                    local bodyState = myChar:GetAttribute("BodyState")
+                    if (bodyState == nil or bodyState == "Animated") and (now - RS.lastTackleAt) >= 0.42 then
+                        local enemyCarrier = nil
+                        local enemyRoot = nil
+                        for _, model in ipairs(CollectionService:GetTagged("MannequinCharacter")) do
+                            if model ~= myChar and model:IsA("Model") and tonumber(model:GetAttribute("DribbleId")) == possessor then
+                                local tTeam = model:GetAttribute("Team")
+                                if myTeam == nil or tTeam == nil or tTeam ~= myTeam then
+                                    enemyCarrier = model
+                                    enemyRoot = model:FindFirstChild("Root") or model:FindFirstChild("HumanoidRootPart")
+                                end
+                                break
+                            end
+                        end
+
+                        if enemyCarrier and enemyRoot then
+                            local carrierVel = enemyRoot.AssemblyLinearVelocity or Vector3.zero
+                            local interceptPos = (ball.Position * 0.55 + enemyRoot.Position * 0.45) + Vector3.new(carrierVel.X, 0, carrierVel.Z) * 0.14
+                            local toTarget = Vector3.new(interceptPos.X - myRoot.Position.X, 0, interceptPos.Z - myRoot.Position.Z)
+                            local flatDist = toTarget.Magnitude
+                            if flatDist <= tRange and flatDist >= 0.8 then
+                                RS.lastTackleAt = now
+                                pcall(function()
+                                    local dir = toTarget.Unit
+                                    if ctrlMgr then
+                                        ctrlMgr.FacingDirection = dir
+                                        ctrlMgr.MovingDirection = dir
+                                    end
+                                    local mult = ConfigState.TackleSpeedMult and math.clamp(tonumber(ConfigState.TackleSpeedVal) or 2.0, 1.0, 5.0) or 1.25
+                                    myRoot.AssemblyLinearVelocity = Vector3.new(dir.X * math.min(44 * mult, 145), myRoot.AssemblyLinearVelocity.Y, dir.Z * math.min(44 * mult, 145))
+                                    fireScriptableAction("Slide", "Slide", 0.09)
+                                    fireScriptableAction("Mannequin", "Slide", 0.09)
+                                    local rSlide = getRemote("RE/MannequinSlide")
+                                    if rSlide then
+                                        rSlide:FireServer(dir, workspace:GetServerTimeNow())
+                                    end
+                                end)
+                            end
+                        end
+                    end
+                end
+
+                -- 5. Fixed Auto-Call Pass (Scriptable InputBinding + Teammate / Play Check + PassRequest Remote)
+                if ConfigState.AutoCallPass and not hasPossession and (now - RS.lastPassCallAt) >= 1.15 then
+                    local shouldCall = true
+                    if possessor ~= 0 and myTeam then
+                        -- Check if an opponent or teammate has the ball; call whenever teammate has it or ball is loose/friendly
+                        for _, model in ipairs(CollectionService:GetTagged("MannequinCharacter")) do
+                            if model ~= myChar and model:IsA("Model") and tonumber(model:GetAttribute("DribbleId")) == possessor then
+                                local tTeam = model:GetAttribute("Team")
+                                if tTeam and tTeam ~= myTeam then
+                                    shouldCall = false
+                                end
+                                break
+                            end
+                        end
+                    end
+                    if shouldCall then
+                        RS.lastPassCallAt = now
+                        pcall(function()
+                            fireScriptableAction("PassRequest", "CallForPass", 0.08)
+                            fireScriptableAction("CallForPass", "CallForPass", 0.08)
+                            fireScriptableAction("Pass", "PassRequest", 0.08)
+                            for _, rName in ipairs({ "RE/PassRequest", "RE/CallForPass", "RE/CallPass" }) do
+                                local rPass = getRemote(rName)
+                                if rPass then
+                                    pcall(function() rPass:FireServer() end)
+                                end
+                            end
                         end)
-                    end)
+                    end
                 end
             end
         end
@@ -17146,85 +16852,184 @@ do
         camera = camera or workspace.CurrentCamera
         if not camera then return end
 
-        local ball, ballView, ballVel, possessorId = updateLiveBallState(dt)
+        local ball = getLiveBall()
+        local myChar, myRoot = getLocalCharAndRoot()
 
-        -- Sync custom cosmetics on visible (drawn) character model every frame
-        local myChar = getLocalMannequin()
-        if ConfigState.OverrideSkins and myChar and (RS.equippedCosmetics.Hair or RS.equippedCosmetics.Hat or RS.equippedCosmetics.BootPattern) then
-            local drawnChar = getDrawnModel(myChar)
-            local drawnHead = drawnChar and drawnChar:FindFirstChild("Head")
-            if drawnChar then
-                for _, child in ipairs(drawnChar:GetChildren()) do
-                    if child:IsA("BasePart") then
-                        local cosType = child:GetAttribute("CoreXYZ_Cosmetic")
-                        if (cosType == "Hair" or cosType == "Hat") and drawnHead then
-                            local offset = child:GetAttribute("CoreXYZ_HeadOffset") or CFrame.new(0, 0.35, 0)
-                            child.CFrame = drawnHead.CFrame * offset
-                        elseif cosType == "Boots" then
-                            local footName = child:GetAttribute("CoreXYZ_FootTarget") or "LeftFoot"
-                            local footPart = drawnChar:FindFirstChild(footName)
-                            if footPart and footPart:IsA("BasePart") then
-                                local bOff = child:GetAttribute("Offset")
-                                if typeof(bOff) ~= "Vector3" then bOff = Vector3.new(0, -0.025, 0.036) end
-                                child.CFrame = footPart.CFrame * CFrame.new(bOff)
-                            end
-                        end
-                    end
+        -- 1. Ball ESP + Custom 3D Ball Trail + Neon Ball Glow
+        if ball and ball:IsA("BasePart") then
+            if ConfigState.BallEsp then
+                if not RS.ballHighlight or not RS.ballHighlight.Parent then
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "CoreXYZ_BallHL"
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.FillTransparency = 0.35
+                    hl.OutlineTransparency = 0.0
+                    hl.Parent = UI.HighlightContainer or UI.ScreenGui
+                    RS.ballHighlight = hl
                 end
-            end
-        end
+                RS.ballHighlight.Adornee = ball
+                RS.ballHighlight.FillColor = ConfigState.BallEspColor
+                RS.ballHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                RS.ballHighlight.Enabled = true
 
-        -- 1. Ball ESP
-        local targetBallPart = (ballView and ballView:IsA("BasePart") and ballView) or (ball and ball:IsA("BasePart") and ball)
-        if ConfigState.BallEsp and targetBallPart then
-            if not RS.ballHighlight or not RS.ballHighlight.Parent then
-                local hl = Instance.new("Highlight")
-                hl.Name = "CoreXYZ_BallHighlight"
-                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                hl.FillTransparency = 0.42
-                hl.OutlineTransparency = 0
-                hl.Parent = UI.HighlightContainer or UI.ScreenGui
-                RS.ballHighlight = hl
-            end
-            RS.ballHighlight.Adornee = targetBallPart
-            RS.ballHighlight.FillColor = ConfigState.BallEspColor
-            RS.ballHighlight.OutlineColor = Color3.new(1, 1, 1)
-            RS.ballHighlight.Enabled = true
+                if not RS.ballBillboard or not RS.ballBillboard.Parent then
+                    local bb = Instance.new("BillboardGui")
+                    bb.Name = "CoreXYZ_BallTag"
+                    bb.Size = UDim2.fromOffset(140, 32)
+                    bb.StudsOffset = Vector3.new(0, 2.5, 0)
+                    bb.AlwaysOnTop = true
+                    bb.Parent = UI.ScreenGui
 
-            local sp, onScreen = camera:WorldToViewportPoint(targetBallPart.Position)
-            if onScreen and sp.Z > 0 then
-                local r = math.clamp(1600 / math.max(sp.Z, 5), 10, 65)
-                local tl = Vector2.new(sp.X - r, sp.Y - r)
-                local tr = Vector2.new(sp.X + r, sp.Y - r)
-                local br = Vector2.new(sp.X + r, sp.Y + r)
-                local bl = Vector2.new(sp.X - r, sp.Y + r)
-                drawLineFrame(RS.ballBoxLines[1], tl, tr, ConfigState.BallEspColor, 1.6)
-                drawLineFrame(RS.ballBoxLines[2], tr, br, ConfigState.BallEspColor, 1.6)
-                drawLineFrame(RS.ballBoxLines[3], br, bl, ConfigState.BallEspColor, 1.6)
-                drawLineFrame(RS.ballBoxLines[4], bl, tl, ConfigState.BallEspColor, 1.6)
-                if RS.ballLabel then
-                    RS.ballLabel.Position = UDim2.fromOffset(sp.X, sp.Y - r - 2)
-                    RS.ballLabel.TextColor3 = ConfigState.BallEspColor
-                    RS.ballLabel.Text = string.format("BALL [%d st/s]", math.floor(ballVel.Magnitude))
-                    RS.ballLabel.Visible = true
+                    local lbl = Instance.new("TextLabel")
+                    lbl.Size = UDim2.fromScale(1, 1)
+                    lbl.BackgroundTransparency = 1
+                    lbl.Font = Enum.Font.Code
+                    lbl.TextSize = 12
+                    lbl.TextStrokeTransparency = 0.15
+                    lbl.TextColor3 = ConfigState.BallEspColor
+                    lbl.Parent = bb
+
+                    RS.ballBillboard = bb
+                    RS.ballTitleLabel = lbl
+                end
+                local dist = myRoot and math.floor((ball.Position - myRoot.Position).Magnitude) or 0
+                local spd = math.floor(ball.AssemblyLinearVelocity.Magnitude)
+                RS.ballBillboard.Adornee = ball
+                RS.ballBillboard.Enabled = true
+                RS.ballTitleLabel.TextColor3 = ConfigState.BallEspColor
+                RS.ballTitleLabel.Text = string.format("BALL [%dst | %d s/s]", dist, spd)
+            else
+                if RS.ballHighlight then RS.ballHighlight.Enabled = false end
+                if RS.ballBillboard then RS.ballBillboard.Enabled = false end
+            end
+
+            -- Custom 3D Ball Trail
+            if ConfigState.CustomBallTrail then
+                local halfW = math.clamp((tonumber(ConfigState.BallTrailWidth) or 1.6) * 0.5, 0.2, 2.5)
+                if not (RS.ballTrailAtt0 and RS.ballTrailAtt0.Parent == ball) then
+                    if RS.ballTrailAtt0 then pcall(function() RS.ballTrailAtt0:Destroy() end) end
+                    local a0 = Instance.new("Attachment")
+                    a0.Name = "CoreXYZ_TrailAtt0"
+                    a0.Parent = ball
+                    RS.ballTrailAtt0 = a0
+                end
+                if not (RS.ballTrailAtt1 and RS.ballTrailAtt1.Parent == ball) then
+                    if RS.ballTrailAtt1 then pcall(function() RS.ballTrailAtt1:Destroy() end) end
+                    local a1 = Instance.new("Attachment")
+                    a1.Name = "CoreXYZ_TrailAtt1"
+                    a1.Parent = ball
+                    RS.ballTrailAtt1 = a1
+                end
+                RS.ballTrailAtt0.Position = Vector3.new(0, halfW, 0)
+                RS.ballTrailAtt1.Position = Vector3.new(0, -halfW, 0)
+
+                if not (RS.ballTrail and RS.ballTrail.Parent == ball) then
+                    if RS.ballTrail then pcall(function() RS.ballTrail:Destroy() end) end
+                    local tr = Instance.new("Trail")
+                    tr.Name = "CoreXYZ_CustomBallTrail"
+                    tr.FaceCamera = true
+                    tr.LightEmission = 0.85
+                    tr.LightInfluence = 0.15
+                    tr.MinLength = 0.05
+                    tr.WidthScale = NumberSequence.new({
+                        NumberSequenceKeypoint.new(0, 1),
+                        NumberSequenceKeypoint.new(0.65, 0.65),
+                        NumberSequenceKeypoint.new(1, 0.05),
+                    })
+                    tr.Transparency = NumberSequence.new({
+                        NumberSequenceKeypoint.new(0, 0.06),
+                        NumberSequenceKeypoint.new(0.6, 0.32),
+                        NumberSequenceKeypoint.new(1, 1.0),
+                    })
+                    tr.Parent = ball
+                    RS.ballTrail = tr
+                end
+
+                local tr = RS.ballTrail
+                tr.Attachment0 = RS.ballTrailAtt0
+                tr.Attachment1 = RS.ballTrailAtt1
+                tr.Lifetime = math.clamp(tonumber(ConfigState.BallTrailLifetime) or 0.65, 0.15, 2.5)
+                tr.Enabled = true
+
+                local baseCol = ConfigState.BallTrailColor or Color3.fromRGB(43, 255, 172)
+                local style = ConfigState.BallTrailStyle or "Solid"
+                if style == "Rainbow" then
+                    local h1 = (now * 0.55) % 1
+                    local h2 = (h1 + 0.33) % 1
+                    local h3 = (h1 + 0.66) % 1
+                    tr.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, Color3.fromHSV(h1, 0.88, 1)),
+                        ColorSequenceKeypoint.new(0.5, Color3.fromHSV(h2, 0.88, 1)),
+                        ColorSequenceKeypoint.new(1, Color3.fromHSV(h3, 0.88, 1)),
+                    })
+                elseif style == "Pulse" then
+                    local pulse = 0.5 + 0.5 * math.sin(now * 6.0)
+                    local c2 = baseCol:Lerp(Color3.fromRGB(255, 255, 255), pulse * 0.7)
+                    tr.Color = ColorSequence.new(c2, baseCol)
+                elseif style == "Fade" then
+                    local dark = Color3.new(baseCol.R * 0.25, baseCol.G * 0.25, baseCol.B * 0.25)
+                    tr.Color = ColorSequence.new(baseCol, dark)
+                else
+                    tr.Color = ColorSequence.new(baseCol)
                 end
             else
-                for i = 1, 4 do RS.ballBoxLines[i].Visible = false end
-                if RS.ballLabel then RS.ballLabel.Visible = false end
+                if RS.ballTrail then RS.ballTrail.Enabled = false end
+            end
+
+            -- Neon Ball Glow
+            if ConfigState.NeonBallGlow then
+                local gCol = ConfigState.NeonBallGlowColor or Color3.fromRGB(43, 255, 172)
+                if not (RS.ballGlowLight and RS.ballGlowLight.Parent == ball) then
+                    if RS.ballGlowLight then pcall(function() RS.ballGlowLight:Destroy() end) end
+                    local pl = Instance.new("PointLight")
+                    pl.Name = "CoreXYZ_BallGlowLight"
+                    pl.Brightness = 3.2
+                    pl.Range = 16
+                    pl.Shadows = false
+                    pl.Parent = ball
+                    RS.ballGlowLight = pl
+                end
+                RS.ballGlowLight.Color = gCol
+                RS.ballGlowLight.Enabled = true
+
+                if not ConfigState.BallEsp then
+                    if not (RS.ballGlowHighlight and RS.ballGlowHighlight.Parent) then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "CoreXYZ_BallNeonHL"
+                        hl.DepthMode = Enum.HighlightDepthMode.Occluded
+                        hl.FillTransparency = 0.2
+                        hl.OutlineTransparency = 0.0
+                        hl.Parent = UI.HighlightContainer or UI.ScreenGui
+                        RS.ballGlowHighlight = hl
+                    end
+                    RS.ballGlowHighlight.Adornee = ball
+                    RS.ballGlowHighlight.FillColor = gCol
+                    RS.ballGlowHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    RS.ballGlowHighlight.Enabled = true
+                elseif RS.ballGlowHighlight then
+                    RS.ballGlowHighlight.Enabled = false
+                end
+            else
+                if RS.ballGlowLight then RS.ballGlowLight.Enabled = false end
+                if RS.ballGlowHighlight then RS.ballGlowHighlight.Enabled = false end
             end
         else
             if RS.ballHighlight then RS.ballHighlight.Enabled = false end
-            for i = 1, 4 do RS.ballBoxLines[i].Visible = false end
-            if RS.ballLabel then RS.ballLabel.Visible = false end
+            if RS.ballBillboard then RS.ballBillboard.Enabled = false end
+            if RS.ballTrail then RS.ballTrail.Enabled = false end
+            if RS.ballGlowLight then RS.ballGlowLight.Enabled = false end
+            if RS.ballGlowHighlight then RS.ballGlowHighlight.Enabled = false end
         end
 
-        -- 2. Mannequin Player ESP & 2D Box
+        -- 2. Player ESP & 2D Box (Inverts color when player possesses ball!)
+        local possessorId = (ball and tonumber(ball:GetAttribute("Possessor"))) or 0
         local activeModels = {}
+
         if ConfigState.PlayerEsp or ConfigState.Player2DBox then
             for _, child in ipairs(workspace:GetChildren()) do
-                if child:IsA("Model") and child ~= myChar and child:GetAttribute("RigType") == "Mannequin" then
-                    local root = getMannequinRoot(child)
-                    if root then
+                if child:IsA("Model") and child ~= myChar and (child:GetAttribute("DribbleId") ~= nil or child:GetAttribute("Team") ~= nil) then
+                    local root = child:FindFirstChild("Root") or child:FindFirstChild("HumanoidRootPart") or child.PrimaryPart
+                    if root and root:IsA("BasePart") then
                         activeModels[child] = true
                         local entry = RS.playerEspPool[child]
                         if not entry then
@@ -17346,7 +17151,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- TAB 2: MAIN (LEFT: SILENT AIM & SHOOTING/POWER | RIGHT: TRICKS, DRIBBLE & BALL REACH)
+-- TAB 2: MAIN (LEFT: SILENT AIM & SHOOTING/POWER | RIGHT: TRICKS, DRIBBLE & REACH/MAGNET)
 --------------------------------------------------------------------------------
 do
     local MystrixHub = getgenv().MystrixHub
@@ -17358,6 +17163,8 @@ do
     createToggle(silentSec, "Silent Aim", false, function(val)
         local SA = getgenv().MystrixSilentAim
         local forced = MystrixHub.Force ~= nil and MystrixHub.Force.Active == true
+        -- Internally enable Only Goal Shots whenever Silent Aim is ON
+        SA.OnlyGoalShots = true
         if val then
             local ok = MystrixHub.Functions.InstallSilentAim()
             pcall(MystrixHub.Functions.InstallPreviewSpoof)
@@ -17375,35 +17182,21 @@ do
     end)
 
     local SILENT_AIM_TARGETS = {
-        "Auto",
+        "Smart",
         "Top Right Corner",
-        "Bottom Right Corner",
         "Top Left Corner",
+        "Bottom Right Corner",
         "Bottom Left Corner",
         "Top Center",
         "Bottom Center",
-        "Upper Right",
-        "Upper Left",
-        "Lower Right",
-        "Lower Left",
-        "Right Post",
-        "Left Post",
-        "Middle",
     }
 
-    createMultiDropdown(silentSec, "Silent Aim Target", SILENT_AIM_TARGETS, { "Auto" }, 14, function(selectedList)
+    createMultiDropdown(silentSec, "Silent Aim Target", SILENT_AIM_TARGETS, { "Smart" }, #SILENT_AIM_TARGETS, function(selectedList)
         MystrixHub.Functions.SetSilentTargets(selectedList)
     end)
 
     createSlider(silentSec, "Silent Aim Range", 20, 300, 300, 1, " st", function(val)
         getgenv().MystrixSilentAim.Range = val
-    end)
-
-    createToggle(silentSec, "Only Goal Shots", SilentAimState.OnlyGoalShots ~= false, function(val)
-        local SA = getgenv().MystrixSilentAim
-        SA.OnlyGoalShots = (val == true)
-        SA.Pending = nil
-        SA.StrikeCache = nil
     end)
 
     createSlider(silentSec, "Goal Shot Tolerance", 0, 100, 50, 1, "%", function(val)
@@ -17441,6 +17234,53 @@ do
         end
     end)
 
+    createToggle(shootSec, "Instant Full Kick Charge", false, function(val)
+        ConfigState.InstantFullCharge = val
+        MystrixHub.Functions.SetInstantKickCharge(val)
+    end)
+
+    createToggle(shootSec, "Shoot Power Multiplier", false, function(val)
+        ConfigState.ShootPowerMult = val
+        local PC = getgenv().MystrixPowerCurve
+        PC.PowerMultEnabled = val
+        pcall(MystrixHub.Functions.InstallSilentAim)
+        MystrixHub.ShotCache = {}
+        MystrixHub.PreviewCache = nil
+        SilentAimState.Pending = nil
+        SilentAimState.StrikeCache = nil
+    end)
+
+    createSlider(shootSec, "Power Multiplier", 1.0, 2.5, 1.35, 0.05, "x", function(val)
+        ConfigState.ShootPowerMultVal = val
+        local PC = getgenv().MystrixPowerCurve
+        PC.PowerMult = val
+        MystrixHub.ShotCache = {}
+        MystrixHub.PreviewCache = nil
+        SilentAimState.Pending = nil
+        SilentAimState.StrikeCache = nil
+    end)
+
+    createToggle(shootSec, "Curve Strength Multiplier", false, function(val)
+        ConfigState.CurveStrengthMult = val
+        local PC = getgenv().MystrixPowerCurve
+        PC.CurveMultEnabled = val
+        pcall(MystrixHub.Functions.InstallSilentAim)
+        MystrixHub.ShotCache = {}
+        MystrixHub.PreviewCache = nil
+        SilentAimState.Pending = nil
+        SilentAimState.StrikeCache = nil
+    end)
+
+    createSlider(shootSec, "Curve Multiplier", 1.0, 3.0, 1.50, 0.05, "x", function(val)
+        ConfigState.CurveStrengthMultVal = val
+        local PC = getgenv().MystrixPowerCurve
+        PC.CurveMult = val
+        MystrixHub.ShotCache = {}
+        MystrixHub.PreviewCache = nil
+        SilentAimState.Pending = nil
+        SilentAimState.StrikeCache = nil
+    end)
+
     createToggle(shootSec, "Auto Shoot", false, function(val)
         local AS = getgenv().MystrixAutoShoot
         if val then
@@ -17461,7 +17301,7 @@ do
         getgenv().MystrixAutoShoot.Range = val
     end)
 
-    -- RIGHT COLUMN — SECTION 1: TRICKS
+    -- RIGHT COLUMN — SECTION 1: TRICKS (A-Z SORTED)
     local tricksSec = UI.createSectionBox(MainTab, "Tricks", "Right")
 
     createMultiDropdown(tricksSec, "Trick Select", MystrixHub.TrickOptions, { "Auto" }, #MystrixHub.TrickOptions, function(selectedList)
@@ -17525,8 +17365,8 @@ do
         getgenv().MystrixAutoDribble.EvadeStrength = val / 100
     end)
 
-    -- RIGHT COLUMN — SECTION 3: BALL REACH
-    local reachSec = UI.createSectionBox(MainTab, "Ball Reach", "Right")
+    -- RIGHT COLUMN — SECTION 3: BALL REACH & MAGNET
+    local reachSec = UI.createSectionBox(MainTab, "Ball Reach & Magnet", "Right")
 
     createToggle(reachSec, "Extended Ball Reach", false, function(val)
         local R = getgenv().MystrixReach
@@ -17540,32 +17380,34 @@ do
         getgenv().MystrixReach.Add = val
     end)
 
-    createToggle(reachSec, "Auto Pickup", false, function(val)
-        local AP = getgenv().MystrixAutoPickup
-        AP.Enabled = val
-        if val then
-            MystrixHub.Functions.StartAutoPickup()
-        else
-            MystrixHub.Functions.StopAutoPickup()
-        end
+    createToggle(reachSec, "Ball Magnet", false, function(val)
+        ConfigState.BallMagnet = val
+        local BM = getgenv().MystrixBallMagnet
+        BM.Enabled = val
+        pcall(MystrixHub.Functions.InstallTackleHitbox)
+        pcall(MystrixHub.Functions.ApplyTackleHitbox)
     end)
 
-    createSlider(reachSec, "Pickup Range", 5, 60, 25, 1, " st", function(val)
-        getgenv().MystrixAutoPickup.Range = val
+    createSlider(reachSec, "Magnet Radius", 3.0, 25.0, 10.0, 0.5, " st", function(val)
+        ConfigState.BallMagnetRadius = val
+        local BM = getgenv().MystrixBallMagnet
+        BM.Radius = val
+        pcall(MystrixHub.Functions.ApplyTackleHitbox)
     end)
 end
 
 --------------------------------------------------------------------------------
--- TAB 3: DEFENCE (LEFT: DEFENSE & PASS TARGETING + PLAYER & SPRINT | RIGHT: MODIFIER)
+-- TAB 3: DEFENCE (LEFT: DEFENSE & GUARD + PLAYER & SPRINT | RIGHT: MODIFIER)
 --------------------------------------------------------------------------------
 do
     local MystrixHub = getgenv().MystrixHub
 
-    -- LEFT COLUMN — SECTION 1: DEFENSE & PASS TARGETING
-    local defSec = UI.createSectionBox(DefenceTab, "Defense & Pass Targeting", "Left")
+    -- LEFT COLUMN — SECTION 1: DEFENSE & GUARD
+    local defSec = UI.createSectionBox(DefenceTab, "Defense & Guard", "Left")
 
     createToggle(defSec, "Auto Guard", false, function(val)
         local GD = getgenv().MystrixGuard
+        GD.Predict = 0
         GD.Enabled = val
         if val then
             MystrixHub.Functions.StartGuard()
@@ -17578,28 +17420,12 @@ do
         getgenv().MystrixGuard.Distance = val
     end)
 
-    createSlider(defSec, "Guard Prediction", 0.10, 1.00, 0.35, 0.05, "s", function(val)
-        getgenv().MystrixGuard.Predict = val
-    end)
-
-    createSlider(defSec, "Guard Engage Range", 8, 45, 22, 1, " st", function(val)
+    createSlider(defSec, "Guard Range", 8, 45, 22, 1, " st", function(val)
         getgenv().MystrixGuard.Engage = val
     end)
 
     createToggle(defSec, "Ignore Teammates", true, function(val)
         getgenv().MystrixGuard.IgnoreTeammates = val
-    end)
-
-    createToggle(defSec, "Pass Targeting", false, function(val)
-        if val and not MystrixHub.Functions.InstallSilentAim() then
-            MystrixHub.Functions.SetTargeting(false)
-            return
-        end
-        MystrixHub.Functions.SetTargeting(val)
-    end)
-
-    createButton(defSec, "Cycle Pass Target", function()
-        MystrixHub.Functions.CycleTarget()
     end)
 
     -- LEFT COLUMN — SECTION 2: PLAYER & SPRINT
@@ -17644,14 +17470,6 @@ do
         else
             MystrixHub.Functions.StopNoCooldown()
         end
-    end)
-
-    createToggle(plrSec, "Walkspeed", false, function(val)
-        ConfigState.Walkspeed = val
-    end)
-
-    createSlider(plrSec, "Walkspeed Slider", 16, 85, 32, 1, "", function(val)
-        ConfigState.WalkspeedVal = val
     end)
 
     createToggle(plrSec, "Jump Power", false, function(val)
@@ -17716,7 +17534,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- TAB 4: VISUALS (LEFT: ESP & FIELD OVERLAYS | RIGHT: BALL TRAJECTORY)
+-- TAB 4: VISUALS (LEFT: ESP & FIELD OVERLAYS | RIGHT: BALL TRAJECTORY & TRAIL)
 --------------------------------------------------------------------------------
 do
     local MystrixHub = getgenv().MystrixHub
@@ -17771,6 +17589,32 @@ do
             getgenv().MystrixTracker.Rate = val
         end
     end)
+
+    local trailSec = UI.createSectionBox(VisualsTab, "Ball Trail Customisation", "Right")
+
+    createToggle(trailSec, "Custom Ball Trail", false, function(val)
+        ConfigState.CustomBallTrail = val
+    end, function(col)
+        ConfigState.BallTrailColor = col
+    end, ConfigState.BallTrailColor)
+
+    createDropdown(trailSec, "Trail Style", { "Solid", "Rainbow", "Pulse", "Fade" }, "Solid", function(opt)
+        ConfigState.BallTrailStyle = opt
+    end)
+
+    createSlider(trailSec, "Trail Lifetime", 0.15, 2.50, 0.65, 0.05, "s", function(val)
+        ConfigState.BallTrailLifetime = val
+    end)
+
+    createSlider(trailSec, "Trail Width", 0.5, 4.0, 1.6, 0.1, " st", function(val)
+        ConfigState.BallTrailWidth = val
+    end)
+
+    createToggle(trailSec, "Neon Ball Glow", false, function(val)
+        ConfigState.NeonBallGlow = val
+    end, function(col)
+        ConfigState.NeonBallGlowColor = col
+    end, ConfigState.NeonBallGlowColor)
 end
 
 --------------------------------------------------------------------------------
@@ -17813,14 +17657,14 @@ do
         ConfigState.DataOverallToggle = val
         if State.RS and State.RS.syncPlayerDataOverrides then State.RS.syncPlayerDataOverrides() end
     end)
-    local ovrBox = createTextInputRow(dataSec, "Overall Textbox", "e.g. 99", "99", function(txt)
+    local overallBox = createTextInputRow(dataSec, "Overall Textbox", "e.g. 99", "99", function(txt)
         ConfigState.DataOverallVal = txt
         if State.RS and State.RS.syncPlayerDataOverrides then State.RS.syncPlayerDataOverrides() end
     end)
-    if ovrBox and ovrBox.GetPropertyChangedSignal then
+    if overallBox and overallBox.GetPropertyChangedSignal then
         pcall(function()
-            ovrBox:GetPropertyChangedSignal("Text"):Connect(function()
-                ConfigState.DataOverallVal = ovrBox.Text
+            overallBox:GetPropertyChangedSignal("Text"):Connect(function()
+                ConfigState.DataOverallVal = overallBox.Text
                 if ConfigState.DataOverallToggle and State.RS and State.RS.syncPlayerDataOverrides then
                     State.RS.syncPlayerDataOverrides()
                 end
@@ -17851,14 +17695,14 @@ do
         ConfigState.DataAssistsToggle = val
         if State.RS and State.RS.syncPlayerDataOverrides then State.RS.syncPlayerDataOverrides() end
     end)
-    local astBox = createTextInputRow(dataSec, "Assists Textbox", "e.g. 500", "500", function(txt)
+    local assistsBox = createTextInputRow(dataSec, "Assists Textbox", "e.g. 999", "999", function(txt)
         ConfigState.DataAssistsVal = txt
         if State.RS and State.RS.syncPlayerDataOverrides then State.RS.syncPlayerDataOverrides() end
     end)
-    if astBox and astBox.GetPropertyChangedSignal then
+    if assistsBox and assistsBox.GetPropertyChangedSignal then
         pcall(function()
-            astBox:GetPropertyChangedSignal("Text"):Connect(function()
-                ConfigState.DataAssistsVal = astBox.Text
+            assistsBox:GetPropertyChangedSignal("Text"):Connect(function()
+                ConfigState.DataAssistsVal = assistsBox.Text
                 if ConfigState.DataAssistsToggle and State.RS and State.RS.syncPlayerDataOverrides then
                     State.RS.syncPlayerDataOverrides()
                 end
@@ -17866,18 +17710,18 @@ do
         end)
     end
 
-    createToggle(dataSec, "Matches Played", false, function(val)
+    createToggle(dataSec, "Matches", false, function(val)
         ConfigState.DataMatchesToggle = val
         if State.RS and State.RS.syncPlayerDataOverrides then State.RS.syncPlayerDataOverrides() end
     end)
-    local matBox = createTextInputRow(dataSec, "Matches Played Textbox", "e.g. 250", "250", function(txt)
+    local matchesBox = createTextInputRow(dataSec, "Matches Textbox", "e.g. 500", "500", function(txt)
         ConfigState.DataMatchesVal = txt
         if State.RS and State.RS.syncPlayerDataOverrides then State.RS.syncPlayerDataOverrides() end
     end)
-    if matBox and matBox.GetPropertyChangedSignal then
+    if matchesBox and matchesBox.GetPropertyChangedSignal then
         pcall(function()
-            matBox:GetPropertyChangedSignal("Text"):Connect(function()
-                ConfigState.DataMatchesVal = matBox.Text
+            matchesBox:GetPropertyChangedSignal("Text"):Connect(function()
+                ConfigState.DataMatchesVal = matchesBox.Text
                 if ConfigState.DataMatchesToggle and State.RS and State.RS.syncPlayerDataOverrides then
                     State.RS.syncPlayerDataOverrides()
                 end
