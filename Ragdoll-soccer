@@ -10892,16 +10892,97 @@ function MystrixHub.Functions.CapabilityReport()
     warn("[Core.xyz] missing: " .. (#missing > 0 and table.concat(missing, ", ") or "none") .. " | device scale: " .. string.format("%.2f", scale) .. " | touch: " .. tostring(touch))
 end
 
+getgenv().MystrixFakeShot = getgenv().MystrixFakeShot or { Enabled = false, WindupUntil = 0, BaitDir = nil, BaitSign = 1 }
+
+function MystrixHub.Functions.FakeShotBaitDir(from, realDir)
+    local F = MystrixHub.Functions
+    local FS = getgenv().MystrixFakeShot
+    local goal = F.SilentAimGoal()
+    if goal and typeof(from) == "Vector3" and (from.X - goal.x) * goal.out < 0 then
+        local realZ = nil
+        local cache = MystrixHub.PreviewCache
+        if cache then
+            for _, entry in pairs(cache) do
+                if entry and typeof(entry.vel) == "Vector3" and entry.goalX == goal.x then
+                    local dx = goal.x - from.X
+                    if math.abs(entry.vel.X) > 1 then
+                        local t = math.clamp(dx / entry.vel.X, 0.05, 2.5)
+                        realZ = from.Z + entry.vel.Z * t
+                        break
+                    end
+                end
+            end
+        end
+        if not realZ and typeof(realDir) == "Vector3" and math.abs(realDir.X) > 0.05 then
+            local t = math.clamp((goal.x - from.X) / realDir.X, 0, 120)
+            realZ = from.Z + realDir.Z * t
+        end
+        local keeper = F.SilentAimKeeper and F.SilentAimKeeper(goal) or nil
+        local baitSign = 1
+        if realZ then
+            baitSign = (realZ >= goal.z) and -1 or 1
+        elseif keeper then
+            baitSign = (keeper.Z >= goal.z) and 1 or -1
+        else
+            baitSign = -(FS.BaitSign or 1)
+        end
+        FS.BaitSign = baitSign
+        local baitZ = goal.z + baitSign * math.max((goal.half or 14) * 1.15, 14)
+        local dx, dz = goal.x - from.X, baitZ - from.Z
+        local m = math.sqrt(dx * dx + dz * dz)
+        if m > 0.001 then
+            return Vector3.new(dx / m, 0, dz / m)
+        end
+    end
+    if typeof(realDir) == "Vector3" then
+        local ang = math.rad(42) * (FS.BaitSign or 1)
+        FS.BaitSign = -(FS.BaitSign or 1)
+        local c, s = math.cos(ang), math.sin(ang)
+        local rx = realDir.X * c - realDir.Z * s
+        local rz = realDir.X * s + realDir.Z * c
+        local m = math.sqrt(rx * rx + rz * rz)
+        if m > 0.001 then
+            return Vector3.new(rx / m, 0, rz / m)
+        end
+    end
+    return realDir
+end
+
 function MystrixHub.Functions.PlanSyncCopy(plan)
     local state = getgenv().MystrixSilentAim
-    if not state.Enabled or state.PlanSync == false then return nil end
+    local fs = getgenv().MystrixFakeShot
+    local saOn = state.Enabled and state.PlanSync ~= false
+    local fsOn = fs and fs.Enabled == true
+    if not (saOn or fsOn) then return nil end
     if type(plan) ~= "table"
-        or plan.hold == true
         or typeof(plan.ball) ~= "Vector3"
         or type(plan.family) ~= "string"
-        or plan.power == nil
-        or plan.leg == nil
         or typeof(plan.dir) ~= "Vector3" then
+        return nil
+    end
+    -- Wind-up packet (plan.hold == true): When Fake Shot is enabled, send the opposite bait corner direction to the server & rotate character!
+    if plan.hold == true then
+        if not fsOn then return nil end
+        local okB, baitDir = pcall(MystrixHub.Functions.FakeShotBaitDir, plan.ball, plan.dir)
+        if not okB or typeof(baitDir) ~= "Vector3" then return nil end
+        fs.BaitDir = baitDir
+        fs.WindupUntil = os.clock() + 0.35
+        pcall(function()
+            local char = LocalPlayer.Character
+            local cm = char and char:FindFirstChildOfClass("ControllerManager")
+            if cm then
+                cm.FacingDirection = baitDir
+            end
+        end)
+        local copy = table.clone(plan)
+        copy.dir = baitDir
+        return copy
+    end
+    -- Strike release packet (plan.hold ~= true): clear windup feint and fire real shot!
+    if fs then
+        fs.WindupUntil = 0
+    end
+    if not saOn or plan.power == nil or plan.leg == nil then
         return nil
     end
     local ok, vel, spin = pcall(MystrixHub.Functions.SilentAimPlan, plan)
@@ -14869,7 +14950,8 @@ function MystrixHub.Functions.InstallPlanSync()
                 local H = getgenv().MystrixHub
                 local FF = H and H.Functions
                 local pc = getgenv().MystrixPowerCurve
-                local on = getgenv().MystrixSilentAim.Enabled or (pc and (pc.PowerMultEnabled or pc.CurveMultEnabled))
+                local fs = getgenv().MystrixFakeShot
+                local on = getgenv().MystrixSilentAim.Enabled or (fs and fs.Enabled)
                 if not (FF and on) then
                     setMethod(method)
                     return old(self, ...)
@@ -14896,7 +14978,8 @@ function MystrixHub.Functions.InstallPlanSync()
                 local H = getgenv().MystrixHub
                 local FF = H and H.Functions
                 local pc = getgenv().MystrixPowerCurve
-                if FF and (getgenv().MystrixSilentAim.Enabled or (pc and (pc.PowerMultEnabled or pc.CurveMultEnabled))) then
+                local fs = getgenv().MystrixFakeShot
+                if FF and (getgenv().MystrixSilentAim.Enabled or (fs and fs.Enabled)) then
                     local okc, copy = pcall(FF.PlanSyncCopy, (...))
                     if okc and copy then
                         return old(self, copy, select(2, ...))
@@ -16553,6 +16636,14 @@ do
         local myChar, myRoot, ctrlMgr = getLocalCharAndRoot()
         local ball = getLiveBall()
 
+        -- Fake Shot Wind-Up Visual Body Feint
+        local FS = getgenv().MystrixFakeShot
+        if FS and FS.Enabled and ctrlMgr and FS.BaitDir and now < (FS.WindupUntil or 0) then
+            pcall(function()
+                ctrlMgr.FacingDirection = FS.BaitDir
+            end)
+        end
+
 
 
         if myChar and myRoot then
@@ -17199,6 +17290,17 @@ do
     createToggle(shootSec, "Instant Full Kick Charge", false, function(val)
         ConfigState.InstantFullCharge = val
         MystrixHub.Functions.SetInstantKickCharge(val)
+    end)
+
+    createToggle(shootSec, "Fake Shot", false, function(val)
+        ConfigState.FakeShot = val
+        local FS = getgenv().MystrixFakeShot
+        FS.Enabled = val
+        FS.WindupUntil = 0
+        if val then
+            pcall(MystrixHub.Functions.InstallSilentAim)
+            pcall(MystrixHub.Functions.InstallPlanSync)
+        end
     end)
 
     createToggle(shootSec, "Auto Shoot", false, function(val)
