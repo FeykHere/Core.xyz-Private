@@ -10900,10 +10900,7 @@ end
 
 function MystrixHub.Functions.PlanSyncCopy(plan)
     local state = getgenv().MystrixSilentAim
-    local pc = getgenv().MystrixPowerCurve
-    local saOn = state.Enabled and state.PlanSync ~= false
-    local pcOn = pc and (pc.PowerMultEnabled or pc.CurveMultEnabled)
-    if not (saOn or pcOn) then return nil end
+    if not state.Enabled or state.PlanSync == false then return nil end
     if type(plan) ~= "table"
         or plan.hold == true
         or typeof(plan.ball) ~= "Vector3"
@@ -10913,39 +10910,20 @@ function MystrixHub.Functions.PlanSyncCopy(plan)
         or typeof(plan.dir) ~= "Vector3" then
         return nil
     end
-    if saOn then
-        local ok, vel, spin = pcall(MystrixHub.Functions.SilentAimPlan, plan)
-        if ok and vel then
-            vel, spin = MystrixHub.Functions.ApplyPowerCurveVel(vel, spin, plan.family, true)
-            local copy = table.clone(plan)
-            if (pc and (pc.PowerMultEnabled or pc.InstantCharge)) or (getgenv().MystrixMaxPower and getgenv().MystrixMaxPower.Enabled) then
-                copy.power = 1
-            end
-            local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
-            if m > 0.001 then
-                copy.dir = Vector3.new(vel.X / m, 0, vel.Z / m)
-            end
-            if typeof(plan.vel) == "Vector3" then
-                copy.vel = vel
-            end
-            if typeof(plan.spin) == "Vector3" and spin then
-                copy.spin = spin
-            end
-            return copy
-        end
+    local ok, vel, spin = pcall(MystrixHub.Functions.SilentAimPlan, plan)
+    if not ok or not vel then return nil end
+    local copy = table.clone(plan)
+    local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
+    if m > 0.001 then
+        copy.dir = Vector3.new(vel.X / m, 0, vel.Z / m)
     end
-    if pcOn then
-        local copy = table.clone(plan)
-        if pc.PowerMultEnabled and type(copy.power) == "number" then
-            local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
-            copy.power = math.clamp(math.max(copy.power * pMult, 0.85), 0, 1)
-        end
-        if typeof(copy.vel) == "Vector3" or typeof(copy.spin) == "Vector3" then
-            copy.vel, copy.spin = MystrixHub.Functions.ApplyPowerCurveVel(copy.vel, copy.spin, plan.family, false)
-        end
-        return copy
+    if typeof(plan.vel) == "Vector3" then
+        copy.vel = vel
     end
-    return nil
+    if typeof(plan.spin) == "Vector3" and spin then
+        copy.spin = spin
+    end
+    return copy
 end
 
 function MystrixHub.Functions.MannequinSnapshot()
@@ -14393,14 +14371,11 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
     local pitchY = gy - radius
     local fam = SA.Families[family]
     local cap = 125
-    local PC = getgenv().MystrixPowerCurve
-    local pMult = (PC and PC.PowerMultEnabled) and math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5) or 1.0
-    local pRatio = math.clamp((pMult - 1.0) / 1.5, 0, 1)
     if fam and fam.speed then
         local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
-        local legalMult = (fam.header and 1 or 1.05) * (0.97 + 0.025 * pRatio)
-        cap = top * legalMult
+        cap = top * (fam.header and 1 or 1.05) * 0.97
     end
+    local PC = getgenv().MystrixPowerCurve
     local dxg, dzg = goal.x - from.X, goal.z - from.Z
     local flatD = math.sqrt(dxg * dxg + dzg * dzg)
     local speed = cap
@@ -14409,7 +14384,7 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
         speed = math.clamp(math.sqrt(params.gravity * math.max(flatD, 12)) * factor, 22, cap)
     end
     local minA = minAngle or (lob and 0.35 or -0.9)
-    local maxA = lob and 1.3 or (0.8 - 0.38 * pRatio)
+    local maxA = lob and 1.3 or 0.8
     local kit = F.KeeperKit()
     local keeperNow = F.SilentAimKeeper(goal)
     local kpos = keeperNow and F.KeeperAt(goal, from, keeperNow, kit) or nil
@@ -14486,7 +14461,7 @@ vel, spin, miss, ft, blocked, c = F.ShotSolve(env, gy, from, p, speed, curve, mi
         local penalty = 1
         if blocked then penalty *= 0.1 end
         if framed then penalty *= 0.05 end
-        local score = pg * penalty * 100 + math.min(gap, 3) * 1.5 + math.min(edge, 1.5) * 2 - ft * (1 + pRatio * 2.2) - miss * 8
+        local score = pg * penalty * 100 + math.min(gap, 3) * 1.5 + math.min(edge, 1.5) * 2 - ft - miss * 8
         return {
             vel = vel,
             spin = spin,
@@ -14654,12 +14629,9 @@ function MystrixHub.Functions.ShotFallback(from, family, lob)
     local env = F.ShotEnv()
     local fam = SA.Families and SA.Families[family]
     local cap = 125
-    local PC = getgenv().MystrixPowerCurve
-    local pMult = (PC and PC.PowerMultEnabled) and math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5) or 1.0
-    local pRatio = math.clamp((pMult - 1.0) / 1.5, 0, 1)
     if fam and fam.speed then
         local top = math.max(fam.speed[2], fam.shotSpeed and fam.shotSpeed[2] or 0)
-        cap = top * (fam.header and 1 or 1.05) * (0.97 + 0.025 * pRatio)
+        cap = top * (fam.header and 1 or 1.05) * 0.97
     end
     local PC = getgenv().MystrixPowerCurve
     if PC and PC.PowerMultEnabled then
@@ -15071,24 +15043,12 @@ function MystrixHub.Functions.InstallPickTrack()
                     if not root then return end
                     local p = root.Position
                     local dir = H.Functions.KickAimDir(p.X, p.Z, self.intent)
-                    local pc = getgenv().MystrixPowerCurve
-                    if dir or (pc and pc.PowerMultEnabled) then
+                    if dir then
                         local copy = table.clone(self)
-                        if dir then
-                            copy.aimDir = dir
-                            copy.travel = dir
-                            copy.facing = dir
-                            copy.sideStepping = false
-                        end
-                        if pc and pc.PowerMultEnabled then
-                            local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
-                            if type(copy.power) == "number" then
-                                copy.power = math.clamp(math.max(copy.power * pMult, 0.85), 0, 1)
-                            end
-                            if type(copy.charge) == "number" then
-                                copy.charge = math.clamp(math.max(copy.charge * pMult, 0.85), 0, 1)
-                            end
-                        end
+                        copy.aimDir = dir
+                        copy.travel = dir
+                        copy.facing = dir
+                        copy.sideStepping = false
                         input = copy
                     end
                 end)
@@ -15157,10 +15117,7 @@ function MystrixHub.Functions.InstallSilentAim()
                                 SA.LastError = tostring(newVel)
                             end
                         end
-                        local PC = getgenv().MystrixPowerCurve
-                        if PC and (PC.PowerMultEnabled or PC.CurveMultEnabled) then
-                            vel, spin = F.ApplyPowerCurveVel(vel, spin, family, redirected)
-                        end
+
                         return callOrig(from, vel, spin, family, t)
                     end
                 end)
