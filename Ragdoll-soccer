@@ -10057,13 +10057,7 @@ function MystrixHub.Functions.InstallMaxPower()
             if (state and state.Enabled) or (pc and pc.InstantCharge) then
                 return 1
             end
-            local base = callOrig(value)
-            if pc and pc.PowerMultEnabled and type(base) == "number" then
-                local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
-                local t = math.clamp((pMult - 1.0) / 1.5, 0, 1)
-                return math.clamp(math.max(base * pMult, 0.55 + 0.45 * t), 0, 1)
-            end
-            return base
+            return callOrig(value)
         end
     end)
     return MP.Hooked == true
@@ -14393,9 +14387,8 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
     local oX = -goal.out
     local bx, bz, bn = F.ShotBodies(goal, lob)
     local slow = F.DeviceScale() > 3
-    local cMult = (PC and PC.CurveMultEnabled) and math.clamp(tonumber(PC.CurveMult) or 1.5, 1.0, 3.0) or 1.0
-    local curveOn = (SA.AutoCurve == true or (PC and PC.CurveMultEnabled)) and not lob and flatD >= 8 and not (fam and fam.header) and (mode == "strike" or not slow)
-    local k = math.min(math.clamp(30 + flatD * 0.5, 40, 70) * (SA.CurveAmount or 1) * cMult, 72 * cMult)
+    local curveOn = SA.AutoCurve == true and not lob and flatD >= 8 and not (fam and fam.header) and (mode == "strike" or not slow)
+    local k = math.min(math.clamp(30 + flatD * 0.5, 40, 70) * (SA.CurveAmount or 1), 72)
     local zLim, yMin, yMax = F.ShotBounds(env)
     local react = kit and math.max(kit.cfg.Reaction[1] - 0.03, 0.1) or 0.2
     local now = os.clock()
@@ -17206,49 +17199,6 @@ do
     createToggle(shootSec, "Instant Full Kick Charge", false, function(val)
         ConfigState.InstantFullCharge = val
         MystrixHub.Functions.SetInstantKickCharge(val)
-    end)
-
-    createToggle(shootSec, "Shoot Power Multiplier", false, function(val)
-        ConfigState.ShootPowerMult = val
-        local PC = getgenv().MystrixPowerCurve
-        PC.PowerMultEnabled = val
-        pcall(MystrixHub.Functions.InstallMaxPower)
-        pcall(MystrixHub.Functions.InstallSilentAim)
-        MystrixHub.ShotCache = {}
-        MystrixHub.PreviewCache = nil
-        SilentAimState.Pending = nil
-        SilentAimState.StrikeCache = nil
-    end)
-
-    createSlider(shootSec, "Power Multiplier", 1.0, 2.5, 1.35, 0.05, "x", function(val)
-        ConfigState.ShootPowerMultVal = val
-        local PC = getgenv().MystrixPowerCurve
-        PC.PowerMult = val
-        MystrixHub.ShotCache = {}
-        MystrixHub.PreviewCache = nil
-        SilentAimState.Pending = nil
-        SilentAimState.StrikeCache = nil
-    end)
-
-    createToggle(shootSec, "Curve Strength Multiplier", false, function(val)
-        ConfigState.CurveStrengthMult = val
-        local PC = getgenv().MystrixPowerCurve
-        PC.CurveMultEnabled = val
-        pcall(MystrixHub.Functions.InstallSilentAim)
-        MystrixHub.ShotCache = {}
-        MystrixHub.PreviewCache = nil
-        SilentAimState.Pending = nil
-        SilentAimState.StrikeCache = nil
-    end)
-
-    createSlider(shootSec, "Curve Multiplier", 1.0, 3.0, 1.50, 0.05, "x", function(val)
-        ConfigState.CurveStrengthMultVal = val
-        local PC = getgenv().MystrixPowerCurve
-        PC.CurveMult = val
-        MystrixHub.ShotCache = {}
-        MystrixHub.PreviewCache = nil
-        SilentAimState.Pending = nil
-        SilentAimState.StrikeCache = nil
     end)
 
     createToggle(shootSec, "Auto Shoot", false, function(val)
