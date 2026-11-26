@@ -10697,6 +10697,28 @@ function MystrixHub.Functions.SilentAimModules()
         SA.Flight = Kick.Flight
         SA.Families = Kick.Families
         SA.KeeperRules = require(sharedGame:WaitForChild("KeeperRules"))
+        if SA.Flight and not SA.Flight.__coreDragHooked then
+            SA.Flight.__coreDragHooked = true
+            local origAirStep = SA.Flight.airStep
+            if type(origAirStep) == "function" then
+                SA.Flight.airStep = function(pos, v, s, dt, params)
+                    local np, nv, ns = origAirStep(pos, v, s, dt, params)
+                    local pc = getgenv().MystrixPowerCurve
+                    if pc and pc.PowerMultEnabled and pc.LastStrikeAt and (os.clock() - pc.LastStrikeAt) < 1.8 and typeof(v) == "Vector3" and typeof(nv) == "Vector3" then
+                        local pMult = math.clamp(tonumber(pc.PowerMult) or 1.35, 1.0, 2.5)
+                        if pMult > 1.02 then
+                            local keep = math.clamp(1 - (1 / (pMult * 1.35)), 0.15, 0.78)
+                            nv = Vector3.new(
+                                nv.X + (v.X - nv.X) * keep,
+                                nv.Y,
+                                nv.Z + (v.Z - nv.Z) * keep
+                            )
+                        end
+                    end
+                    return np, nv, ns
+                end
+            end
+        end
     end)
     return SA.BallView ~= nil and SA.Flight ~= nil and SA.Families ~= nil
 end
@@ -10850,6 +10872,9 @@ function MystrixHub.Functions.PlanSyncCopy(plan)
         local ok, vel, spin = pcall(MystrixHub.Functions.SilentAimPlan, plan)
         if ok and vel then
             local copy = table.clone(plan)
+            if (pc and (pc.PowerMultEnabled or pc.InstantCharge)) or (getgenv().MystrixMaxPower and getgenv().MystrixMaxPower.Enabled) then
+                copy.power = 1
+            end
             local m = math.sqrt(vel.X * vel.X + vel.Z * vel.Z)
             if m > 0.001 then
                 copy.dir = Vector3.new(vel.X / m, 0, vel.Z / m)
@@ -10871,7 +10896,7 @@ function MystrixHub.Functions.PlanSyncCopy(plan)
                 copy.vel = Vector3.new(copy.vel.X * pMult, copy.vel.Y * math.sqrt(pMult), copy.vel.Z * pMult)
             end
             if type(copy.power) == "number" then
-                copy.power = math.min(copy.power * pMult, 2.5)
+                copy.power = 1
             end
         end
         if pc.CurveMultEnabled and typeof(copy.spin) == "Vector3" then
@@ -14400,7 +14425,7 @@ function MystrixHub.Functions.ShotBest(from, family, lob, budget, minAngle, mode
         speed = math.clamp(math.sqrt(params.gravity * math.max(flatD, 12)) * factor, 22, cap)
     end
     local minA = minAngle or (lob and 0.35 or -0.9)
-    local maxA = lob and 1.3 or 0.8
+    local maxA = lob and 1.3 or ((PC and PC.PowerMultEnabled) and math.max(0.24, 0.8 / math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.2)) or 0.8)
     local kit = F.KeeperKit()
     local keeperNow = F.SilentAimKeeper(goal)
     local kpos = keeperNow and F.KeeperAt(goal, from, keeperNow, kit) or nil
@@ -14847,9 +14872,47 @@ function MystrixHub.Functions.InstallPlanSync()
             local old
             old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 local method = getMethod()
+                if method == "InvokeServer" and tostring(self.Name):find("LockerLoad") then
+                    setMethod(method)
+                    local res = old(self, ...)
+                    if (ConfigState and (ConfigState.UnlockAll or ConfigState.OverrideSkins)) and type(res) == "table" then
+                        pcall(function()
+                            local shared = Services.ReplicatedStorage:FindFirstChild("Shared")
+                            local gameFolder = shared and shared:FindFirstChild("Game")
+                            if gameFolder then
+                                for _, m in ipairs(gameFolder:GetDescendants()) do
+                                    if m:IsA("ModuleScript") and (m.Name:find("Locker") or m.Name:find("Cosmetic") or m.Name:find("Item") or m.Name:find("Skin") or m.Name:find("Goal")) then
+                                        local okM, data = pcall(require, m)
+                                        if okM and type(data) == "table" then
+                                            for k, v in pairs(data) do
+                                                if type(k) == "string" and type(res.owned) == "table" then
+                                                    res.owned[k] = true
+                                                end
+                                                if type(v) == "table" and type(v.id or v.Id or v.name or v.Name) == "string" then
+                                                    local id = v.id or v.Id or v.name or v.Name
+                                                    if type(res.owned) == "table" then res.owned[id] = true end
+                                                    if type(res.Owned) == "table" then res.Owned[id] = true end
+                                                    if type(res.items) == "table" then res.items[id] = true end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+                    end
+                    return res
+                end
                 if method ~= "FireServer" then
                     setMethod(method)
                     return old(self, ...)
+                end
+                if tostring(self.Name) == "Afk" and ConfigState and ConfigState.ToggleAFK then
+                    local arg1 = select(1, ...)
+                    if arg1 == "active" or arg1 == false then
+                        setMethod(method)
+                        return old(self, "inactive")
+                    end
                 end
                 local H = getgenv().MystrixHub
                 local FF = H and H.Functions
@@ -15096,14 +15159,22 @@ function MystrixHub.Functions.InstallSilentAim()
                             end
                         end
                         local PC = getgenv().MystrixPowerCurve
-                        if PC and not redirected then
-                            if PC.PowerMultEnabled and typeof(vel) == "Vector3" then
-                                local pMult = math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
-                                vel = Vector3.new(vel.X * pMult, vel.Y * math.sqrt(pMult), vel.Z * pMult)
+                        if PC then
+                            if not redirected then
+                                if PC.PowerMultEnabled and typeof(vel) == "Vector3" then
+                                    local pMult = math.clamp(tonumber(PC.PowerMult) or 1.35, 1.0, 2.5)
+                                    vel = Vector3.new(vel.X * pMult, vel.Y * math.sqrt(pMult), vel.Z * pMult)
+                                end
+                                if PC.CurveMultEnabled and typeof(spin) == "Vector3" then
+                                    local cMult = math.clamp(tonumber(PC.CurveMult) or 1.5, 1.0, 3.0)
+                                    spin = spin * cMult
+                                end
                             end
-                            if PC.CurveMultEnabled and typeof(spin) == "Vector3" then
-                                local cMult = math.clamp(tonumber(PC.CurveMult) or 1.5, 1.0, 3.0)
-                                spin = spin * cMult
+                            if (PC.PowerMultEnabled or PC.CurveMultEnabled) and typeof(from) == "Vector3" and typeof(vel) == "Vector3" then
+                                PC.LastStrikeAt = os.clock()
+                                PC.LastFrom = from
+                                PC.LastVel = vel
+                                PC.LastSpin = typeof(spin) == "Vector3" and spin or Vector3.zero
                             end
                         end
                         return callOrig(from, vel, spin, family, t)
@@ -16327,51 +16398,6 @@ do
             end
         end)
 
-        if not RS.namecallHooked and Env.hookmetamethod and Env.getnamecallmethod then
-            RS.namecallHooked = true
-            pcall(function()
-                local oldNamecall
-                oldNamecall = Env.hookmetamethod(game, "__namecall", function(self, ...)
-                    local method = Env.getnamecallmethod()
-                    if method == "InvokeServer" and tostring(self.Name):find("LockerLoad") then
-                        local res = oldNamecall(self, ...)
-                        if (ConfigState.UnlockAll or ConfigState.OverrideSkins) and type(res) == "table" then
-                            pcall(function()
-                                local shared = ReplicatedStorage:FindFirstChild("Shared")
-                                local gameFolder = shared and shared:FindFirstChild("Game")
-                                if gameFolder then
-                                    for _, m in ipairs(gameFolder:GetDescendants()) do
-                                        if m:IsA("ModuleScript") and (m.Name:find("Locker") or m.Name:find("Cosmetic") or m.Name:find("Item") or m.Name:find("Skin") or m.Name:find("Goal")) then
-                                            local okM, data = pcall(require, m)
-                                            if okM and type(data) == "table" then
-                                                for k, v in pairs(data) do
-                                                    if type(k) == "string" and type(res.owned) == "table" then
-                                                        res.owned[k] = true
-                                                    end
-                                                    if type(v) == "table" and type(v.id or v.Id or v.name or v.Name) == "string" then
-                                                        local id = v.id or v.Id or v.name or v.Name
-                                                        if type(res.owned) == "table" then res.owned[id] = true end
-                                                        if type(res.Owned) == "table" then res.Owned[id] = true end
-                                                        if type(res.items) == "table" then res.items[id] = true end
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end)
-                        end
-                        return res
-                    elseif method == "FireServer" and tostring(self.Name) == "Afk" and ConfigState.ToggleAFK then
-                        local arg1 = select(1, ...)
-                        if arg1 == "active" or arg1 == false then
-                            return oldNamecall(self, "inactive")
-                        end
-                    end
-                    return oldNamecall(self, ...)
-                end)
-            end)
-        end
     end
 
     local function syncUnlockAllLocker()
@@ -16592,6 +16618,49 @@ do
 
         local myChar, myRoot, ctrlMgr = getLocalCharAndRoot()
         local ball = getLiveBall()
+
+        -- Sustain Multiplied Shot Velocity & Curve across Server BallEvent Checkpoint Replication!
+        local PC = getgenv().MystrixPowerCurve
+        if PC and (PC.PowerMultEnabled or PC.CurveMultEnabled) and PC.LastStrikeAt and (now - PC.LastStrikeAt) < 1.85 then
+            pcall(function()
+                local SA = getgenv().MystrixSilentAim
+                local BV = SA and SA.BallView
+                if BV and type(BV.freeSim) == "function" then
+                    local state, _, ev, cp = BV.freeSim()
+                    if cp and ev and PC.LastFrom and typeof(cp.pos) == "Vector3" and (cp.pos - PC.LastFrom).Magnitude < 14 then
+                        if PC.PowerMultEnabled and PC.LastVel then
+                            if not cp.__coreVelSustained then
+                                cp.__coreVelSustained = true
+                                cp.vel = PC.LastVel
+                            end
+                            if not ev.__coreVelSustained then
+                                ev.__coreVelSustained = true
+                                ev.vel = PC.LastVel
+                            end
+                            if state and typeof(state.vel) == "Vector3" and (now - PC.LastStrikeAt) < 0.95 then
+                                local curSpd = state.vel.Magnitude
+                                local wantSpd = PC.LastVel.Magnitude * math.max(0.72, 1 - (now - PC.LastStrikeAt) * 0.25)
+                                if curSpd > 4 and curSpd < wantSpd then
+                                    state.vel = state.vel.Unit * wantSpd
+                                end
+                            end
+                        end
+                        if PC.CurveMultEnabled and PC.LastSpin then
+                            cp.spin = PC.LastSpin
+                            ev.spin = PC.LastSpin
+                            if state then state.spin = PC.LastSpin end
+                        end
+                    end
+                end
+                if ball and ball:IsA("BasePart") and PC.PowerMultEnabled and PC.LastVel and (now - PC.LastStrikeAt) < 0.95 then
+                    local bVel = ball.AssemblyLinearVelocity
+                    local wantSpd = PC.LastVel.Magnitude * math.max(0.72, 1 - (now - PC.LastStrikeAt) * 0.25)
+                    if bVel.Magnitude > 5 and bVel.Magnitude < wantSpd and bVel:Dot(PC.LastVel) > 0 then
+                        ball.AssemblyLinearVelocity = bVel.Unit * wantSpd
+                    end
+                end
+            end)
+        end
 
         if myChar and myRoot then
             local myDribbleId = tonumber(myChar:GetAttribute("DribbleId")) or -999
