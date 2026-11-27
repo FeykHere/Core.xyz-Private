@@ -1,56 +1,66 @@
--- // Core.xyz · Illegal Soccer Prototype (Undetected Smooth Auto Farm Goals)
+-- // Core.xyz - Illegal Soccer Auto Farm Goals Prototype (v2 - Server Synced)
+-- // PlaceId: 126987974021910
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 local GetServerTimeNow = workspace.GetServerTimeNow
 
--- // State
-local State = {
-    Enabled = false,
-    SafeRadius = 15,      -- Only TP to ball if no other player is within X studs (0 - 40)
-    SmoothGlide = true,   -- Smooth micro-step glide (undetected) vs Instant Snap
-    GlideSpeed = 165,     -- Studs/sec during smooth glide step
-    Status = "Idle"
-}
-
-local function SafeRequire(inst)
-    if not inst then return nil end
-    local ok, mod = pcall(require, inst)
-    return ok and mod or nil
+-- // Cleanup previous prototype instance if re-executed
+if getgenv and getgenv().__CoreIllegalSoccerAutoFarmCleanup then
+    pcall(getgenv().__CoreIllegalSoccerAutoFarmCleanup)
 end
 
--- // Resolve Game Modules from IllegalSoccerMainGame dump
-local Modules = ReplicatedStorage:WaitForChild("Modules", 10)
-local Client = ReplicatedStorage:WaitForChild("Client", 10)
-local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+-- // Prototype State
+local State = {
+    Enabled = false,
+    SafeRadius = 15,   -- 0 to 40 studs (only fetch ball if no other player is within this distance)
+    MoveSpeed = 42,    -- 25 to 150 studs/s (38-45 is server-accepted max sprint/boost speed)
+    Status = "Idle",
+    CorrectionHoldUntil = 0,
+    Connections = {}
+}
+
+-- // Safe Module Loader
+local function SafeRequire(mod)
+    if not mod then return nil end
+    local ok, res = pcall(require, mod)
+    return ok and res or nil
+end
+
+local Modules = ReplicatedStorage:FindFirstChild("Modules")
+local Client = ReplicatedStorage:FindFirstChild("Client")
+local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
 
 local CharactersMod = Modules and Modules:FindFirstChild("Characters")
-local GameplayMod = Modules and Modules:FindFirstChild("Gameplay")
-local ActionsMod = Modules and Modules:FindFirstChild("Actions")
 local BallMod = Modules and Modules:FindFirstChild("Ball")
+local ActionsMod = Modules and Modules:FindFirstChild("Actions")
+local GameplayMod = Modules and Modules:FindFirstChild("Gameplay")
 
 local ClientGameplay = Client and Client:FindFirstChild("Gameplay")
 local ClientBall = ClientGameplay and ClientGameplay:FindFirstChild("Ball")
-local ClientPlayer = Client and Client:FindFirstChild("Player")
 local ClientReplay = ClientGameplay and ClientGameplay:FindFirstChild("Replay")
+local ClientPlayer = Client and Client:FindFirstChild("Player")
+local ClientGameplayPlayer = ClientGameplay and ClientGameplay:FindFirstChild("Player")
 
 local AntiExploitSettings = CharactersMod and SafeRequire(CharactersMod:FindFirstChild("AntiExploitSettings"))
 local CharacterPlacement = CharactersMod and SafeRequire(CharactersMod:FindFirstChild("CharacterPlacement"))
+local CharacterControllers = CharactersMod and SafeRequire(CharactersMod:FindFirstChild("CharacterControllers"))
+local CharacterMotion = CharactersMod and SafeRequire(CharactersMod:FindFirstChild("CharacterMotion"))
 local LocalMovementGuardMod = CharactersMod and SafeRequire(CharactersMod:FindFirstChild("LocalMovementGuard"))
 local LocalMovementGuardClient = ClientPlayer and SafeRequire(ClientPlayer:FindFirstChild("LocalMovementGuard"))
 local Ragdoll = CharactersMod and SafeRequire(CharactersMod:FindFirstChild("Ragdoll"))
+local PlayerMovement = ClientGameplayPlayer and SafeRequire(ClientGameplayPlayer:FindFirstChild("Movement"))
+local SprintAction = ActionsMod and SafeRequire(ActionsMod:FindFirstChild("Sprint"))
 
 local BallRenderer = ClientBall and SafeRequire(ClientBall:FindFirstChild("Renderer"))
-local BallPhysics = BallMod and SafeRequire(BallMod:FindFirstChild("Physics"))
 local ActorTeams = ClientGameplay and SafeRequire(ClientGameplay:FindFirstChild("ActorTeams"))
 local MatchSettings = GameplayMod and SafeRequire(GameplayMod:FindFirstChild("MatchSettings"))
 local ShotAimAssist = ActionsMod and SafeRequire(ActionsMod:FindFirstChild("ShotAimAssist"))
 local ActionRemoteProtocol = ActionsMod and SafeRequire(ActionsMod:FindFirstChild("ActionRemoteProtocol"))
-
 local KickoffFreeze = ClientGameplay and SafeRequire(ClientGameplay:FindFirstChild("KickoffFreeze"))
 local GoalReplay = ClientReplay and SafeRequire(ClientReplay:FindFirstChild("GoalReplay"))
 local TutorialSession = ClientGameplay and SafeRequire(ClientGameplay:FindFirstChild("TutorialSession"))
@@ -58,8 +68,14 @@ local PracticeSession = ClientGameplay and SafeRequire(ClientGameplay:FindFirstC
 
 local BallRemotes = Remotes and Remotes:FindFirstChild("Ball")
 local KickRemote = BallRemotes and BallRemotes:FindFirstChild("Kick")
+local CharactersRemotes = Remotes and Remotes:FindFirstChild("Characters")
+local MovementCorrectionRemote = CharactersRemotes and CharactersRemotes:FindFirstChild("MovementCorrection")
 
 -- // 1. Bypass Client Anti-Teleport (AntiExploitSettings & LocalMovementGuard)
+local OldIsLocalEnabled = AntiExploitSettings and AntiExploitSettings.IsLocalEnabled
+local OldModValidate = LocalMovementGuardMod and LocalMovementGuardMod.Validate
+local OldClientValidate = LocalMovementGuardClient and LocalMovementGuardClient.Validate
+
 pcall(function()
     if CharactersMod then
         local aeScript = CharactersMod:FindFirstChild("AntiExploitSettings")
@@ -67,90 +83,168 @@ pcall(function()
             aeScript:SetAttribute("LocalAntiExploitEnabled", false)
         end
     end
-    if AntiExploitSettings and type(AntiExploitSettings.IsLocalEnabled) == "function" then
+    if AntiExploitSettings and type(OldIsLocalEnabled) == "function" then
         AntiExploitSettings.IsLocalEnabled = function()
             return false
         end
     end
-    if LocalMovementGuardMod and type(LocalMovementGuardMod.Validate) == "function" then
-        local oldValidate = LocalMovementGuardMod.Validate
+    if LocalMovementGuardMod and type(OldModValidate) == "function" then
         LocalMovementGuardMod.Validate = function(hrp, hum, ...)
             if State.Enabled then
                 if CharacterPlacement and type(CharacterPlacement.RecordPositionWrite) == "function" and hrp then
-                    pcall(CharacterPlacement.RecordPositionWrite, hrp, Vector3.zero, 0)
+                    pcall(CharacterPlacement.RecordPositionWrite, hrp, hrp.AssemblyLinearVelocity, hrp.AssemblyLinearVelocity.Y)
                 end
                 return true
             end
-            return oldValidate(hrp, hum, ...)
+            return OldModValidate(hrp, hum, ...)
         end
     end
-    if LocalMovementGuardClient and type(LocalMovementGuardClient.Validate) == "function" then
-        local oldClientValidate = LocalMovementGuardClient.Validate
+    if LocalMovementGuardClient and type(OldClientValidate) == "function" then
         LocalMovementGuardClient.Validate = function(hrp, hum, ...)
             if State.Enabled then
                 return true
             end
-            return oldClientValidate(hrp, hum, ...)
+            return OldClientValidate(hrp, hum, ...)
         end
     end
 end)
 
--- // 2. Registered Undetected Placement Helper
-local function PlaceCharacterAt(char, hrp, hum, targetPos, lookTarget)
-    if not (char and hrp and targetPos) then return end
+-- // 2. Server-Synced Movement Helper
+-- Drives character movement BEFORE CharacterReplicationClient.PostSimulation sends MovementUpdate,
+-- and populates CharacterControllers.SetMoveCommand + CharacterMotion.SetStreamVelocity + AssemblyLinearVelocity
+-- so CharacterReplicationClient transmits our real movement packets to the server for ball pickup & goal scoring.
+local ActiveFarmingMove = false
 
-    local flatLook = Vector3.new(0, 0, -1)
-    if lookTarget then
-        local diff = Vector3.new(lookTarget.X - targetPos.X, 0, lookTarget.Z - targetPos.Z)
-        if diff.Magnitude > 1e-3 then
-            flatLook = diff.Unit
+local function StopCharacterDrive(char)
+    if not ActiveFarmingMove then return end
+    ActiveFarmingMove = false
+    pcall(function()
+        if PlayerMovement and type(PlayerMovement.ClearMultiplier) == "function" then
+            PlayerMovement.ClearMultiplier("ItemMotion")
         end
-    else
-        local curLook = hrp.CFrame.LookVector
-        local flat = Vector3.new(curLook.X, 0, curLook.Z)
-        if flat.Magnitude > 1e-3 then
-            flatLook = flat.Unit
+        if char then
+            if CharacterControllers and type(CharacterControllers.SetMoveCommand) == "function" then
+                CharacterControllers.SetMoveCommand(char, Vector3.zero)
+            end
+            if CharacterMotion and type(CharacterMotion.SetStreamVelocity) == "function" then
+                CharacterMotion.SetStreamVelocity(char, nil)
+            end
         end
-    end
-
-    local targetCF = CFrame.lookAt(targetPos, targetPos + flatLook)
-
-    hrp.CFrame = targetCF
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    hrp.AssemblyAngularVelocity = Vector3.zero
-
-    local cm = char:FindFirstChild("ControllerManager")
-    if cm then
-        pcall(function()
-            cm.FacingDirection = flatLook
-        end)
-    end
-
-    if CharacterPlacement then
-        if type(CharacterPlacement.RecordPositionWrite) == "function" then
-            pcall(CharacterPlacement.RecordPositionWrite, hrp, Vector3.zero, 0)
-        end
-    end
-    if LocalMovementGuardMod and type(LocalMovementGuardMod.CapturePhysics) == "function" then
-        pcall(LocalMovementGuardMod.CapturePhysics, hrp, hum)
-    end
+    end)
 end
 
-local function MoveCharacterTowards(char, hrp, hum, targetPos, lookTarget, dt)
-    if not (char and hrp and targetPos) then return false end
-    local curPos = hrp.Position
-    local delta = targetPos - curPos
-    local dist = delta.Magnitude
+local function DriveCharacterTowards(char, hrp, hum, targetPos, lookTarget, dt)
+    if not (char and hrp and hum and targetPos) then return false end
+    ActiveFarmingMove = true
 
-    if not State.SmoothGlide or dist <= 14 then
-        PlaceCharacterAt(char, hrp, hum, targetPos, lookTarget)
-        return true
+    -- Grant infinite stamina while farming
+    if SprintAction and type(SprintAction.SetUnlimitedStamina) == "function" then
+        pcall(SprintAction.SetUnlimitedStamina, LocalPlayer, "CoreAutoFarm", true)
+    end
+    pcall(function()
+        char:SetAttribute("SprintIsSprinting", true)
+    end)
+
+    local curPos = hrp.Position
+    local flatDelta = Vector3.new(targetPos.X - curPos.X, 0, targetPos.Z - curPos.Z)
+    local flatDist = flatDelta.Magnitude
+
+    local moveDir = flatDist > 0.05 and flatDelta.Unit or Vector3.zero
+    local lookDir = moveDir
+    if lookTarget then
+        local lDelta = Vector3.new(lookTarget.X - curPos.X, 0, lookTarget.Z - curPos.Z)
+        if lDelta.Magnitude > 0.05 then
+            lookDir = lDelta.Unit
+        end
+    end
+    if lookDir.Magnitude < 0.05 then
+        local curLook = hrp.CFrame.LookVector
+        local flatLook = Vector3.new(curLook.X, 0, curLook.Z)
+        lookDir = flatLook.Magnitude > 0.05 and flatLook.Unit or Vector3.new(0, 0, -1)
     end
 
-    local stepDist = math.min(dist, math.max(State.GlideSpeed * math.clamp(dt, 1/240, 0.05), 8))
-    local nextPos = curPos + delta.Unit * stepDist
-    PlaceCharacterAt(char, hrp, hum, nextPos, lookTarget or targetPos)
-    return (targetPos - nextPos).Magnitude <= 5
+    local speed = State.MoveSpeed
+    -- If server recently rubberbanded us because speed was set too high, clamp to safe server speed (40) briefly
+    if os.clock() < State.CorrectionHoldUntil then
+        speed = math.min(speed, 40)
+    end
+
+    local horizVel = moveDir * speed
+    local curVelY = hrp.AssemblyLinearVelocity.Y
+    local fullVel = Vector3.new(horizVel.X, curVelY, horizVel.Z)
+
+    -- 1. Feed game's native Movement & ControllerManager
+    pcall(function()
+        if PlayerMovement and type(PlayerMovement.SetMultiplier) == "function" then
+            local baseSpeed = (type(PlayerMovement.GetBaseWalkSpeed) == "function" and PlayerMovement.GetBaseWalkSpeed()) or 16
+            PlayerMovement.SetMultiplier("ItemMotion", {
+                WalkSpeed = math.max(speed / math.max(baseSpeed, 1), 1)
+            })
+        end
+        if CharacterControllers then
+            if type(CharacterControllers.SetWalkSpeed) == "function" then
+                CharacterControllers.SetWalkSpeed(char, hum, speed)
+            end
+            if type(CharacterControllers.SetMoveCommand) == "function" then
+                CharacterControllers.SetMoveCommand(char, moveDir, lookDir, true)
+            end
+        end
+        local cm = char:FindFirstChildOfClass("ControllerManager")
+        if cm then
+            cm.BaseMoveSpeed = speed
+            cm.MovingDirection = moveDir
+            if lookDir.Magnitude > 0 then
+                cm.FacingDirection = lookDir
+            end
+        end
+    end)
+
+    -- 2. Advance CFrame smoothly & set non-zero AssemblyLinearVelocity + StreamVelocity
+    -- so watchOwnSimulation & sendLocalMovement transmit every packet to the server
+    local stepDist = math.min(flatDist, speed * math.clamp(dt, 1 / 240, 0.05))
+    local nextXZ = Vector3.new(curPos.X, 0, curPos.Z) + moveDir * stepDist
+    local nextPos = Vector3.new(nextXZ.X, curPos.Y, nextXZ.Z)
+    local nextCF = CFrame.lookAt(nextPos, nextPos + lookDir)
+
+    hrp.CFrame = nextCF
+    hrp.AssemblyLinearVelocity = fullVel
+    hrp.AssemblyAngularVelocity = Vector3.zero
+
+    pcall(function()
+        if CharacterMotion and type(CharacterMotion.SetStreamVelocity) == "function" then
+            CharacterMotion.SetStreamVelocity(char, fullVel)
+        end
+        if CharacterPlacement and type(CharacterPlacement.RecordPositionWrite) == "function" then
+            CharacterPlacement.RecordPositionWrite(hrp, horizVel, curVelY)
+        end
+        if LocalMovementGuardMod then
+            if type(LocalMovementGuardMod.RegisterVelocity) == "function" then
+                LocalMovementGuardMod.RegisterVelocity(hrp, horizVel, curVelY)
+            end
+            if type(LocalMovementGuardMod.CapturePhysics) == "function" then
+                LocalMovementGuardMod.CapturePhysics(hrp, hum)
+            end
+        end
+    end)
+
+    return flatDist <= 3.5
+end
+
+-- // Listen for Server MovementCorrection (detects if server anti-cheat rejected speed)
+if MovementCorrectionRemote and MovementCorrectionRemote:IsA("RemoteEvent") then
+    local corrConn = MovementCorrectionRemote.OnClientEvent:Connect(function(char, serverCF)
+        if State.Enabled and char == LocalPlayer.Character and typeof(serverCF) == "CFrame" then
+            State.CorrectionHoldUntil = os.clock() + 0.65
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = hrp.CFrame.Rotation + serverCF.Position
+                if CharacterPlacement and type(CharacterPlacement.RecordPositionWrite) == "function" then
+                    pcall(CharacterPlacement.RecordPositionWrite, hrp, Vector3.zero, 0)
+                end
+            end
+        end
+    end)
+    table.insert(State.Connections, corrConn)
 end
 
 -- // 3. Find Enemy Goal Part & Best Open Goal Target
@@ -183,7 +277,6 @@ local function GetEnemyGoalPart()
                 if g then return g end
             end
         end
-        -- Fallback: check teams in Map.Data
         for _, folder in ipairs(data:GetChildren()) do
             if folder.Name ~= myTeam and folder:FindFirstChild("Goal") then
                 return folder.Goal
@@ -193,7 +286,6 @@ local function GetEnemyGoalPart()
     return nil
 end
 
--- Find open spot inside enemy goal post away from any goalkeeper
 local function GetBestGoalTarget(goalPart, fromPos)
     if not goalPart then return nil, nil end
     local center = goalPart.Position
@@ -205,7 +297,6 @@ local function GetBestGoalTarget(goalPart, fromPos)
             local leftSpot = mouth.PlanePosition + mouth.Lateral * (-halfW * 0.65)
             local rightSpot = mouth.PlanePosition + mouth.Lateral * (halfW * 0.65)
 
-            -- Pick side furthest from nearest enemy player/goalkeeper
             local bestSide = mouth.PlanePosition
             local bestMinDist = -1
             for _, candidate in ipairs({ leftSpot, rightSpot, mouth.PlanePosition }) do
@@ -227,16 +318,15 @@ local function GetBestGoalTarget(goalPart, fromPos)
                 end
             end
 
-            -- Stand right on/inside the goal plane and aim deep into the net
-            local standPos = Vector3.new(bestSide.X, (fromPos and fromPos.Y) or (mouth.BottomY + 3), bestSide.Z) - mouth.Forward * 1.5
-            local shootAimPos = Vector3.new(bestSide.X, (mouth.BottomY or center.Y) + 3.2, bestSide.Z) - mouth.Forward * 8
+            local standPos = Vector3.new(bestSide.X, (fromPos and fromPos.Y) or bestSide.Y, bestSide.Z) - mouth.Forward * 1.5
+            local shootAimPos = standPos - mouth.Forward * 6
             return standPos, shootAimPos
         end
     end
 
-    local dirToGoal = Vector3.new(center.X - (fromPos and fromPos.X or 0), 0, center.Z - (fromPos and fromPos.Z or 0))
+    local dirToGoal = (center - (fromPos or center))
     if dirToGoal.Magnitude > 1e-3 then
-        dirToGoal = dirToGoal.Unit
+        dirToGoal = Vector3.new(dirToGoal.X, 0, dirToGoal.Z).Unit
     else
         dirToGoal = Vector3.new(0, 0, -1)
     end
@@ -286,7 +376,6 @@ local function GetBallInfo()
         end
     end
 
-    -- Fallback visual lookup
     local visuals = workspace:FindFirstChild("Visuals")
     local clientBall = visuals and (visuals:FindFirstChild("ClientBall_MainMatch") or visuals:FindFirstChild("ClientBall_1"))
     if clientBall and clientBall:IsA("BasePart") and clientBall.Transparency < 1 then
@@ -312,7 +401,7 @@ local function IsAnyoneCloseToBall(ballPos, radius)
     return false
 end
 
--- // 5. Instant Point-Blank Goal Finish (Fires 100% power shot straight into net once inside goal)
+-- // 5. Point-Blank Goal Finish
 local LastAutoShotAt = 0
 local SessionCounter = math.floor(GetServerTimeNow(workspace) * 1000) * 2
 
@@ -347,17 +436,15 @@ local function FirePointBlankGoalShot(hrp, aimTargetPos)
 
     if ActionRemoteProtocol and type(ActionRemoteProtocol.Start) == "function" and type(ActionRemoteProtocol.Release) == "function" then
         pcall(function()
-            local startCmd = {
+            ActionRemoteProtocol.Start({
                 Kind = "Kick",
                 PassType = "Shot",
                 MaximumChargeSeconds = maxCharge,
                 AimDirection = aimTable,
                 KickDirection = flatDir,
                 ShotTime = serverNow - maxCharge
-            }
-            ActionRemoteProtocol.Start(startCmd)
-
-            local releaseCmd = {
+            })
+            ActionRemoteProtocol.Release({
                 Kind = "Kick",
                 PassType = "Shot",
                 MaximumChargeSeconds = maxCharge,
@@ -367,65 +454,76 @@ local function FirePointBlankGoalShot(hrp, aimTargetPos)
                 ShotTime = serverNow,
                 AimDirection = aimTable,
                 KickDirection = flatDir
-            }
-            ActionRemoteProtocol.Release(releaseCmd)
+            })
         end)
     elseif KickRemote then
         SessionCounter = SessionCounter + 2
         local sid = SessionCounter
-        local startPacket = {
-            Protocol = "ActionSession",
-            Phase = "Start",
-            Command = {
-                MaximumChargeSeconds = maxCharge,
-                AimDirection = aimTable,
-                SessionId = sid,
-                ShotTime = serverNow - maxCharge,
-                PassType = "Shot",
-                PlayerVelocity = flatDir * 36,
-                Kind = "Kick",
-                KickDirection = flatDir
-            }
-        }
-        local releasePacket = {
-            Protocol = "ActionSession",
-            Phase = "Release",
-            Command = {
-                MaximumChargeSeconds = maxCharge,
-                AimDirection = aimTable,
-                ChargeStartedAt = serverNow - maxCharge,
-                SessionId = sid,
-                ShotTime = serverNow,
-                ChargeSeconds = maxCharge,
-                PassType = "Shot",
-                AimLockedAt = serverNow - 0.05,
-                PlayerVelocity = flatDir * 36,
-                Kind = "Kick",
-                KickDirection = flatDir
-            }
-        }
         pcall(function()
-            KickRemote:FireServer(startPacket)
-            KickRemote:FireServer(releasePacket)
+            KickRemote:FireServer({
+                Protocol = "ActionSession",
+                Phase = "Start",
+                Command = {
+                    MaximumChargeSeconds = maxCharge,
+                    AimDirection = aimTable,
+                    SessionId = sid,
+                    ShotTime = serverNow - maxCharge,
+                    PassType = "Shot",
+                    PlayerVelocity = flatDir * 36,
+                    Kind = "Kick",
+                    KickDirection = flatDir
+                }
+            })
+            KickRemote:FireServer({
+                Protocol = "ActionSession",
+                Phase = "Release",
+                Command = {
+                    MaximumChargeSeconds = maxCharge,
+                    AimDirection = aimTable,
+                    ChargeStartedAt = serverNow - maxCharge,
+                    SessionId = sid,
+                    ShotTime = serverNow,
+                    ChargeSeconds = maxCharge,
+                    PassType = "Shot",
+                    AimLockedAt = serverNow - 0.05,
+                    PlayerVelocity = flatDir * 36,
+                    Kind = "Kick",
+                    KickDirection = flatDir
+                }
+            })
         end)
     end
 end
 
--- // 6. Floating UI (Toggle + Safe Radius Slider + Mode Button + Live Status)
-local GuiParent = (gethui and gethui()) or CoreGui
-local OldGui = GuiParent:FindFirstChild("CoreIllegalSoccerProto")
-if OldGui then OldGui:Destroy() end
+-- // 6. Floating UI (Parented to PlayerGui to prevent "lacking capability Plugin" error on mobile executors)
+pcall(function()
+    local cg = game:GetService("CoreGui")
+    local oldCg = cg:FindFirstChild("CoreIllegalSoccerProto")
+    if oldCg then oldCg:Destroy() end
+end)
+pcall(function()
+    if gethui then
+        local hu = gethui()
+        local oldHu = hu and hu:FindFirstChild("CoreIllegalSoccerProto")
+        if oldHu then oldHu:Destroy() end
+    end
+end)
+
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local OldPg = PlayerGui:FindFirstChild("CoreIllegalSoccerProto")
+if OldPg then OldPg:Destroy() end
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "CoreIllegalSoccerProto"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999999
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = GuiParent
+ScreenGui.Parent = PlayerGui
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 270, 0, 204)
-MainFrame.Position = UDim2.new(0.5, -135, 0.18, 0)
+MainFrame.Size = UDim2.new(0, 270, 0, 212)
+MainFrame.Position = UDim2.new(0.5, -135, 0.16, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -454,7 +552,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -24, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "ILLEGAL SOCCER · AUTO FARM"
+Title.Text = "ILLEGAL SOCCER · AUTO FARM v2"
 Title.TextColor3 = Color3.fromRGB(235, 240, 255)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 12
@@ -483,44 +581,54 @@ ToggleStroke.Color = Color3.fromRGB(50, 58, 78)
 ToggleStroke.Thickness = 1
 ToggleStroke.Parent = ToggleBtn
 
--- TP Mode Toggle Button (Smooth Glide vs Instant Snap)
-local ModeBtn = Instance.new("TextButton")
-ModeBtn.Size = UDim2.new(1, -24, 0, 28)
-ModeBtn.Position = UDim2.new(0, 12, 0, 82)
-ModeBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 38)
-ModeBtn.BorderSizePixel = 0
-ModeBtn.Text = "TP Mode: Smooth Glide (Undetected)"
-ModeBtn.TextColor3 = Color3.fromRGB(165, 185, 255)
-ModeBtn.Font = Enum.Font.GothamMedium
-ModeBtn.TextSize = 11
-ModeBtn.AutoButtonColor = false
-ModeBtn.Parent = MainFrame
+-- Speed Slider Label (25 to 150 studs/s)
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Size = UDim2.new(1, -24, 0, 18)
+SpeedLabel.Position = UDim2.new(0, 12, 0, 84)
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.Text = "Move Speed: 42 studs/s (Server Safe)"
+SpeedLabel.TextColor3 = Color3.fromRGB(165, 185, 255)
+SpeedLabel.Font = Enum.Font.GothamMedium
+SpeedLabel.TextSize = 11
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpeedLabel.Parent = MainFrame
 
-local ModeCorner = Instance.new("UICorner")
-ModeCorner.CornerRadius = UDim.new(0, 7)
-ModeCorner.Parent = ModeBtn
+local SpeedTrack = Instance.new("Frame")
+SpeedTrack.Size = UDim2.new(1, -24, 0, 13)
+SpeedTrack.Position = UDim2.new(0, 12, 0, 104)
+SpeedTrack.BackgroundColor3 = Color3.fromRGB(28, 32, 45)
+SpeedTrack.BorderSizePixel = 0
+SpeedTrack.Parent = MainFrame
 
-local ModeStroke = Instance.new("UIStroke")
-ModeStroke.Color = Color3.fromRGB(45, 55, 82)
-ModeStroke.Thickness = 1
-ModeStroke.Parent = ModeBtn
+local SpeedTrackCorner = Instance.new("UICorner")
+SpeedTrackCorner.CornerRadius = UDim.new(1, 0)
+SpeedTrackCorner.Parent = SpeedTrack
 
--- Safe Distance Slider Label
+local SpeedFill = Instance.new("Frame")
+SpeedFill.Size = UDim2.new((42 - 25) / (150 - 25), 0, 1, 0)
+SpeedFill.BackgroundColor3 = Color3.fromRGB(70, 200, 125)
+SpeedFill.BorderSizePixel = 0
+SpeedFill.Parent = SpeedTrack
+
+local SpeedFillCorner = Instance.new("UICorner")
+SpeedFillCorner.CornerRadius = UDim.new(1, 0)
+SpeedFillCorner.Parent = SpeedFill
+
+-- Safe Ball Distance Slider Label
 local SliderLabel = Instance.new("TextLabel")
 SliderLabel.Size = UDim2.new(1, -24, 0, 18)
-SliderLabel.Position = UDim2.new(0, 12, 0, 118)
+SliderLabel.Position = UDim2.new(0, 12, 0, 125)
 SliderLabel.BackgroundTransparency = 1
 SliderLabel.Text = "Safe Ball Distance: 15 studs"
 SliderLabel.TextColor3 = Color3.fromRGB(180, 190, 215)
 SliderLabel.Font = Enum.Font.GothamMedium
-SliderLabel.TextSize = 12
+SliderLabel.TextSize = 11
 SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
 SliderLabel.Parent = MainFrame
 
--- Slider Track
 local SliderTrack = Instance.new("Frame")
-SliderTrack.Size = UDim2.new(1, -24, 0, 14)
-SliderTrack.Position = UDim2.new(0, 12, 0, 140)
+SliderTrack.Size = UDim2.new(1, -24, 0, 13)
+SliderTrack.Position = UDim2.new(0, 12, 0, 145)
 SliderTrack.BackgroundColor3 = Color3.fromRGB(28, 32, 45)
 SliderTrack.BorderSizePixel = 0
 SliderTrack.Parent = MainFrame
@@ -542,7 +650,7 @@ FillCorner.Parent = SliderFill
 -- Live Status Label
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(1, -24, 0, 22)
-StatusLabel.Position = UDim2.new(0, 12, 0, 168)
+StatusLabel.Position = UDim2.new(0, 12, 0, 174)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Text = "Status: Idle"
 StatusLabel.TextColor3 = Color3.fromRGB(140, 150, 175)
@@ -554,63 +662,76 @@ StatusLabel.Parent = MainFrame
 local function SetStatus(txt)
     if State.Status ~= txt then
         State.Status = txt
-        StatusLabel.Text = "Status: " .. txt
+        pcall(function()
+            StatusLabel.Text = "Status: " .. txt
+        end)
     end
 end
 
 local function UpdateVisuals()
-    if State.Enabled then
-        ToggleBtn.Text = "Auto Farm Goals: ON"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 135, 85)
-        ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ToggleStroke.Color = Color3.fromRGB(70, 200, 125)
-    else
-        ToggleBtn.Text = "Auto Farm Goals: OFF"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(26, 30, 42)
-        ToggleBtn.TextColor3 = Color3.fromRGB(200, 205, 220)
-        ToggleStroke.Color = Color3.fromRGB(50, 58, 78)
-        SetStatus("Idle")
-    end
+    pcall(function()
+        if State.Enabled then
+            ToggleBtn.Text = "Auto Farm Goals: ON"
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 135, 85)
+            ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            ToggleStroke.Color = Color3.fromRGB(70, 200, 125)
+        else
+            ToggleBtn.Text = "Auto Farm Goals: OFF"
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(26, 30, 42)
+            ToggleBtn.TextColor3 = Color3.fromRGB(200, 205, 220)
+            ToggleStroke.Color = Color3.fromRGB(50, 58, 78)
+            SetStatus("Idle")
+        end
 
-    if State.SmoothGlide then
-        ModeBtn.Text = "TP Mode: Smooth Glide (Undetected)"
-        ModeBtn.TextColor3 = Color3.fromRGB(165, 185, 255)
-    else
-        ModeBtn.Text = "TP Mode: Instant Snap"
-        ModeBtn.TextColor3 = Color3.fromRGB(255, 195, 120)
-    end
+        local speedAlpha = math.clamp((State.MoveSpeed - 25) / (150 - 25), 0, 1)
+        SpeedFill.Size = UDim2.new(speedAlpha, 0, 1, 0)
+        local tag = State.MoveSpeed <= 48 and "(Server Safe)" or "(Fast - May Rubberband)"
+        SpeedLabel.Text = string.format("Move Speed: %d studs/s %s", State.MoveSpeed, tag)
 
-    local alpha = math.clamp(State.SafeRadius / 40, 0, 1)
-    SliderFill.Size = UDim2.new(alpha, 0, 1, 0)
-    SliderLabel.Text = string.format("Safe Ball Distance: %d studs", State.SafeRadius)
+        local alpha = math.clamp(State.SafeRadius / 40, 0, 1)
+        SliderFill.Size = UDim2.new(alpha, 0, 1, 0)
+        SliderLabel.Text = string.format("Safe Ball Distance: %d studs", State.SafeRadius)
+    end)
 end
 
 ToggleBtn.MouseButton1Click:Connect(function()
     State.Enabled = not State.Enabled
+    if not State.Enabled then
+        StopCharacterDrive(LocalPlayer.Character)
+    end
     UpdateVisuals()
 end)
 
-ModeBtn.MouseButton1Click:Connect(function()
-    State.SmoothGlide = not State.SmoothGlide
-    UpdateVisuals()
-end)
+local DraggingSpeed = false
+local DraggingRadius = false
+local DraggingWindow = false
+local DragStart, StartPos
 
-local DraggingSlider = false
-local function SetSliderFromX(screenX)
+local function SetSpeedFromX(screenX)
+    local rel = math.clamp((screenX - SpeedTrack.AbsolutePosition.X) / math.max(SpeedTrack.AbsoluteSize.X, 1), 0, 1)
+    State.MoveSpeed = math.clamp(math.floor(25 + rel * (150 - 25) + 0.5), 25, 150)
+    UpdateVisuals()
+end
+
+local function SetRadiusFromX(screenX)
     local rel = math.clamp((screenX - SliderTrack.AbsolutePosition.X) / math.max(SliderTrack.AbsoluteSize.X, 1), 0, 1)
     State.SafeRadius = math.clamp(math.floor(rel * 40 + 0.5), 0, 40)
     UpdateVisuals()
 end
 
-SliderTrack.InputBegan:Connect(function(input)
+SpeedTrack.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        DraggingSlider = true
-        SetSliderFromX(input.Position.X)
+        DraggingSpeed = true
+        SetSpeedFromX(input.Position.X)
     end
 end)
 
-local DraggingWindow = false
-local DragStart, StartPos
+SliderTrack.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        DraggingRadius = true
+        SetRadiusFromX(input.Position.X)
+    end
+end)
 
 Header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -620,10 +741,12 @@ Header.InputBegan:Connect(function(input)
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
+table.insert(State.Connections, UserInputService.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        if DraggingSlider then
-            SetSliderFromX(input.Position.X)
+        if DraggingSpeed then
+            SetSpeedFromX(input.Position.X)
+        elseif DraggingRadius then
+            SetRadiusFromX(input.Position.X)
         elseif DraggingWindow and DragStart and StartPos then
             local delta = input.Position - DragStart
             MainFrame.Position = UDim2.new(
@@ -634,34 +757,21 @@ UserInputService.InputChanged:Connect(function(input)
             )
         end
     end
-end)
+end))
 
-UserInputService.InputEnded:Connect(function(input)
+table.insert(State.Connections, UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        DraggingSlider = false
+        DraggingSpeed = false
+        DraggingRadius = false
         DraggingWindow = false
     end
-end)
+end))
 
--- // 7. Main Auto-Farm Heartbeat Loop
-RunService.Heartbeat:Connect(function(dt)
+-- // 7. Main Auto-Farm PreSimulation Loop
+-- Runs on PreSimulation so our velocity & MoveCommand are set right BEFORE CharacterReplicationClient.PostSimulation
+-- sends Remotes.Characters.MovementUpdate to the server.
+local simConn = RunService.PreSimulation:Connect(function(dt)
     if not State.Enabled then return end
-
-    -- Pause during Kickoff Countdown or Goal Replay
-    if KickoffFreeze and type(KickoffFreeze.IsFrozen) == "function" then
-        local ok, frozen = pcall(KickoffFreeze.IsFrozen)
-        if ok and frozen then
-            SetStatus("Waiting (Kickoff Freeze)")
-            return
-        end
-    end
-    if GoalReplay and type(GoalReplay.IsActive) == "function" then
-        local ok, active = pcall(GoalReplay.IsActive)
-        if ok and active then
-            SetStatus("Waiting (Goal Replay)")
-            return
-        end
-    end
 
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -671,9 +781,26 @@ RunService.Heartbeat:Connect(function(dt)
         return
     end
 
+    if KickoffFreeze and type(KickoffFreeze.IsFrozen) == "function" then
+        local ok, frozen = pcall(KickoffFreeze.IsFrozen)
+        if ok and frozen then
+            StopCharacterDrive(char)
+            SetStatus("Waiting (Kickoff Freeze)")
+            return
+        end
+    end
+    if GoalReplay and type(GoalReplay.IsActive) == "function" then
+        local ok, active = pcall(GoalReplay.IsActive)
+        if ok and active then
+            StopCharacterDrive(char)
+            SetStatus("Waiting (Goal Replay)")
+            return
+        end
+    end
     if Ragdoll and type(Ragdoll.IsEnabled) == "function" then
         local ok, rag = pcall(Ragdoll.IsEnabled, char)
         if ok and rag then
+            StopCharacterDrive(char)
             SetStatus("Waiting (Ragdolled)")
             return
         end
@@ -681,25 +808,26 @@ RunService.Heartbeat:Connect(function(dt)
 
     local ballPos, ownerUserId, ballVel = GetBallInfo()
     if not ballPos then
+        StopCharacterDrive(char)
         SetStatus("Waiting for Match Ball")
         return
     end
 
     local goalPart = GetEnemyGoalPart()
     if not goalPart then
+        StopCharacterDrive(char)
         SetStatus("Waiting for Enemy Goal")
         return
     end
 
-    -- CASE 1: We own the ball -> TP inside/to enemy goal post & score!
+    -- CASE 1: We own the ball -> Drive to enemy goal post & score!
     if ownerUserId == LocalPlayer.UserId then
         local standPos, shootAimPos = GetBestGoalTarget(goalPart, hrp.Position)
         if standPos then
-            SetStatus("Scoring -> Enemy Goal!")
-            local reached = MoveCharacterTowards(char, hrp, hum, standPos, shootAimPos, dt)
-            if reached or (hrp.Position - standPos).Magnitude <= 12 then
-                -- Walk/Step into goal net AND fire point-blank shot so it scores immediately
-                PlaceCharacterAt(char, hrp, hum, shootAimPos, shootAimPos + (shootAimPos - standPos))
+            SetStatus("Has Ball -> Driving to Enemy Goal!")
+            local reached = DriveCharacterTowards(char, hrp, hum, standPos, shootAimPos, dt)
+            local distToGoal = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(standPos.X, 0, standPos.Z)).Magnitude
+            if reached or distToGoal <= 16 then
                 FirePointBlankGoalShot(hrp, shootAimPos)
             end
         end
@@ -708,6 +836,7 @@ RunService.Heartbeat:Connect(function(dt)
 
     -- CASE 2: Someone else owns the ball -> Wait safely
     if ownerUserId ~= nil and ownerUserId ~= LocalPlayer.UserId then
+        StopCharacterDrive(char)
         SetStatus("Waiting (Ball Owned)")
         return
     end
@@ -715,19 +844,34 @@ RunService.Heartbeat:Connect(function(dt)
     -- CASE 3: Ball is free -> Check if anyone is too close to the ball
     local tooClose, closestName = IsAnyoneCloseToBall(ballPos, State.SafeRadius)
     if tooClose then
+        StopCharacterDrive(char)
         SetStatus("Waiting (" .. tostring(closestName) .. " near ball)")
         return
     end
 
-    -- CASE 4: Ball is free & clear -> Lead ball velocity slightly and TP onto ball pickup hitbox
+    -- CASE 4: Ball is free & clear -> Drive through ball's server pickup hitbox
     local leadPos = ballPos
     if typeof(ballVel) == "Vector3" and ballVel.Magnitude > 1 then
-        leadPos = ballPos + Vector3.new(ballVel.X, 0, ballVel.Z) * 0.06
+        leadPos = ballPos + Vector3.new(ballVel.X, 0, ballVel.Z) * 0.08
     end
-    local pickupPos = Vector3.new(leadPos.X, math.max(leadPos.Y + 2.2, hrp.Position.Y), leadPos.Z)
 
-    SetStatus("Fetching Free Ball...")
-    MoveCharacterTowards(char, hrp, hum, pickupPos, goalPart.Position, dt)
+    local statusTxt = os.clock() < State.CorrectionHoldUntil
+        and "Fetching Ball (Server Synced 40s/s)"
+        or "Fetching Free Ball..."
+    SetStatus(statusTxt)
+    DriveCharacterTowards(char, hrp, hum, leadPos, goalPart.Position, dt)
 end)
+table.insert(State.Connections, simConn)
+
+if getgenv then
+    getgenv().__CoreIllegalSoccerAutoFarmCleanup = function()
+        State.Enabled = false
+        StopCharacterDrive(LocalPlayer.Character)
+        for _, conn in ipairs(State.Connections) do
+            pcall(function() conn:Disconnect() end)
+        end
+        pcall(function() ScreenGui:Destroy() end)
+    end
+end
 
 UpdateVisuals()
