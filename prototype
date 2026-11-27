@@ -1,0 +1,391 @@
+-- // Core.xyz · Illegal Soccer Prototype (Shot Strength 100% - 500%)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- // State
+local State = {
+    Enabled = false,
+    Percent = 100, -- 100% (1.0x) to 500% (5.0x)
+    Multiplier = 1.0
+}
+
+-- // Safe Require Helper
+local function SafeRequire(path)
+    if not path then return nil end
+    local ok, mod = pcall(require, path)
+    return ok and mod or nil
+end
+
+local Modules = ReplicatedStorage:WaitForChild("Modules", 10)
+local Actions = Modules and Modules:WaitForChild("Actions", 10)
+local Gameplay = Modules and Modules:WaitForChild("Gameplay", 10)
+
+local KickCore = Actions and SafeRequire(Actions:FindFirstChild("KickCore"))
+local KickPowerups = Actions and SafeRequire(Actions:FindFirstChild("KickPowerups"))
+local Shoot = Actions and SafeRequire(Actions:FindFirstChild("Shoot"))
+local Pass = Actions and SafeRequire(Actions:FindFirstChild("Pass"))
+local Throw = Actions and SafeRequire(Actions:FindFirstChild("Throw"))
+local Headbutt = Actions and SafeRequire(Actions:FindFirstChild("Headbutt"))
+local ActionRemoteProtocol = Actions and SafeRequire(Actions:FindFirstChild("ActionRemoteProtocol"))
+local TuningScope = Gameplay and SafeRequire(Gameplay:FindFirstChild("TuningScope"))
+
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+local BallRemotes = Remotes and Remotes:WaitForChild("Ball", 10)
+local KickRemote = BallRemotes and BallRemotes:WaitForChild("Kick", 10)
+
+-- // Backup Original Constants
+local BaseConstants = {
+    ShotMin = Shoot and Shoot.Constants and Shoot.Constants.Shot and Shoot.Constants.Shot.MinimumSpeed or 70,
+    ShotMax = Shoot and Shoot.Constants and Shoot.Constants.Shot and Shoot.Constants.Shot.MaximumSpeed or 123,
+    PassGroundMin = Pass and Pass.Constants and Pass.Constants.Ground and Pass.Constants.Ground.MinimumSpeed or 62,
+    PassGroundMax = Pass and Pass.Constants and Pass.Constants.Ground and Pass.Constants.Ground.MaximumSpeed or 105,
+    PassLobMin = Pass and Pass.Constants and Pass.Constants.Lob and Pass.Constants.Lob.MinimumSpeed or 52,
+    PassLobMax = Pass and Pass.Constants and Pass.Constants.Lob and Pass.Constants.Lob.MaximumSpeed or 95,
+    ThrowMin = Throw and Throw.Constants and Throw.Constants.MinimumSpeed or 62,
+    ThrowMax = Throw and Throw.Constants and Throw.Constants.MaximumSpeed or 105,
+    HeadbuttMin = Headbutt and Headbutt.Constants and Headbutt.Constants.MinimumSpeed or 40,
+    HeadbuttMax = Headbutt and Headbutt.Constants and Headbutt.Constants.MaximumSpeed or 135,
+}
+
+local function IsLocalActor(actor)
+    if not actor or not LocalPlayer then return true end
+    if actor == LocalPlayer or actor == LocalPlayer.Character then return true end
+    if typeof(actor) == "Instance" and LocalPlayer.Character and actor:IsDescendantOf(LocalPlayer.Character) then
+        return true
+    end
+    return false
+end
+
+-- // Apply Shot Strength to Game Modules
+local function ApplyShotStrength()
+    local mult = State.Enabled and State.Multiplier or 1.0
+
+    -- 1. Scale Shoot / Pass / Throw / Headbutt Constants
+    if Shoot and Shoot.Constants and Shoot.Constants.Shot then
+        Shoot.Constants.Shot.MinimumSpeed = BaseConstants.ShotMin * mult
+        Shoot.Constants.Shot.MaximumSpeed = BaseConstants.ShotMax * mult
+    end
+    if Pass and Pass.Constants then
+        if Pass.Constants.Ground then
+            Pass.Constants.Ground.MinimumSpeed = BaseConstants.PassGroundMin * mult
+            Pass.Constants.Ground.MaximumSpeed = BaseConstants.PassGroundMax * mult
+        end
+        if Pass.Constants.Lob then
+            Pass.Constants.Lob.MinimumSpeed = BaseConstants.PassLobMin * mult
+            Pass.Constants.Lob.MaximumSpeed = BaseConstants.PassLobMax * mult
+        end
+    end
+    if Throw and Throw.Constants then
+        Throw.Constants.MinimumSpeed = BaseConstants.ThrowMin * mult
+        Throw.Constants.MaximumSpeed = BaseConstants.ThrowMax * mult
+    end
+    if Headbutt and Headbutt.Constants then
+        Headbutt.Constants.MinimumSpeed = BaseConstants.HeadbuttMin * mult
+        Headbutt.Constants.MaximumSpeed = BaseConstants.HeadbuttMax * mult
+    end
+
+    -- 2. Apply Launch Multipliers in KickCore
+    if KickCore and type(KickCore.SetLaunchMultipliers) == "function" then
+        pcall(function()
+            if TuningScope and type(TuningScope.SetAffectedUserIds) == "function" then
+                TuningScope.SetAffectedUserIds(nil)
+            end
+            KickCore.SetLaunchMultipliers({
+                Kick = mult,
+                Lob = mult,
+                Pass = mult
+            })
+        end)
+    end
+end
+
+-- // Hook KickCore & KickPowerups functions
+if KickCore and type(KickCore.GetLaunchMultiplier) == "function" then
+    local oldGetLaunchMultiplier = KickCore.GetLaunchMultiplier
+    KickCore.GetLaunchMultiplier = function(kind, actor, ...)
+        if State.Enabled and State.Multiplier > 1 and IsLocalActor(actor) then
+            return State.Multiplier
+        end
+        return oldGetLaunchMultiplier(kind, actor, ...)
+    end
+end
+
+if KickPowerups then
+    if type(KickPowerups.GetMultiplier) == "function" then
+        local oldGetMultiplier = KickPowerups.GetMultiplier
+        KickPowerups.GetMultiplier = function(actor, ...)
+            local base = oldGetMultiplier(actor, ...) or 1
+            if State.Enabled and State.Multiplier > 1 and IsLocalActor(actor) then
+                return math.max(base, State.Multiplier)
+            end
+            return base
+        end
+    end
+    if type(KickPowerups.GetVelocityMultipliers) == "function" then
+        local oldGetVelMult = KickPowerups.GetVelocityMultipliers
+        KickPowerups.GetVelocityMultipliers = function(multArg, ...)
+            if State.Enabled and State.Multiplier > 1 then
+                local m = math.max(tonumber(multArg) or 1, State.Multiplier)
+                return m, 1 + (m - 1) * 0.35
+            end
+            return oldGetVelMult(multArg, ...)
+        end
+    end
+end
+
+-- // Helper to boost ActionSession Command table before sending to server
+local LastStartShotTime = nil
+
+local function BoostKickCommand(phase, cmd)
+    if type(cmd) ~= "table" then return end
+    if not (State.Enabled and State.Multiplier > 1) then return end
+
+    local maxCharge = tonumber(cmd.MaximumChargeSeconds) or 0.4
+    local now = tonumber(cmd.ShotTime) or workspace:GetServerTimeNow()
+
+    if phase == "Start" then
+        LastStartShotTime = now - maxCharge
+        cmd.ShotTime = LastStartShotTime
+    elseif phase == "Release" then
+        cmd.ChargeSeconds = maxCharge
+        cmd.ChargeStartedAt = LastStartShotTime or (now - maxCharge)
+        cmd.ShotTime = math.max(now, cmd.ChargeStartedAt + maxCharge)
+    end
+
+    local dir = cmd.KickDirection
+    if typeof(dir) ~= "Vector3" and type(cmd.AimDirection) == "table" and typeof(cmd.AimDirection.Direction) == "Vector3" then
+        local aimDir = cmd.AimDirection.Direction
+        local flat = Vector3.new(aimDir.X, 0, aimDir.Z)
+        if flat.Magnitude > 1e-4 then
+            dir = flat.Unit
+        end
+    end
+    if typeof(dir) == "Vector3" and dir.Magnitude > 1e-4 then
+        local flatUnit = Vector3.new(dir.X, 0, dir.Z).Unit
+        local alpha = math.clamp((State.Multiplier - 1) / 4, 0, 1)
+        local boostSpeed = 24 + (28 * alpha) * State.Multiplier
+        cmd.PlayerVelocity = flatUnit * boostSpeed
+    end
+end
+
+-- // Hook ActionRemoteProtocol
+if ActionRemoteProtocol then
+    for _, methodName in ipairs({ "Start", "Update", "Release" }) do
+        local oldFn = ActionRemoteProtocol[methodName]
+        if type(oldFn) == "function" then
+            ActionRemoteProtocol[methodName] = function(cmd, ...)
+                if State.Enabled and State.Multiplier > 1 and type(cmd) == "table" then
+                    BoostKickCommand(methodName, cmd)
+                end
+                return oldFn(cmd, ...)
+            end
+        end
+    end
+end
+
+-- // Hook ReplicatedStorage.Remotes.Ball.Kick:FireServer (__namecall)
+if hookmetamethod and getnamecallmethod then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if State.Enabled and State.Multiplier > 1 and self == KickRemote and (method == "FireServer" or method == "fireServer") then
+            local args = { ... }
+            local packet = args[1]
+            if type(packet) == "table" and packet.Protocol == "ActionSession" and type(packet.Command) == "table" then
+                BoostKickCommand(packet.Phase, packet.Command)
+                return oldNamecall(self, unpack(args))
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+end
+
+-- // Floating UI (1 Toggle + 1 Slider: 100% - 500%)
+local GuiParent = (gethui and gethui()) or CoreGui
+local OldGui = GuiParent:FindFirstChild("CoreIllegalSoccerProto")
+if OldGui then OldGui:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CoreIllegalSoccerProto"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = GuiParent
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 260, 0, 148)
+MainFrame.Position = UDim2.new(0.5, -130, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(45, 52, 70)
+MainStroke.Thickness = 1.2
+MainStroke.Parent = MainFrame
+
+-- Header
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 34)
+Header.BackgroundColor3 = Color3.fromRGB(22, 25, 34)
+Header.BorderSizePixel = 0
+Header.Parent = MainFrame
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 10)
+HeaderCorner.Parent = Header
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -24, 1, 0)
+Title.Position = UDim2.new(0, 12, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "ILLEGAL SOCCER · SHOT PROTO"
+Title.TextColor3 = Color3.fromRGB(235, 240, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 12
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+-- Toggle Button Row
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(1, -24, 0, 36)
+ToggleBtn.Position = UDim2.new(0, 12, 0, 44)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(26, 30, 42)
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Text = "Shot Strength: OFF"
+ToggleBtn.TextColor3 = Color3.fromRGB(200, 205, 220)
+ToggleBtn.Font = Enum.Font.GothamSemibold
+ToggleBtn.TextSize = 13
+ToggleBtn.AutoButtonColor = false
+ToggleBtn.Parent = MainFrame
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 8)
+ToggleCorner.Parent = ToggleBtn
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Color = Color3.fromRGB(50, 58, 78)
+ToggleStroke.Thickness = 1
+ToggleStroke.Parent = ToggleBtn
+
+-- Slider Label
+local SliderLabel = Instance.new("TextLabel")
+SliderLabel.Size = UDim2.new(1, -24, 0, 20)
+SliderLabel.Position = UDim2.new(0, 12, 0, 88)
+SliderLabel.BackgroundTransparency = 1
+SliderLabel.Text = "Strength: 100% (1.00x)"
+SliderLabel.TextColor3 = Color3.fromRGB(180, 190, 215)
+SliderLabel.Font = Enum.Font.GothamMedium
+SliderLabel.TextSize = 12
+SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+SliderLabel.Parent = MainFrame
+
+-- Slider Track
+local SliderTrack = Instance.new("Frame")
+SliderTrack.Size = UDim2.new(1, -24, 0, 14)
+SliderTrack.Position = UDim2.new(0, 12, 0, 114)
+SliderTrack.BackgroundColor3 = Color3.fromRGB(28, 32, 45)
+SliderTrack.BorderSizePixel = 0
+SliderTrack.Parent = MainFrame
+
+local TrackCorner = Instance.new("UICorner")
+TrackCorner.CornerRadius = UDim.new(1, 0)
+TrackCorner.Parent = SliderTrack
+
+local SliderFill = Instance.new("Frame")
+SliderFill.Size = UDim2.new(0, 0, 1, 0)
+SliderFill.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+SliderFill.BorderSizePixel = 0
+SliderFill.Parent = SliderTrack
+
+local FillCorner = Instance.new("UICorner")
+FillCorner.CornerRadius = UDim.new(1, 0)
+FillCorner.Parent = SliderFill
+
+-- UI Interaction Logic
+local function UpdateVisuals()
+    if State.Enabled then
+        ToggleBtn.Text = "Shot Strength: ON"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 135, 85)
+        ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        ToggleStroke.Color = Color3.fromRGB(70, 200, 125)
+    else
+        ToggleBtn.Text = "Shot Strength: OFF"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(26, 30, 42)
+        ToggleBtn.TextColor3 = Color3.fromRGB(200, 205, 220)
+        ToggleStroke.Color = Color3.fromRGB(50, 58, 78)
+    end
+
+    local alpha = (State.Percent - 100) / 400
+    SliderFill.Size = UDim2.new(math.clamp(alpha, 0, 1), 0, 1, 0)
+    SliderLabel.Text = string.format("Strength: %d%% (%.2fx)", State.Percent, State.Multiplier)
+    ApplyShotStrength()
+end
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    State.Enabled = not State.Enabled
+    UpdateVisuals()
+end)
+
+local DraggingSlider = false
+
+local function SetSliderFromX(screenX)
+    local rel = math.clamp((screenX - SliderTrack.AbsolutePosition.X) / math.max(SliderTrack.AbsoluteSize.X, 1), 0, 1)
+    local pct = math.floor(100 + rel * 400 + 0.5)
+    State.Percent = math.clamp(pct, 100, 500)
+    State.Multiplier = State.Percent / 100
+    UpdateVisuals()
+end
+
+SliderTrack.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        DraggingSlider = true
+        SetSliderFromX(input.Position.X)
+    end
+end)
+
+-- Smooth Window Dragging (Header)
+local DraggingWindow = false
+local DragStart, StartPos
+
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        DraggingWindow = true
+        DragStart = input.Position
+        StartPos = MainFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if DraggingSlider then
+            SetSliderFromX(input.Position.X)
+        elseif DraggingWindow and DragStart and StartPos then
+            local delta = input.Position - DragStart
+            MainFrame.Position = UDim2.new(
+                StartPos.X.Scale,
+                StartPos.X.Offset + delta.X,
+                StartPos.Y.Scale,
+                StartPos.Y.Offset + delta.Y
+            )
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        DraggingSlider = false
+        DraggingWindow = false
+    end
+end)
+
+UpdateVisuals()
