@@ -18,11 +18,13 @@ flow_preinit(function()
 			[9294074907] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
 			[10770730129] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
 			[10773229738] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Basketball-duels.lua",
+			[7326934954] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/99-nights-in-the-forest.lua",
 		},
 		SupportedPlaces = {
 			[90568084448279] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
 			[106931373443671] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
 			[134954408729617] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Basketball-duels.lua",
+			[126509999114328] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/99-nights-in-the-forest.lua",
 		},
 	}
 

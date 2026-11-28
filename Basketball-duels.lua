@@ -585,7 +585,7 @@ local State = {
     trackedEnemyDeathStates = {},
     isWindowFocused = true,
     effectivePerformanceMode = "Balanced",
-    detectedGameName = "Prison Life",
+    detectedGameName = "Basketball Duels",
     detectedRegionCode = "IN",
     themeBoundElements = {},
     isUnderRoof = false,
@@ -9417,6 +9417,28 @@ do
             return string.format("%02dm %02ds", mins, secs)
         end
 
+        local function getKeyTimeLeftString()
+            if keyState.lastSync == 0 and keyState.key ~= "" and keyState.expiresAt == nil and not keyState.isLifetime then
+                pcall(queryFlowAuthExpiry)
+            end
+            if keyState.isLifetime then
+                return "Lifetime"
+            end
+            if keyState.expiresAt then
+                local rem = keyState.expiresAt - os.time()
+                if rem > 0 then
+                    return formatDuration(rem)
+                else
+                    return "Expired"
+                end
+            end
+            if keyState.isValid == false then
+                return keyState.statusText or ((keyState.key == "") and "No Active Key" or "Expired")
+            end
+            return (keyState.key ~= "") and "24h 00m 00s" or "Active"
+        end
+        State.getKeyTimeLeftText = getKeyTimeLeftString
+
         local function renderKeyDuration()
             if not durationLabel or not durationLabel.Parent then
                 return
@@ -10173,7 +10195,7 @@ local BD = {
     PerfectChances = 100,
     TimingOffsetMs = 0,
     AutoShoot = false,
-    AutoShootRange = 26,
+    AutoShootRange = 12,
     FinisherType = "Auto",
     AutoAlleyOopFinisher = false,
     NoColdShotPenalty = false,
@@ -10182,12 +10204,12 @@ local BD = {
 
     -- Tab 2: Attack -> Dunk
     AutoDunk = false,
-    DunkRange = 11.5,
+    DunkRange = 10,
     DunkChance = 100,
 
     -- Tab 2: Attack -> Dribble
     AutoDribble = false,
-    DribbleReactionMs = 85,
+    DribbleReactionMs = 45,
     AlwaysAnkleBreak = false,
     AutoBagworkCombo = false,
     ZeroDribbleCooldown = false,
@@ -10282,12 +10304,14 @@ local BD = {
     LastDribbleAt = 0,
     LastBagAt = 0,
     BagStepIdx = 1,
+    DribbleComboIdx = 1,
     LastAutoShootAt = 0,
     LastAutoBlockAt = 0,
     LastAutoStealAt = 0,
     LastAutoReboundAt = 0,
     LastAbilityAt = 0,
     LastPassAt = 0,
+    LastCheckAt = 0,
     LastQueueAt = 0,
     LastPadCheckAt = 0,
     LastVoteAt = 0,
@@ -10295,18 +10319,24 @@ local BD = {
     LastFarmTick = 0,
     LastSpinTick = 0,
     LastRewardTick = 0,
+    FarmActiveMatchToken = nil,
     GreenRollActive = true,
     GreenRollGatherId = nil,
     AutoReleasedGather = nil,
     LocalEquippedCosmetics = {},
+    FreeCamYaw = 0,
+    FreeCamPitch = -0.25,
+    FreeCamDist = 16,
+    FreeCamInit = false,
 }
 
 do
     local ReplicatedStorage = safeGetService("ReplicatedStorage")
     local VirtualUser = safeGetService("VirtualUser")
-    local IsoFolder = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Iso")
-    local PackagesFolder = ReplicatedStorage and ReplicatedStorage:FindFirstChild("Packages")
-    local CoreRemotes = ReplicatedStorage and ReplicatedStorage:FindFirstChild("CoreRemotes")
+
+    local IsoFolder = ReplicatedStorage and (ReplicatedStorage:FindFirstChild("Iso") or ReplicatedStorage:WaitForChild("Iso", 5))
+    local PackagesFolder = ReplicatedStorage and (ReplicatedStorage:FindFirstChild("Packages") or ReplicatedStorage:WaitForChild("Packages", 5))
+    local CoreRemotes = ReplicatedStorage and (ReplicatedStorage:FindFirstChild("CoreRemotes") or ReplicatedStorage:WaitForChild("CoreRemotes", 5))
 
     local function safeRequire(inst)
         if not inst then return nil end
@@ -10322,6 +10352,7 @@ do
     local IsoBot       = IsoFolder and safeRequire(IsoFolder:FindFirstChild("Bot"))
     local IsoInput     = IsoFolder and safeRequire(IsoFolder:FindFirstChild("Input"))
     local IsoHUD       = IsoFolder and safeRequire(IsoFolder:FindFirstChild("HUD"))
+    local IsoFX        = IsoFolder and safeRequire(IsoFolder:FindFirstChild("FX"))
     local IsoCourt     = IsoFolder and safeRequire(IsoFolder:FindFirstChild("Court"))
     local IsoCameraRig = IsoFolder and safeRequire(IsoFolder:FindFirstChild("CameraRig"))
     local IsoCosmetics = IsoFolder and safeRequire(IsoFolder:FindFirstChild("Cosmetics"))
@@ -10332,6 +10363,107 @@ do
     local IsoReplay    = IsoFolder and safeRequire(IsoFolder:FindFirstChild("Replay"))
     local IsoShop      = IsoFolder and safeRequire(IsoFolder:FindFirstChild("Shop"))
     local CorePkg      = PackagesFolder and safeRequire(PackagesFolder:FindFirstChild("Core"))
+
+    local function getCoreRemotesFolder()
+        if not CoreRemotes or not CoreRemotes.Parent then
+            CoreRemotes = ReplicatedStorage and ReplicatedStorage:FindFirstChild("CoreRemotes")
+        end
+        return CoreRemotes
+    end
+
+    local function fireCoreServiceEvent(serviceName, remoteName, ...)
+        local args = { ... }
+        local fired = false
+        if CorePkg and type(CorePkg.GetService) == "function" then
+            local ok, svc = pcall(CorePkg.GetService, serviceName)
+            if ok and type(svc) == "table" and svc[remoteName] then
+                local remObj = svc[remoteName]
+                if type(remObj) == "table" and type(remObj.Fire) == "function" then
+                    local okF = pcall(function()
+                        remObj:Fire(table.unpack(args))
+                    end)
+                    if okF then fired = true end
+                end
+            end
+        end
+        if not fired then
+            local cr = getCoreRemotesFolder()
+            local svcFolder = cr and cr:FindFirstChild(serviceName)
+            local rem = svcFolder and svcFolder:FindFirstChild(remoteName)
+            if rem and (rem:IsA("RemoteEvent") or rem:IsA("UnreliableRemoteEvent")) then
+                pcall(function()
+                    rem:FireServer(table.unpack(args))
+                end)
+                fired = true
+            end
+        end
+        return fired
+    end
+
+    local function invokeCoreServiceFunction(serviceName, remoteName, ...)
+        local args = { ... }
+        if CorePkg and type(CorePkg.GetService) == "function" then
+            local ok, svc = pcall(CorePkg.GetService, serviceName)
+            if ok and type(svc) == "table" and type(svc[remoteName]) == "function" then
+                local okI, res = pcall(function()
+                    return svc[remoteName](svc, table.unpack(args))
+                end)
+                if okI then return res end
+            end
+        end
+        local cr = getCoreRemotesFolder()
+        local svcFolder = cr and cr:FindFirstChild(serviceName)
+        local rem = svcFolder and svcFolder:FindFirstChild(remoteName)
+        if rem and rem:IsA("RemoteFunction") then
+            local okI, res = pcall(function()
+                return rem:InvokeServer(table.unpack(args))
+            end)
+            if okI then return res end
+        end
+        return nil
+    end
+
+    local function fireGuiButton(btn)
+        if not btn or not btn:IsA("GuiButton") then return false end
+        local fired = false
+        if type(Env.firesignal) == "function" then
+            pcall(function()
+                Env.firesignal(btn.Activated)
+                fired = true
+            end)
+            pcall(function()
+                Env.firesignal(btn.MouseButton1Click)
+                fired = true
+            end)
+        end
+        if not fired and type(Env.getconnections) == "function" then
+            pcall(function()
+                for _, conn in ipairs(Env.getconnections(btn.Activated)) do
+                    if conn and type(conn.Fire) == "function" then
+                        conn:Fire()
+                        fired = true
+                    elseif conn and type(conn.Function) == "function" then
+                        task.spawn(conn.Function)
+                        fired = true
+                    end
+                end
+            end)
+            if not fired then
+                pcall(function()
+                    for _, conn in ipairs(Env.getconnections(btn.MouseButton1Click)) do
+                        if conn and type(conn.Fire) == "function" then
+                            conn:Fire()
+                            fired = true
+                        elseif conn and type(conn.Function) == "function" then
+                            task.spawn(conn.Function)
+                            fired = true
+                        end
+                    end
+                end)
+            end
+        end
+        return fired
+    end
 
     local function getIsoDebugBindable()
         local pg = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
@@ -10410,6 +10542,7 @@ do
     -- 2. 3-Point Range ESP 3D Court Arc Builder
     local ThreePtFolder = nil
     local LastCourtOrigin = nil
+
     local function clearThreePointESP()
         if ThreePtFolder then
             pcall(function() ThreePtFolder:Destroy() end)
@@ -10425,15 +10558,18 @@ do
             end
             return
         end
+
         local okOrigin, worldHoop = pcall(function()
             return IsoCourt.toWorld(IsoConfig.HOOP.x, 0.15, IsoConfig.HOOP.y)
         end)
         if not okOrigin or typeof(worldHoop) ~= "Vector3" then
             return
         end
+
         if ThreePtFolder and ThreePtFolder.Parent and LastCourtOrigin and (worldHoop - LastCourtOrigin).Magnitude < 0.5 then
             return
         end
+
         clearThreePointESP()
         LastCourtOrigin = worldHoop
 
@@ -10443,37 +10579,36 @@ do
         ThreePtFolder = folder
 
         local r3 = tonumber(IsoConfig.R3) or 23.75
-        local hx = IsoConfig.HOOP.x or 0
-        local hy = IsoConfig.HOOP.y or 3
+        local hx = IsoConfig.HOOP.x or 25
+        local hy = IsoConfig.HOOP.y or 5.25
         local segments = 34
         local pts = {}
+
         for i = 0, segments do
             local ang = -math.pi * 0.44 + (math.pi * 0.88) * (i / segments)
-            local cx = hx + math.sin(ang) * r3
+            local cx = math.clamp(hx + math.sin(ang) * r3, 3, 47)
             local cy = hy + math.cos(ang) * r3
-            cx = math.clamp(cx, -(IsoConfig.HALF_W or 25) + 0.5, (IsoConfig.HALF_W or 25) - 0.5)
-            cy = math.clamp(cy, 0.5, (IsoConfig.LENGTH or 47) - 0.5)
-            local okW, wPos = pcall(IsoCourt.toWorld, cx, 0.12, cy)
-            if okW and typeof(wPos) == "Vector3" then
-                table.insert(pts, wPos)
+            local okP, wp = pcall(IsoCourt.toWorld, cx, 0.14, cy)
+            if okP and typeof(wp) == "Vector3" then
+                table.insert(pts, wp)
             end
         end
+
         for i = 1, #pts - 1 do
-            local p1 = pts[i]
-            local p2 = pts[i + 1]
+            local p1, p2 = pts[i], pts[i + 1]
             local dist = (p2 - p1).Magnitude
             if dist > 0.05 then
                 local seg = Instance.new("Part")
-                seg.Name = "ArcSeg"
+                seg.Name = "ArcSeg_" .. tostring(i)
                 seg.Anchored = true
                 seg.CanCollide = false
                 seg.CanQuery = false
                 seg.CanTouch = false
                 seg.CastShadow = false
                 seg.Material = Enum.Material.Neon
-                seg.Color = Theme.Accent or Color3.fromRGB(115, 255, 145)
-                seg.Transparency = 0.2
-                seg.Size = Vector3.new(0.18, 0.06, dist)
+                seg.Color = Theme.Accent
+                seg.Transparency = 0.15
+                seg.Size = Vector3.new(0.28, 0.08, dist + 0.05)
                 seg.CFrame = CFrame.lookAt((p1 + p2) * 0.5, p2)
                 seg.Parent = folder
             end
@@ -10481,53 +10616,63 @@ do
     end
     BD.UpdateThreePointESP = updateThreePointESP
 
-    -- 3. Custom Physics & Dribble Cooldown Synchronizer
-    local DefaultPhysics = nil
-    if IsoConfig then
-        DefaultPhysics = {
-            SPEED = IsoConfig.SPEED or 17,
-            crossSpd = IsoConfig.cross and IsoConfig.cross.spd or 29,
-            crossWidth = IsoConfig.cross and IsoConfig.cross.width or 3.3,
-            crossCd = IsoConfig.cross and IsoConfig.cross.cd or 0.34,
-            drSpd = IsoConfig.play and IsoConfig.play.drSpd or 27,
-            hesiSpd = IsoConfig.play and IsoConfig.play.hesiSpd or 26.5,
-            sbSpd = IsoConfig.play and IsoConfig.play.sbSpd or 25,
-            sbCd = IsoConfig.play and IsoConfig.play.sbCd or 0.52,
-            drCd = IsoConfig.play and IsoConfig.play.drCd or 0.36,
-            drAgain = IsoConfig.play and IsoConfig.play.drAgain or 0.55,
-            moveGap = IsoConfig.play and IsoConfig.play.moveGap or 0.14,
-            cdCap = IsoConfig.play and IsoConfig.play.cdCap or 0.85,
-            dSlide = IsoConfig.play and IsoConfig.play.dSlide or 29.5,
-            dSlideCd = IsoConfig.play and IsoConfig.play.dSlideCd or 0.36,
-            dunkJump = IsoConfig.play and IsoConfig.play.dunkJump or 5.2,
-            dunkReach = IsoConfig.play and IsoConfig.play.dunkReach or 7.5,
-            dunkFt = IsoSim and IsoSim.DUNK_FT or 11.5,
-            reach = IsoConfig.play and IsoConfig.play.reach or 4.9,
-            dReach = IsoConfig.play and IsoConfig.play.dReach or 3.1,
-            bRad = IsoConfig.play and IsoConfig.play.bRad or 5.2,
-            green = IsoConfig.play and IsoConfig.play.green or 0.04,
-            greenPct = IsoConfig.GREEN_PCT or 100,
-            biteStun = IsoConfig.play and IsoConfig.play.biteStun or 0.55,
-            ankleTime = IsoConfig.play and IsoConfig.play.ankleTime or 3,
-            ankleGreen = IsoConfig.play and IsoConfig.play.ankleGreen or 1.4,
-        }
-    end
+    -- 3. Default Physics Backup & Live Physics Sync
+    local DefaultPhysics = {
+        SPEED      = (IsoConfig and IsoConfig.SPEED) or 17,
+        crossSpd   = (IsoConfig and IsoConfig.cross and IsoConfig.cross.spd) or 29,
+        crossWidth = (IsoConfig and IsoConfig.cross and IsoConfig.cross.width) or 3.6,
+        crossCd    = (IsoConfig and IsoConfig.cross and IsoConfig.cross.cd) or 0.25,
+        crossShield= (IsoConfig and IsoConfig.cross and IsoConfig.cross.shield) or 0.35,
+         crossReadCap=(IsoConfig and IsoConfig.cross and IsoConfig.cross.readCap) or 0.45,
+        drSpd      = (IsoConfig and IsoConfig.play and IsoConfig.play.drSpd) or 27,
+        hesiSpd    = (IsoConfig and IsoConfig.play and IsoConfig.play.hesiSpd) or 33,
+        sbSpd      = (IsoConfig and IsoConfig.play and IsoConfig.play.sbSpd) or 25,
+        sbCd       = (IsoConfig and IsoConfig.play and IsoConfig.play.sbCd) or 0.4,
+        drCd       = (IsoConfig and IsoConfig.play and IsoConfig.play.drCd) or 0.48,
+        drAgain    = (IsoConfig and IsoConfig.play and IsoConfig.play.drAgain) or 1.2,
+        moveGap    = (IsoConfig and IsoConfig.play and IsoConfig.play.moveGap) or 0.1,
+        cdCap      = (IsoConfig and IsoConfig.play and IsoConfig.play.cdCap) or 0.45,
+        dSlide     = (IsoConfig and IsoConfig.play and IsoConfig.play.dSlide) or 29.5,
+        dSlideCd   = (IsoConfig and IsoConfig.play and IsoConfig.play.dSlideCd) or 0.44,
+        dunkJump   = (IsoConfig and IsoConfig.play and IsoConfig.play.dunkJump) or 5.2,
+        dunkReach  = (IsoConfig and IsoConfig.play and IsoConfig.play.dunkReach) or 7.0,
+        dunkFt     = (IsoSim and IsoSim.DUNK_FT) or 10.5,
+        reach      = (IsoConfig and IsoConfig.play and IsoConfig.play.reach) or 4.9,
+        dReach     = (IsoConfig and IsoConfig.play and IsoConfig.play.dReach) or 3.8,
+        bRad       = (IsoConfig and IsoConfig.play and IsoConfig.play.bRad) or 4.9,
+        ankleTime  = (IsoConfig and IsoConfig.play and IsoConfig.play.ankleTime) or 2.5,
+        ankleGreen = (IsoConfig and IsoConfig.play and IsoConfig.play.ankleGreen) or 1.4,
+        biteStun   = (IsoConfig and IsoConfig.play and IsoConfig.play.biteStun) or 0.35,
+        green      = (IsoConfig and IsoConfig.play and IsoConfig.play.green) or 0.04,
+        greenPct   = (IsoConfig and IsoConfig.GREEN_PCT) or 0.17,
+        camera     = (IsoConfig and IsoConfig.CAMERA) or "broadcast",
+    }
 
     local function syncIsoPhysics()
-        if not IsoConfig or not DefaultPhysics then return end
+        if not IsoConfig then return end
         pcall(function()
             IsoConfig.SPEED = tonumber(BD.BaseCourtSpeed) or DefaultPhysics.SPEED
             if IsoConfig.cross then
                 local cSpd = tonumber(BD.CrossoverSpeedWidth) or DefaultPhysics.crossSpd
                 IsoConfig.cross.spd = cSpd
                 IsoConfig.cross.width = DefaultPhysics.crossWidth * (cSpd / DefaultPhysics.crossSpd)
-                IsoConfig.cross.cd = BD.ZeroDribbleCooldown and 0.01 or DefaultPhysics.crossCd
+                IsoConfig.cross.cd = (BD.ZeroDribbleCooldown or BD.AutoDribble) and 0.01 or DefaultPhysics.crossCd
+                IsoConfig.cross.shield = BD.AutoDribble and 0.01 or DefaultPhysics.crossShield
+                IsoConfig.cross.readCap = BD.AutoDribble and 0.01 or DefaultPhysics.crossReadCap
+            end
+            if IsoConfig.moves then
+                for _, mvTbl in pairs(IsoConfig.moves) do
+                    if type(mvTbl) == "table" and mvTbl.steal then
+                        mvTbl.steal = BD.AutoDribble and 0.01 or mvTbl.steal
+                    end
+                end
             end
             if IsoConfig.play then
                 local dhSpd = tonumber(BD.DriveHesiBoostSpeed) or DefaultPhysics.drSpd
                 IsoConfig.play.drSpd = dhSpd
                 IsoConfig.play.hesiSpd = dhSpd
                 IsoConfig.play.sbSpd = tonumber(BD.StepbackSpeedDist) or DefaultPhysics.sbSpd
+
                 local dSlideVal = tonumber(BD.DefSlideSpeed) or DefaultPhysics.dSlide
                 IsoConfig.play.dSlide = dSlideVal
                 IsoConfig.play.dSlideCd = (dSlideVal > 30 or BD.ZeroDribbleCooldown) and 0.01 or DefaultPhysics.dSlideCd
@@ -10536,7 +10681,7 @@ do
                 IsoConfig.play.dunkJump = dunkVal
                 IsoConfig.play.dunkReach = math.max(DefaultPhysics.dunkReach, dunkVal * 1.35)
                 if IsoSim then
-                    IsoSim.DUNK_FT = BD.AutoDunk and (tonumber(BD.DunkRange) or 11.5) or math.max(DefaultPhysics.dunkFt, dunkVal * 1.8)
+                    IsoSim.DUNK_FT = BD.AutoDunk and (tonumber(BD.DunkRange) or 10) or math.max(DefaultPhysics.dunkFt, dunkVal * 1.8)
                 end
 
                 local reachVal = tonumber(BD.StealBlockReach) or DefaultPhysics.reach
@@ -10547,7 +10692,7 @@ do
                 IsoConfig.play.dReach = math.max(DefaultPhysics.dReach, reachVal * 0.78)
                 IsoConfig.play.bRad = math.max(DefaultPhysics.bRad, reachVal)
 
-                if BD.ZeroDribbleCooldown then
+                if BD.ZeroDribbleCooldown or BD.AutoDribble then
                     IsoConfig.play.sbCd = 0.01
                     IsoConfig.play.drCd = 0.01
                     IsoConfig.play.drAgain = 0.01
@@ -10600,16 +10745,86 @@ do
             if BD.NoColdShotPenalty and plr and plr.gather then
                 plr.gather.cold = nil
             end
-            local c, hw = origGreenWindow(sim, plr, ...)
-            if BD.CustomGreenWindow and type(hw) == "number" then
+            local c, hw, d, l, r = origGreenWindow(sim, plr, ...)
+            if BD.CustomGreenWindow and type(c) == "number" then
                 local mult = tonumber(BD.GreenWindowSize) or 1.5
-                hw = math.clamp(hw * mult, 0.01, 0.48)
+                c = math.clamp(c * mult, 0.02, 0.48)
+                if type(r) == "number" then
+                    r = math.clamp(r * mult, 0.02, 0.48)
+                end
             end
-            return c, hw
+            return c, hw, d, l, r
         end
     end
 
-    -- 5. Hook Iso.CameraRig (Disable Shakes, Disable Slow Mo, Custom Camera Mode & FOV)
+    -- 5. Interactive Roblox Free Camera Rotation & Zoom + Iso.CameraRig Hook
+    local freeCamTouchInput = nil
+    local freeCamLastPos = nil
+    local freeCamMouseRotating = false
+
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if not (BD.CustomCameraMode and BD.CameraMode == "Roblox Free Camera") then
+            return
+        end
+        if input.UserInputType == Enum.UserInputType.MouseButton2 then
+            freeCamMouseRotating = true
+            freeCamLastPos = input.Position
+        elseif input.UserInputType == Enum.UserInputType.Touch and not gpe and not freeCamTouchInput then
+            local cam = workspace.CurrentCamera
+            local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+            -- Ignore bottom-left virtual thumbstick zone so movement joystick still works seamlessly
+            if not (input.Position.X < vp.X * 0.35 and input.Position.Y > vp.Y * 0.45) then
+                freeCamTouchInput = input
+                freeCamLastPos = input.Position
+            end
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input, gpe)
+        if not (BD.CustomCameraMode and BD.CameraMode == "Roblox Free Camera") then
+            return
+        end
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            local rmbDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+            local locked = (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCurrentPosition)
+            if freeCamMouseRotating or rmbDown or locked then
+                local dx = input.Delta.X
+                local dy = input.Delta.Y
+                if dx == 0 and dy == 0 and freeCamLastPos then
+                    dx = input.Position.X - freeCamLastPos.X
+                    dy = input.Position.Y - freeCamLastPos.Y
+                end
+                freeCamLastPos = input.Position
+                BD.FreeCamYaw = (BD.FreeCamYaw or 0) - dx * 0.0065
+                BD.FreeCamPitch = math.clamp((BD.FreeCamPitch or -0.25) - dy * 0.0055, -1.25, 0.65)
+            end
+        elseif input == freeCamTouchInput and input.UserInputType == Enum.UserInputType.Touch then
+            if freeCamLastPos then
+                local dx = input.Position.X - freeCamLastPos.X
+                local dy = input.Position.Y - freeCamLastPos.Y
+                BD.FreeCamYaw = (BD.FreeCamYaw or 0) - dx * 0.0075
+                BD.FreeCamPitch = math.clamp((BD.FreeCamPitch or -0.25) - dy * 0.0065, -1.25, 0.65)
+            end
+            freeCamLastPos = input.Position
+        elseif input.UserInputType == Enum.UserInputType.MouseWheel and not gpe then
+            BD.FreeCamDist = math.clamp((BD.FreeCamDist or 16) - input.Position.Z * 1.8, 6, 38)
+        elseif input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.Thumbstick2 then
+            if math.abs(input.Position.X) > 0.12 or math.abs(input.Position.Y) > 0.12 then
+                BD.FreeCamYaw = (BD.FreeCamYaw or 0) - input.Position.X * 0.055
+                BD.FreeCamPitch = math.clamp((BD.FreeCamPitch or -0.25) + input.Position.Y * 0.045, -1.25, 0.65)
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton2 then
+            freeCamMouseRotating = false
+        elseif input == freeCamTouchInput then
+            freeCamTouchInput = nil
+            freeCamLastPos = nil
+        end
+    end)
+
     if IsoCameraRig then
         if type(IsoCameraRig.shake) == "function" then
             local origShake = IsoCameraRig.shake
@@ -10633,32 +10848,44 @@ do
             local origCamUpdate = IsoCameraRig.update
             IsoCameraRig.update = function(sim, myIdx, dt, spectate, ...)
                 if IsoConfig then
-                    if BD.CustomCameraMode then
-                        if BD.CameraMode == "Roblox Free Camera" then
-                            IsoConfig.CAMERA = "roblox"
-                        else
-                            IsoConfig.CAMERA = "iso"
-                        end
+                    if BD.CustomCameraMode and BD.CameraMode == "Roblox Free Camera" then
+                        IsoConfig.CAMERA = "roblox"
+                    else
+                        IsoConfig.CAMERA = DefaultPhysics.camera or "broadcast"
                     end
                 end
                 local res = origCamUpdate(sim, myIdx, dt, spectate, ...)
                 local cam = workspace.CurrentCamera
                 if cam then
-                    if BD.CustomCameraMode and BD.CameraMode == "Player Lock" and sim and sim.players and IsoCourt then
+                    if BD.CustomCameraMode and sim and sim.players and IsoCourt then
                         local me = sim.players[myIdx or 1]
                         if me and me.x and me.y then
-                            local okMe, myWorld = pcall(IsoCourt.toWorld, me.x, 3.5, me.y)
-                            local okHoop, hoopWorld = pcall(IsoCourt.toWorld, IsoConfig and IsoConfig.HOOP.x or 0, 10, IsoConfig and IsoConfig.HOOP.y or 3)
-                            if okMe and okHoop and typeof(myWorld) == "Vector3" and typeof(hoopWorld) == "Vector3" then
-                                local backDir = (myWorld - hoopWorld)
-                                backDir = Vector3.new(backDir.X, 0, backDir.Z)
-                                if backDir.Magnitude > 0.01 then
-                                    backDir = backDir.Unit
-                                else
-                                    backDir = Vector3.new(0, 0, 1)
+                            local okMe, myWorld = pcall(IsoCourt.toWorld, me.x, (me.z or 0) + 3.5, me.y)
+                            local okHoop, hoopWorld = pcall(IsoCourt.toWorld, IsoConfig and IsoConfig.HOOP.x or 25, 10, IsoConfig and IsoConfig.HOOP.y or 5.25)
+                            if okMe and typeof(myWorld) == "Vector3" then
+                                if BD.CameraMode == "Roblox Free Camera" then
+                                    if not BD.FreeCamInit and okHoop and typeof(hoopWorld) == "Vector3" then
+                                        local toHoop = Vector3.new(hoopWorld.X - myWorld.X, 0, hoopWorld.Z - myWorld.Z)
+                                        if toHoop.Magnitude > 0.1 then
+                                            BD.FreeCamYaw = math.atan2(-toHoop.X, -toHoop.Z)
+                                        end
+                                        BD.FreeCamInit = true
+                                    end
+                                    local rotCF = CFrame.fromEulerAnglesYXZ(BD.FreeCamPitch or -0.25, BD.FreeCamYaw or 0, 0)
+                                    local dist = tonumber(BD.FreeCamDist) or 16
+                                    local camPos = myWorld + (rotCF.LookVector * -dist) + Vector3.new(0, 1.5, 0)
+                                    cam.CFrame = CFrame.lookAt(camPos, myWorld + Vector3.new(0, 1.0, 0))
+                                    cam.Focus = CFrame.new(myWorld)
+                                elseif BD.CameraMode == "Player Lock" and okHoop and typeof(hoopWorld) == "Vector3" then
+                                    local backDir = Vector3.new(myWorld.X - hoopWorld.X, 0, myWorld.Z - hoopWorld.Z)
+                                    if backDir.Magnitude > 0.01 then
+                                        backDir = backDir.Unit
+                                    else
+                                        backDir = Vector3.new(0, 0, 1)
+                                    end
+                                    local camPos = myWorld + backDir * 16 + Vector3.new(0, 7.5, 0)
+                                    cam.CFrame = CFrame.lookAt(camPos, hoopWorld)
                                 end
-                                local camPos = myWorld + backDir * 16 + Vector3.new(0, 7.5, 0)
-                                cam.CFrame = CFrame.lookAt(camPos, hoopWorld)
                             end
                         end
                     end
@@ -10683,17 +10910,27 @@ do
         end
     end
 
-    -- 7. Unlock All Cosmetics (Inventory Injection + Local Equip Hook)
+    -- 7. Unlock All Cosmetics (Inventory Injection + C_Data Replica Patch + Local Equip Hook)
     local function applyUnlockAllToProfileData(data)
-        if not BD.UnlockAllCosmetics or type(data) ~= "table" or not IsoCosmetics or type(IsoCosmetics.LIST) ~= "table" then
+        if not BD.UnlockAllCosmetics or type(data) ~= "table" then
             return
         end
-        data.cosmetics = data.cosmetics or {}
-        data.cosmetics.owned = data.cosmetics.owned or {}
-        data.cosmetics.equipped = data.cosmetics.equipped or { ball = "ball_classic", scorefx = "", anim = "anim_default" }
+        if not IsoCosmetics and IsoFolder then
+            IsoCosmetics = safeRequire(IsoFolder:FindFirstChild("Cosmetics"))
+        end
+        if not IsoCosmetics or type(IsoCosmetics.LIST) ~= "table" then
+            return
+        end
+        data.cosmetics = type(data.cosmetics) == "table" and data.cosmetics or {}
+        data.cosmetics.owned = type(data.cosmetics.owned) == "table" and data.cosmetics.owned or {}
+        data.cosmetics.equipped = type(data.cosmetics.equipped) == "table" and data.cosmetics.equipped or {
+            ball = "ball_classic",
+            scorefx = "",
+            anim = "anim_default",
+        }
         for _, item in ipairs(IsoCosmetics.LIST) do
-            if item and item.id then
-                if (data.cosmetics.owned[item.id] or 0) < 1 then
+            if type(item) == "table" and item.id then
+                if (tonumber(data.cosmetics.owned[item.id]) or 0) < 1 then
                     data.cosmetics.owned[item.id] = 1
                 end
             end
@@ -10708,15 +10945,46 @@ do
         end
     end
 
-    BD.RefreshUnlockAllCosmetics = function()
-        if IsoProfile and IsoProfile.data then
-            applyUnlockAllToProfileData(IsoProfile.data)
-            if IsoProfile.changed and IsoProfile.changed.Fire then
-                pcall(function()
-                    IsoProfile.changed:Fire(IsoProfile.data)
-                end)
-            end
+    local function patchAllCosmeticTables()
+        if not IsoProfile and IsoFolder then
+            IsoProfile = safeRequire(IsoFolder:FindFirstChild("Profile"))
         end
+        if IsoProfile and type(IsoProfile.data) == "table" then
+            applyUnlockAllToProfileData(IsoProfile.data)
+        end
+        if CorePkg and type(CorePkg.GetController) == "function" then
+            pcall(function()
+                local cData = CorePkg.GetController("C_Data")
+                local rep = cData and type(cData.GetReplica) == "function" and cData:GetReplica()
+                if rep and type(rep.Data) == "table" then
+                    applyUnlockAllToProfileData(rep.Data)
+                end
+            end)
+        end
+    end
+
+    BD.RefreshUnlockAllCosmetics = function()
+        patchAllCosmeticTables()
+        if IsoProfile and IsoProfile.data and IsoProfile.changed and IsoProfile.changed.Fire then
+            pcall(function()
+                IsoProfile.changed:Fire(IsoProfile.data)
+            end)
+        end
+        -- Force refresh Locker UI if currently open on Cosmetics tab
+        pcall(function()
+            local pg = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+            local locker = pg and pg:FindFirstChild("IsoLocker")
+            local kinds = locker and locker:FindFirstChild("Root") and locker.Root:FindFirstChild("Cosmetics") and locker.Root.Cosmetics:FindFirstChild("Kinds")
+            if kinds then
+                for _, kName in ipairs({ "Ball", "Scorefx", "Anim" }) do
+                    local kBtn = kinds:FindFirstChild(kName)
+                    if kBtn and kBtn:IsA("GuiButton") and kBtn.Visible then
+                        fireGuiButton(kBtn)
+                        break
+                    end
+                end
+            end
+        end)
     end
 
     if IsoProfile then
@@ -10725,6 +10993,7 @@ do
                 IsoProfile.onChange(function(d)
                     if BD.UnlockAllCosmetics then
                         applyUnlockAllToProfileData(d)
+                        patchAllCosmeticTables()
                     end
                 end)
             end)
@@ -10740,13 +11009,11 @@ do
                     local id = tostring(a2 or "")
                     BD.LocalEquippedCosmetics[kind] = id
                     local res = origProfileCall(action, a1, a2, ...)
-                    if IsoProfile.data then
-                        applyUnlockAllToProfileData(IsoProfile.data)
-                        if IsoProfile.changed and IsoProfile.changed.Fire then
-                            pcall(function()
-                                IsoProfile.changed:Fire(IsoProfile.data)
-                            end)
-                        end
+                    patchAllCosmeticTables()
+                    if IsoProfile.data and IsoProfile.changed and IsoProfile.changed.Fire then
+                        pcall(function()
+                            IsoProfile.changed:Fire(IsoProfile.data)
+                        end)
                     end
                     if type(res) == "table" and res.ok then
                         return res
@@ -10754,8 +11021,8 @@ do
                     return { ok = true, data = IsoProfile.data }
                 end
                 local res = origProfileCall(action, a1, a2, ...)
-                if BD.UnlockAllCosmetics and IsoProfile.data then
-                    applyUnlockAllToProfileData(IsoProfile.data)
+                if BD.UnlockAllCosmetics then
+                    patchAllCosmeticTables()
                 end
                 return res
             end
@@ -10782,11 +11049,10 @@ do
     }
 
     local BAG_SEQUENCES = {
+        { 2, 3 },       -- Between the Legs (0.2x steal odds!)
+        { 1, 3 },       -- Behind the Back (0.5x steal odds)
         { 1, 2 },       -- Double Cross
-        { 2, 3 },       -- Between the Legs
-        { 1, 3 },       -- Behind the Back
         { 1, 2, 3 },    -- Killer Cross
-        { 1, 3, 2 },    -- Hesitation
         { 1, 1 },       -- Shamgod
     }
 
@@ -10801,18 +11067,35 @@ do
 
     local function getTargetHoldTime(gather)
         if not gather or not gather.fill then return nil end
-        local fe = (IsoConfig and IsoConfig.FE) or 0.78
+        local fe = (IsoConfig and IsoConfig.FE) or 0.8
         local offsetSec = (tonumber(BD.TimingOffsetMs) or 0) / 1000
         return math.max(0.05, gather.fill * fe + offsetSec)
     end
 
+    local function applyGreenTimingToGather(sim, myIdx, me, targetHeld)
+        if not targetHeld then return end
+        if me and me.gather then
+            me.gather.t = targetHeld
+        end
+        if IsoFX then
+            IsoFX.shown = {
+                team = myIdx or (me and me.team) or 1,
+                t = targetHeld,
+                at = os.clock(),
+            }
+        end
+    end
+
     local function getBotLevelTable()
         if BD.AIPlaystyle == "Custom Tuned" then
+            -- Note: Iso.Bot divides react by 1000 and skill by 100, and aim is shot spread (lower = more accurate!)
+            local aimPrec = math.clamp(tonumber(BD.AIShotAimPct) or 100, 0, 100)
+            local aimSpread = math.clamp((100 - aimPrec) / 100 * 1.4, 0.02, 1.5)
             return {
                 name = "CUSTOM",
-                react = math.clamp((tonumber(BD.AIReactionMs) or 35) / 1000, 0.01, 0.5),
-                skill = math.clamp((tonumber(BD.AISkillPct) or 100) / 100, 0, 1.2),
-                aim = math.clamp((tonumber(BD.AIShotAimPct) or 100) / 100, 0, 1.0),
+                react = math.clamp(tonumber(BD.AIReactionMs) or 35, 10, 500),
+                skill = math.clamp(tonumber(BD.AISkillPct) or 100, 0, 120),
+                aim = aimSpread,
                 steal = math.clamp(tonumber(BD.AIStealAggro) or 1.6, 0, 3.0),
                 pace = math.clamp(tonumber(BD.AIMovementPace) or 1.15, 0.7, 1.5),
             }
@@ -10830,7 +11113,7 @@ do
                 return table.clone(levels[idx])
             end
         end
-        return { name = "LEGEND", react = 0.08, skill = 1.0, aim = 0.96, steal = 1.5, pace = 1.05 }
+        return { name = "LEGEND", react = 140, skill = 100, aim = 0.05, steal = 1.6, pace = 1.05 }
     end
 
     local function processLiveMatchFrame(sim, myIdx, dt)
@@ -10840,11 +11123,16 @@ do
         BD.LiveSim = sim
         myIdx = tonumber(myIdx) or 1
         BD.MyIdx = myIdx
+
         local me = sim.players[myIdx]
         if not me then return end
-
         local now = os.clock()
         local ball = sim.ball
+
+        -- Keep Unlock All synced in background
+        if BD.UnlockAllCosmetics then
+            patchAllCosmeticTables()
+        end
 
         -- Update Shoot Predictor Mini UI
         if BD.ShootPredictor and ShootPredCard.Visible and ball then
@@ -10884,16 +11172,33 @@ do
             me.fall = false
             me.whiff = false
         end
-        if BD.ZeroDribbleCooldown then
+        if BD.ZeroDribbleCooldown or BD.AutoDribble then
             me.moveCd = 0
             me.slideCd = 0
+            if type(me.bagCd) == "table" then
+                table.clear(me.bagCd)
+            end
         end
         if BD.AlwaysAnkleBreak then
             me.buff = me.buff or {}
             me.buff.ankle = { t = 99 }
         end
 
-        -- No Cold Shot Penalty & Finisher Override on live gather
+        -- Auto Check-Ball during 'check' phase for AutoPlay or Instant CPU Match Auto Farm
+        if sim.phase == "check" then
+            OverrideMoveX = nil
+            OverrideMoveY = nil
+            if (BD.AutoPlay or BD.InstantCPUMatchFarm) and ball and ball.owner == myIdx and (now - BD.LastCheckAt) >= 0.4 then
+                BD.LastCheckAt = now
+                if IsoInput and IsoInput.verbs and type(IsoInput.verbs.pass) == "function" then
+                    pcall(IsoInput.verbs.pass)
+                end
+                queueAction({ t = "pass" })
+            end
+            return
+        end
+
+        -- No Cold Shot Penalty & Finisher Override + Auto-Green Release on live gather
         if me.gather then
             if BD.NoColdShotPenalty then
                 me.gather.cold = nil
@@ -10905,10 +11210,12 @@ do
                 BD.GreenRollGatherId = me.gather
                 BD.GreenRollActive = (math.random(1, 100) <= (tonumber(BD.PerfectChances) or 100))
             end
-            if BD.AutoGreen and BD.GreenRollActive and BD.AutoReleasedGather ~= me.gather then
+            local wantAutoRelease = (BD.AutoGreen and BD.GreenRollActive) or BD.AutoPlay or BD.InstantCPUMatchFarm
+            if wantAutoRelease and BD.AutoReleasedGather ~= me.gather then
                 local targetHeld = getTargetHoldTime(me.gather)
-                if targetHeld and (me.gather.t or 0) >= (targetHeld - (dt or 0.016) * 0.65) then
+                if targetHeld and (me.gather.t or 0) >= (targetHeld - (dt or 0.016) * 0.85) then
                     BD.AutoReleasedGather = me.gather
+                    applyGreenTimingToGather(sim, myIdx, me, targetHeld)
                     if IsoInput and IsoInput.verbs and IsoInput.verbs.shootUp then
                         pcall(IsoInput.verbs.shootUp)
                     end
@@ -10934,6 +11241,7 @@ do
         local nearestEnemyDist = 999
         local enemyHandler = nil
         local enemyHandlerDist = 999
+
         for idx, p in ipairs(sim.players) do
             if idx ~= myIdx and p.team ~= me.team and p.x and p.y and me.x and me.y then
                 local d = math.sqrt((p.x - me.x) ^ 2 + (p.y - me.y) ^ 2)
@@ -10965,10 +11273,21 @@ do
 
         -- OFFENSE FEATURES (When we hold the ball)
         if iHaveBall then
+            -- Make ball near-unstealable locally & boost ball protection stats
+            if BD.AutoDribble then
+                ball.secure = math.max(ball.secure or 0, 0.45)
+                if type(me.mods) == "table" then
+                    me.mods.handles = math.max(tonumber(me.mods.handles) or 1, 1.95)
+                    me.mods.secure = math.max(tonumber(me.mods.secure) or 1, 4.0)
+                    me.mods.assist = math.max(tonumber(me.mods.assist) or 0, 0.85)
+                end
+            end
+
             -- Auto Clear Ball
             if BD.AutoClearBall and sim.needClear and IsoConfig then
-                local targetY = (IsoConfig.R3 or 23.75) + 3.5
-                local dx = (0 - (me.x or 0))
+                local hx = (IsoConfig.HOOP and IsoConfig.HOOP.x) or 25
+                local targetY = (IsoConfig.R3 or 23.75) + 6.5
+                local dx = (hx - (me.x or hx))
                 local dy = (targetY - (me.y or 0))
                 local len = math.sqrt(dx * dx + dy * dy)
                 if len > 0.2 then
@@ -11000,13 +11319,13 @@ do
                 end
             end
 
-            -- Auto-Dunk
+            -- Auto-Dunk (Range 5-15 ft, Default 10 ft)
             if BD.AutoDunk and not sim.needClear and not me.gather and (now - BD.LastAutoShootAt) >= 0.45 then
-                local dRange = tonumber(BD.DunkRange) or 11.5
+                local dRange = tonumber(BD.DunkRange) or 10
                 if distToHoop <= dRange and math.random(1, 100) <= (tonumber(BD.DunkChance) or 100) then
                     BD.LastAutoShootAt = now
-                    local hx = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.x) or 0
-                    local hy = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.y) or 3
+                    local hx = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.x) or 25
+                    local hy = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.y) or 5.25
                     local dx, dy = hx - me.x, hy - me.y
                     local l = math.sqrt(dx * dx + dy * dy)
                     if l > 0.05 then
@@ -11017,9 +11336,9 @@ do
                 end
             end
 
-            -- Auto Shoot
+            -- Auto Shoot (Range 5-20 ft, Default 12 ft)
             if BD.AutoShoot and not sim.needClear and not me.gather and (now - BD.LastAutoShootAt) >= 0.45 then
-                local sRange = tonumber(BD.AutoShootRange) or 26
+                local sRange = tonumber(BD.AutoShootRange) or 12
                 if distToHoop <= sRange then
                     BD.LastAutoShootAt = now
                     local wantFin = (BD.FinisherType ~= "Auto" and FINISHER_MAP[BD.FinisherType]) or nil
@@ -11027,26 +11346,86 @@ do
                 end
             end
 
-            -- Auto Dribble / Evade Defender
-            local reactDelay = 0.08 + ((tonumber(BD.DribbleReactionMs) or 85) / 1000)
-            if BD.AutoDribble and nearestEnemy and nearestEnemyDist <= 6.2 and (now - BD.LastDribbleAt) >= math.max(0.22, reactDelay) then
-                BD.LastDribbleAt = now
-                local side = ((me.x or 0) > 0) and -1 or 1
-                queueAction({ t = "dribble", b = (side > 0 and 3 or 1), dx = side, dy = -0.35 })
+            -- Predictive Frame-Perfect Auto Dribble (Unstealable Ball Protection & Ankle-Break Counter)
+            if BD.AutoDribble and not me.gather and nearestEnemy then
+                -- Predict defender distance 140ms ahead based on relative velocity
+                local relVx = (nearestEnemy.vx or 0) - (me.vx or 0)
+                local relVy = (nearestEnemy.vy or 0) - (me.vy or 0)
+                local predEnemyX = (nearestEnemy.x or 0) + relVx * 0.14
+                local predEnemyY = (nearestEnemy.y or 0) + relVy * 0.14
+                local predDist = math.sqrt((predEnemyX - (me.x or 0)) ^ 2 + (predEnemyY - (me.y or 0)) ^ 2)
+
+                local enemyReaching = (nearestEnemy.reach or 0) > 0
+                local defReachRad = (IsoConfig and IsoConfig.play and IsoConfig.play.reach) or 4.9
+                local triggerDist = defReachRad + 3.0 -- 7.9 ft protective envelope
+                local reactDelay = math.max(0.06, ((tonumber(BD.DribbleReactionMs) or 45) / 1000))
+
+                if (enemyReaching or nearestEnemyDist <= triggerDist or predDist <= triggerDist) and (now - BD.LastDribbleAt) >= (enemyReaching and 0.05 or reactDelay) then
+                    BD.LastDribbleAt = now
+                    me.moveCd = 0
+                    if type(me.bagCd) == "table" then
+                        table.clear(me.bagCd)
+                    end
+
+                    -- Determine which side of us the defender is on so we cross/step away from their reach hand
+                    local awayX = (me.x or 25) - (nearestEnemy.x or 25)
+                    local awayY = (me.y or 20) - (nearestEnemy.y or 20)
+                    local awayLen = math.sqrt(awayX * awayX + awayY * awayY)
+                    if awayLen > 0.01 then
+                        awayX = awayX / awayLen
+                        awayY = awayY / awayLen
+                    else
+                        awayX = ((me.x or 25) > 25) and -1 or 1
+                        awayY = 0
+                    end
+                    local escapeSide = (awayX >= 0) and 1 or -1
+
+                    if enemyReaching or nearestEnemyDist <= 4.6 then
+                        -- Instant Between-The-Legs (2 -> 3, 0.2x steal multiplier) or Stepback to guarantee whiff + ankle break
+                        if (BD.DribbleComboIdx % 2) == 1 then
+                            queueAction({ t = "dribble", b = 2, side = escapeSide, dx = awayX, dy = awayY })
+                            queueAction({ t = "dribble", b = 3, side = escapeSide, dx = awayX, dy = awayY, g = 0.05 })
+                        else
+                            queueAction({ t = "step" })
+                        end
+                        BD.DribbleComboIdx = BD.DribbleComboIdx + 1
+                    else
+                        -- Chain protective Behind-the-Back (1 -> 3), Double-Cross (1 -> 2), or Drive burst away from defender
+                        local pat = (BD.DribbleComboIdx % 3)
+                        BD.DribbleComboIdx = BD.DribbleComboIdx + 1
+                        if pat == 0 then
+                            queueAction({ t = "dribble", b = 1, side = escapeSide, dx = awayX, dy = awayY })
+                            queueAction({ t = "dribble", b = 3, side = escapeSide, dx = awayX, dy = awayY, g = 0.05 })
+                        elseif pat == 1 then
+                            queueAction({ t = "dribble", b = 2, side = escapeSide, dx = awayX, dy = awayY })
+                            queueAction({ t = "dribble", b = 3, side = escapeSide, dx = awayX, dy = awayY, g = 0.05 })
+                        else
+                            queueAction({ t = "dribble", b = 1, side = escapeSide, dx = awayX, dy = awayY })
+                            queueAction({ t = "dribble", b = 2, side = escapeSide, dx = awayX, dy = awayY, g = 0.05 })
+                        end
+                    end
+                end
             end
 
             -- Auto-Bagwork Combo
-            if BD.AutoBagworkCombo and not me.gather and (now - BD.LastBagAt) >= 0.14 then
+            if BD.AutoBagworkCombo and not me.gather and (now - BD.LastBagAt) >= 0.12 then
                 local seq = BAG_SEQUENCES[((math.floor(now * 2) % #BAG_SEQUENCES) + 1)]
                 local bKey = seq[BD.BagStepIdx] or 1
+                local prevStep = BD.BagStepIdx
                 BD.BagStepIdx = BD.BagStepIdx + 1
                 if BD.BagStepIdx > #seq then
                     BD.BagStepIdx = 1
-                    BD.LastBagAt = now + 0.24
+                    BD.LastBagAt = now + 0.22
                 else
                     BD.LastBagAt = now
                 end
-                queueAction({ t = "dribble", b = bKey, dx = me.fx or 0, dy = me.fy or -1 })
+                queueAction({
+                    t = "dribble",
+                    b = bKey,
+                    dx = me.fx or 0,
+                    dy = me.fy or -1,
+                    g = (prevStep > 1) and 0.06 or nil,
+                })
             end
         end
 
@@ -11123,8 +11502,8 @@ do
         if BD.AutoGuard and not myTeamHasBall then
             local targetEnemy = enemyHandler or nearestEnemy
             if targetEnemy and targetEnemy.x and targetEnemy.y and me.x and me.y then
-                local hx = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.x) or 0
-                local hy = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.y) or 3
+                local hx = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.x) or 25
+                local hy = (IsoConfig and IsoConfig.HOOP and IsoConfig.HOOP.y) or 5.25
                 local toHoopX = hx - targetEnemy.x
                 local toHoopY = hy - targetEnemy.y
                 local toHoopLen = math.sqrt(toHoopX * toHoopX + toHoopY * toHoopY)
@@ -11137,7 +11516,7 @@ do
                 if dist > 0.35 then
                     OverrideMoveX = dx / dist
                     OverrideMoveY = dy / dist
-                    if dist > 2.2 and ((targetEnemy.drive and targetEnemy.drive.t and targetEnemy.drive.t > 0) or (targetEnemy.cross and targetEnemy.cross > 0)) and (me.slideCd or 0) <= 0 then
+                    if dist > 2.2 and (targetEnemy.move ~= nil) and (me.moveCd or 0) <= 0 then
                         queueAction({ t = "slide", dx = OverrideMoveX, dy = OverrideMoveY })
                     end
                 else
@@ -11145,7 +11524,7 @@ do
                     OverrideMoveY = 0
                 end
             end
-        elseif not BD.AutoPlay and not (BD.AutoClearBall and iHaveBall and sim.needClear) then
+        elseif not BD.AutoPlay and not BD.InstantCPUMatchFarm and not (BD.AutoClearBall and iHaveBall and sim.needClear) then
             OverrideMoveX = nil
             OverrideMoveY = nil
         end
@@ -11172,34 +11551,43 @@ do
             local myIdx = BD.MyIdx or 1
             local me = (sim and sim.players) and sim.players[myIdx] or nil
 
-            -- Tab 4: AutoPlay AI Bot Controller
-            if BD.AutoPlay and sim and me and sim.phase == "live" and IsoBot then
+            -- Tab 4: AutoPlay AI Bot Controller (Also drives Instant CPU Match AutoFarm smoothly without IsoDebug stutter!)
+            local runBotController = (BD.AutoPlay or BD.InstantCPUMatchFarm) and sim and me and sim.phase == "live" and IsoBot
+            if runBotController then
                 local iHaveBall = (sim.ball and sim.ball.state == "held" and sim.ball.owner == myIdx)
                 local onOffense = (sim.possTeam == me.team)
                 local filter = BD.AutoPlayFilter
                 local shouldRunBot = true
-                if filter == "Offense Only" and not onOffense then
-                    shouldRunBot = false
-                elseif filter == "Defense Only" and onOffense then
-                    shouldRunBot = false
-                elseif filter == "Off-Ball Only" and iHaveBall then
-                    shouldRunBot = false
+
+                if not BD.InstantCPUMatchFarm then
+                    if filter == "Offense Only" and not onOffense then
+                        shouldRunBot = false
+                    elseif filter == "Defense Only" and onOffense then
+                        shouldRunBot = false
+                    elseif filter == "Off-Ball Only" and iHaveBall then
+                        shouldRunBot = false
+                    end
                 end
 
                 if shouldRunBot then
+                    local lvlTbl = getBotLevelTable()
                     if not BD.BotInstance or BD.BotIdx ~= myIdx or BD.BotTeam ~= me.team then
-                        BD.BotInstance = IsoBot.new(me.team, getBotLevelTable(), myIdx)
+                        BD.BotInstance = IsoBot.new(me.team, lvlTbl, myIdx)
                         BD.BotIdx = myIdx
                         BD.BotTeam = me.team
-                    else
-                        BD.BotInstance.level = getBotLevelTable()
+                    elseif type(BD.BotInstance.setLevel) == "function" then
+                        BD.BotInstance:setLevel(lvlTbl)
                     end
+
+                    -- Call BD.BotInstance:input(sim) (the real Iso.Bot method!)
                     local okBot, botOut = pcall(function()
-                        return BD.BotInstance:update(sim, 0.016)
+                        return BD.BotInstance:input(sim)
                     end)
                     if okBot and type(botOut) == "table" then
-                        packet.mx = botOut.mx or packet.mx
-                        packet.my = botOut.my or packet.my
+                        if math.abs(packet.mx or 0) < 0.08 and math.abs(packet.my or 0) < 0.08 then
+                            packet.mx = botOut.mx or 0
+                            packet.my = botOut.my or 0
+                        end
                         if type(botOut.actions) == "table" then
                             for _, act in ipairs(botOut.actions) do
                                 table.insert(packet.actions, act)
@@ -11230,14 +11618,19 @@ do
                     local okPrev, prev = pcall(IsoSim.previewGather, sim, me)
                     if okPrev then previewGather = prev end
                 end
+
                 for _, act in ipairs(packet.actions) do
                     if type(act) == "table" then
                         if act.t == "holdStart" and BD.FinisherType ~= "Auto" and FINISHER_MAP[BD.FinisherType] then
                             act.want = FINISHER_MAP[BD.FinisherType]
-                        elseif act.t == "holdEnd" and BD.AutoGreen and BD.GreenRollActive and previewGather then
-                            local targetHeld = getTargetHoldTime(previewGather)
-                            if targetHeld then
-                                act.held = targetHeld
+                        elseif act.t == "holdEnd" then
+                            local forceGreen = (BD.AutoGreen and BD.GreenRollActive) or BD.AutoPlay or BD.InstantCPUMatchFarm
+                            if forceGreen and previewGather then
+                                local targetHeld = getTargetHoldTime(previewGather)
+                                if targetHeld then
+                                    act.held = targetHeld
+                                    applyGreenTimingToGather(sim, myIdx, me, targetHeld)
+                                end
                             end
                         end
                     end
@@ -11280,7 +11673,13 @@ do
         if devFilter ~= "Any" then
             local pDev = tostring(plr:GetAttribute("Device") or "PC"):upper()
             local want = devFilter:upper()
-            if want == "CONTROLLER" and (pDev == "CONSOLE" or pDev == "CONTROLLER" or pDev == "GAMEPAD") then
+            if want == "CONTROLLER" and (pDev == "CONSOLE" or pDev == "CONTROLLER" or pDev == "GAMEPAD" or pDev == "PAD") then
+                return true
+            end
+            if want == "MOBILE" and (pDev == "MOBILE" or pDev == "TOUCH") then
+                return true
+            end
+            if want == "PC" and (pDev == "PC" or pDev == "KB") then
                 return true
             end
             if pDev ~= want then
@@ -11292,7 +11691,7 @@ do
 
     -- 12. Background Automation Loop (Auto-Queue, Auto-Pad, Auto-Vote, Auto-Rematch, AutoFarm, Auto-Spin, Rewards)
     task.spawn(function()
-        while task.wait(0.35) do
+        while task.wait(0.3) do
             if not State.isAuthorized then
                 continue
             end
@@ -11313,70 +11712,96 @@ do
                     local hud = pg and pg:FindFirstChild("IsoHUD")
                     local replayFrame = hud and hud:FindFirstChild("Root") and hud.Root:FindFirstChild("DockL") and hud.Root.DockL:FindFirstChild("Replay")
                     if (LocalPlayer and LocalPlayer:GetAttribute("InReplay")) or (replayFrame and replayFrame.Visible) then
-                        local duelGame = CoreRemotes and CoreRemotes:FindFirstChild("S_DuelGame")
-                        local duelIn = duelGame and duelGame:FindFirstChild("DuelIn")
-                        if duelIn and duelIn:IsA("RemoteEvent") then
-                            duelIn:FireServer("replaySkip")
+                        fireCoreServiceEvent("S_DuelGame", "DuelIn", "replaySkip")
+                        if replayFrame and replayFrame:IsA("GuiButton") then
+                            fireGuiButton(replayFrame)
                         end
                     end
                 end)
             end
 
             -- Auto Rematch
-            if BD.AutoRematch and (now - BD.LastRematchAt) >= 1.2 then
+            if BD.AutoRematch and (now - BD.LastRematchAt) >= 1.0 then
                 pcall(function()
                     local pg = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
                     local hud = pg and pg:FindFirstChild("IsoHUD")
                     local endCard = hud and hud:FindFirstChild("Root") and hud.Root:FindFirstChild("EndCard")
                     if endCard and endCard.Visible then
                         BD.LastRematchAt = now
-                        local duelMatches = CoreRemotes and CoreRemotes:FindFirstChild("S_DuelMatches")
-                        local rematchRE = duelMatches and duelMatches:FindFirstChild("Rematch")
-                        if rematchRE and rematchRE:IsA("RemoteEvent") then
-                            rematchRE:FireServer()
+                        fireCoreServiceEvent("S_DuelMatches", "Rematch")
+                        local rematchBtn = endCard:FindFirstChild("Rematch")
+                        if rematchBtn and rematchBtn.Visible and not rematchBtn:GetAttribute("Disabled") then
+                            fireGuiButton(rematchBtn)
                         end
                     end
                 end)
             end
 
             -- Auto Map Vote
-            if BD.AutoMapVote and (now - BD.LastVoteAt) >= 1.0 then
+            if BD.AutoMapVote and (now - BD.LastVoteAt) >= 0.9 then
                 pcall(function()
                     local pg = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
                     local voteGui = pg and pg:FindFirstChild("IsoVote")
-                    local panel = voteGui and voteGui:FindFirstChild("Root") and voteGui.Root:FindFirstChild("Panel")
+                    local root = voteGui and voteGui:FindFirstChild("Root")
+                    local panel = root and root:FindFirstChild("Panel")
                     if voteGui and voteGui.Enabled and panel and panel.Visible then
                         BD.LastVoteAt = now
                         local mapChoice = tostring(BD.VoteMap or "Park")
-                        if mapChoice == "RANDOM" then
-                            local maps = { "Park", "Gym", "Warehouse", "Driveway", "Stadium", "Rooftop" }
-                            mapChoice = maps[math.random(1, #maps)]
+                        local clickedCard = false
+                        local cardsContainer = panel:FindFirstChild("Cards")
+                        if cardsContainer then
+                            for _, desc in ipairs(cardsContainer:GetDescendants()) do
+                                if desc:IsA("GuiButton") and string.upper(desc.Name) == string.upper(mapChoice) then
+                                    if fireGuiButton(desc) then
+                                        clickedCard = true
+                                    end
+                                    break
+                                end
+                            end
                         end
-                        local duelMatches = CoreRemotes and CoreRemotes:FindFirstChild("S_DuelMatches")
-                        local voteRE = duelMatches and duelMatches:FindFirstChild("Vote")
-                        local skipRE = duelMatches and duelMatches:FindFirstChild("Skip")
-                        if voteRE and voteRE:IsA("RemoteEvent") then
-                            voteRE:FireServer(mapChoice)
+                        if not clickedCard then
+                            fireCoreServiceEvent("S_DuelMatches", "Vote", mapChoice)
                         end
-                        if skipRE and skipRE:IsA("RemoteEvent") then
-                            skipRE:FireServer()
+                        local skipBtn = root:FindFirstChild("DockL") and root.DockL:FindFirstChild("Skip")
+                        if skipBtn and skipBtn:IsA("GuiButton") and not skipBtn:GetAttribute("Disabled") then
+                            if not fireGuiButton(skipBtn) then
+                                fireCoreServiceEvent("S_DuelMatches", "Skip")
+                            end
+                        else
+                            fireCoreServiceEvent("S_DuelMatches", "Skip")
                         end
                     end
                 end)
             end
 
             -- Auto Global Queue
-            if BD.AutoGlobalQueue and (now - BD.LastQueueAt) >= 2.5 then
+            if BD.AutoGlobalQueue and (now - BD.LastQueueAt) >= 2.2 then
                 pcall(function()
                     local qState = LocalPlayer and LocalPlayer:GetAttribute("QueueState")
+                    local qMode = LocalPlayer and LocalPlayer:GetAttribute("QueueMode")
                     local matchId = LocalPlayer and LocalPlayer:GetAttribute("MatchId")
-                    if not qState and not matchId and (not BD.LiveSim or BD.LiveSim.phase == "final") then
+                    local inMatch = LocalPlayer and LocalPlayer:GetAttribute("InMatch")
+                    local pg = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+                    local hud = pg and pg:FindFirstChild("IsoHUD")
+                    local endCard = hud and hud:FindFirstChild("Root") and hud.Root:FindFirstChild("EndCard")
+                    local mode = tostring(BD.GlobalQueueMode or "1v1")
+
+                    -- If match just ended and EndCard is visible, fire PlayAgain / S_GlobalQueue
+                    if endCard and endCard.Visible then
                         BD.LastQueueAt = now
-                        local mode = tostring(BD.GlobalQueueMode or "1v1")
-                        local gq = CoreRemotes and CoreRemotes:FindFirstChild("S_GlobalQueue")
-                        local qRE = gq and gq:FindFirstChild("Queue")
-                        if qRE and qRE:IsA("RemoteEvent") then
-                            qRE:FireServer("join", mode)
+                        local playAgainBtn = endCard:FindFirstChild("PlayAgain")
+                        if playAgainBtn and playAgainBtn.Visible then
+                            fireGuiButton(playAgainBtn)
+                        end
+                        fireCoreServiceEvent("S_GlobalQueue", "Queue", "join", mode)
+                        return
+                    end
+
+                    local isSearching = (qState == "Searching" or qState == "Found" or qState == "Teleporting") or (type(qMode) == "string" and qMode ~= "")
+                    if not isSearching and not matchId and not inMatch then
+                        BD.LastQueueAt = now
+                        if not fireCoreServiceEvent("S_GlobalQueue", "Queue", "join", mode) then
+                            fireCoreServiceEvent("S_DuelJoin", "Join", mode)
                         end
                     end
                 end)
@@ -11387,7 +11812,7 @@ do
                 BD.LastPadCheckAt = now
                 pcall(function()
                     if IsoPadLocal.off and IsoPadLocal.off() then return end
-                    if LocalPlayer:GetAttribute("MatchId") then return end
+                    if LocalPlayer:GetAttribute("MatchId") or LocalPlayer:GetAttribute("InMatch") then return end
                     local char = LocalPlayer.Character
                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
                     if not hrp then return end
@@ -11411,11 +11836,8 @@ do
                                     for _, uid in ipairs((st and st.ids) or {}) do
                                         local oppPlr = Players:GetPlayerByUserId(uid)
                                         if oppPlr and not doesPlayerPassCheck(oppPlr) then
-                                            -- Step off pad immediately
                                             hrp.CFrame = hrp.CFrame + Vector3.new(0, 0, 14)
-                                            local lobbyPads = CoreRemotes and CoreRemotes:FindFirstChild("S_LobbyPads")
-                                            local presRE = lobbyPads and lobbyPads:FindFirstChild("Presence")
-                                            if presRE then presRE:FireServer(false) end
+                                            fireCoreServiceEvent("S_LobbyPads", "Presence", false)
                                             return
                                         end
                                     end
@@ -11450,9 +11872,7 @@ do
                                         end
                                         if courtOkay then
                                             hrp.CFrame = base.CFrame + Vector3.new(0, 3.2, 0)
-                                            local lobbyPads = CoreRemotes and CoreRemotes:FindFirstChild("S_LobbyPads")
-                                            local presRE = lobbyPads and lobbyPads:FindFirstChild("Presence")
-                                            if presRE then presRE:FireServer(m) end
+                                            fireCoreServiceEvent("S_LobbyPads", "Presence", m)
                                             break
                                         end
                                     end
@@ -11463,8 +11883,8 @@ do
                 end)
             end
 
-            -- Instant CPU Match Auto Farm
-            if BD.InstantCPUMatchFarm and (now - BD.LastFarmTick) >= 1.5 then
+            -- Instant CPU Match Auto Farm (Never spams IsoDebug during live match -> zero freeze, zero lag!)
+            if BD.InstantCPUMatchFarm and (now - BD.LastFarmTick) >= 1.2 then
                 BD.LastFarmTick = now
                 pcall(function()
                     local levelMap = {
@@ -11476,30 +11896,56 @@ do
                     }
                     local lvlIdx = levelMap[tostring(BD.CPULevel or "WALK-ON")] or 1
                     local sim = BD.LiveSim
-                    if not sim or sim.phase == "final" then
-                        if IsoProfile and type(IsoProfile.call) == "function" then
-                            pcall(IsoProfile.call, "matchStart", lvlIdx)
+                    local pg = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+                    local hud = pg and pg:FindFirstChild("IsoHUD")
+                    local endCard = hud and hud:FindFirstChild("Root") and hud.Root:FindFirstChild("EndCard")
+
+                    if endCard and endCard.Visible then
+                        BD.FarmActiveMatchToken = nil
+                        local playAgainBtn = endCard:FindFirstChild("PlayAgain")
+                        if playAgainBtn and playAgainBtn.Visible then
+                            if not fireGuiButton(playAgainBtn) then
+                                invokeIsoDebug("start", tostring(lvlIdx), "1v1")
+                            end
+                        else
+                            invokeIsoDebug("start", tostring(lvlIdx), "1v1")
                         end
+                    elseif not sim or sim.phase == "over" or not LocalPlayer:GetAttribute("InMatch") then
+                        BD.FarmActiveMatchToken = nil
                         invokeIsoDebug("start", tostring(lvlIdx), "1v1")
-                        invokeIsoDebug("auto", "1", "5")
-                        invokeIsoDebug("ts", "2")
-                    else
-                        invokeIsoDebug("auto", "1", "5")
-                        invokeIsoDebug("ts", "2")
-                        invokeIsoDebug("step", "180")
+                    elseif BD.FarmActiveMatchToken ~= sim then
+                        -- Only configure match timescale ONCE per match! Our IsoInput.poll BotInstance + AutoGreen drives the player smoothly!
+                        BD.FarmActiveMatchToken = sim
+                        invokeIsoDebug("auto", "0")
+                        invokeIsoDebug("ts", "1.5")
                     end
                 end)
             end
 
             -- Auto Spin Style & Auto Spin Ability
-            if (BD.AutoSpinStyle or BD.AutoSpinAbility) and IsoProfile and IsoProfile.data and (now - BD.LastSpinTick) >= (BD.InstantSpin and 0.25 or 0.9) then
+            if (BD.AutoSpinStyle or BD.AutoSpinAbility) and (now - BD.LastSpinTick) >= (BD.InstantSpin and 0.25 or 0.85) then
                 BD.LastSpinTick = now
                 pcall(function()
-                    local d = IsoProfile.data
+                    if not IsoProfile and IsoFolder then
+                        IsoProfile = safeRequire(IsoFolder:FindFirstChild("Profile"))
+                    end
+                    local d = IsoProfile and IsoProfile.data
+                    if not d and CorePkg and type(CorePkg.GetController) == "function" then
+                        local okC, cData = pcall(CorePkg.GetController, "C_Data")
+                        local rep = okC and cData and type(cData.GetReplica) == "function" and cData:GetReplica()
+                        d = rep and rep.Data
+                    end
+                    if type(d) ~= "table" or not IsoProfile or type(IsoProfile.call) ~= "function" then
+                        return
+                    end
+
                     -- 1. Auto Spin Style
-                    if BD.AutoSpinStyle and d.slots then
+                    if BD.AutoSpinStyle and type(d.slots) == "table" then
                         local eqSlot = tonumber(d.equipped) or 1
                         local slotObj = d.slots[eqSlot]
+                        if slotObj and slotObj.locked then
+                            pcall(IsoProfile.call, "lock", eqSlot)
+                        end
                         local curStyleId = (slotObj and slotObj.style) or ""
                         local curStyleDef = (IsoStyles and IsoStyles.BY_ID) and IsoStyles.BY_ID[curStyleId] or nil
                         local curStyleName = curStyleDef and curStyleDef.name or ""
@@ -11512,25 +11958,36 @@ do
                             end
                         end
 
-                        if hitTarget then
+                        if hitTarget and curStyleId ~= "" then
                             BD.AutoSpinStyle = false
                             notify("Auto Spin Style", "Target Style Rolled: " .. tostring(curStyleName) .. "!", 5)
                         else
-                            local mode = ((tonumber(d.luckySpins) or 0) > 0) and "lucky" or "normal"
-                            local totalSpins = (tonumber(d.spins) or 0) + (tonumber(d.luckySpins) or 0)
+                            local luckyCount = tonumber(d.luckySpins) or 0
+                            local normalCount = tonumber(d.spins) or 0
+                            local totalSpins = normalCount + luckyCount
                             if totalSpins < 1 and BD.AutoBuySpinsCoins then
-                                local buyId = (IsoShop and IsoShop.QUICK and IsoShop.QUICK.normal) or "spin_1"
-                                IsoProfile.call("buy", buyId)
+                                local buyId = (IsoShop and IsoShop.QUICK and IsoShop.QUICK.normal) or "spin1"
+                                local buyRes = IsoProfile.call("buy", buyId)
+                                if type(buyRes) == "table" and buyRes.ok then
+                                    normalCount = normalCount + 1
+                                    totalSpins = totalSpins + 1
+                                end
                             end
-                            local res = IsoProfile.call("spin", mode, eqSlot, curStyleId, true)
-                            if type(res) == "table" and res.ok and res.style then
-                                local rolledDef = IsoStyles and IsoStyles.BY_ID and IsoStyles.BY_ID[res.style]
-                                local rolledName = rolledDef and rolledDef.name or tostring(res.style)
-                                for _, tName in ipairs(BD.TargetStyles or {}) do
-                                    if string.upper(tostring(tName)) == string.upper(tostring(rolledName)) then
-                                        BD.AutoSpinStyle = false
-                                        notify("Auto Spin Style", "Rolled Target Style: " .. tostring(rolledName) .. "!", 5)
-                                        break
+                            if totalSpins >= 1 then
+                                local mode = (luckyCount > 0) and "lucky" or "normal"
+                                local res = IsoProfile.call("spin", mode, eqSlot, curStyleId, true)
+                                if type(res) == "table" and not res.ok and res.confirm then
+                                    res = IsoProfile.call("spin", mode, eqSlot, tostring(res.confirm), true)
+                                end
+                                if type(res) == "table" and res.ok and res.style then
+                                    local rolledDef = IsoStyles and IsoStyles.BY_ID and IsoStyles.BY_ID[res.style]
+                                    local rolledName = rolledDef and rolledDef.name or tostring(res.style)
+                                    for _, tName in ipairs(BD.TargetStyles or {}) do
+                                        if string.upper(tostring(tName)) == string.upper(tostring(rolledName)) or string.lower(tostring(tName)) == string.lower(tostring(res.style)) then
+                                            BD.AutoSpinStyle = false
+                                            notify("Auto Spin Style", "Rolled Target Style: " .. tostring(rolledName) .. "!", 5)
+                                            break
+                                        end
                                     end
                                 end
                             end
@@ -11538,9 +11995,13 @@ do
                     end
 
                     -- 2. Auto Spin Ability
-                    if BD.AutoSpinAbility and d.abilities and d.abilities.slots then
-                        local eqSlot = (d.abilities.equipped and tonumber(d.abilities.equipped[1])) or 1
+                    if BD.AutoSpinAbility and type(d.abilities) == "table" and type(d.abilities.slots) == "table" then
+                        local eqList = d.abilities.equipped
+                        local eqSlot = (type(eqList) == "table" and tonumber(eqList[1])) or 1
                         local slotObj = d.abilities.slots[eqSlot]
+                        if slotObj and slotObj.locked then
+                            pcall(IsoProfile.call, "abilityLock", eqSlot)
+                        end
                         local curAbilId = (slotObj and slotObj.id) or ""
                         local curAbilDef = (IsoAbilities and IsoAbilities.BY_ID) and IsoAbilities.BY_ID[curAbilId] or nil
                         local curAbilName = curAbilDef and curAbilDef.name or ""
@@ -11553,25 +12014,36 @@ do
                             end
                         end
 
-                        if hitTarget then
+                        if hitTarget and curAbilId ~= "" then
                             BD.AutoSpinAbility = false
                             notify("Auto Spin Ability", "Target Ability Rolled: " .. tostring(curAbilName) .. "!", 5)
                         else
-                            local mode = ((tonumber(d.abilities.luckySpins) or 0) > 0) and "lucky" or "normal"
-                            local totalSpins = (tonumber(d.abilities.spins) or 0) + (tonumber(d.abilities.luckySpins) or 0)
+                            local luckyCount = tonumber(d.abilities.luckySpins) or 0
+                            local normalCount = tonumber(d.abilities.spins) or 0
+                            local totalSpins = normalCount + luckyCount
                             if totalSpins < 1 and BD.AutoBuySpinsCoins then
-                                local buyId = (IsoShop and IsoShop.QUICK_ABILITY and IsoShop.QUICK_ABILITY.normal) or "ability_spin_1"
-                                IsoProfile.call("buy", buyId)
+                                local buyId = (IsoShop and IsoShop.QUICK_ABILITY and IsoShop.QUICK_ABILITY.normal) or "aspin1"
+                                local buyRes = IsoProfile.call("buy", buyId)
+                                if type(buyRes) == "table" and buyRes.ok then
+                                    normalCount = normalCount + 1
+                                    totalSpins = totalSpins + 1
+                                end
                             end
-                            local res = IsoProfile.call("abilitySpin", mode, eqSlot, curAbilId, true)
-                            if type(res) == "table" and res.ok and res.ability then
-                                local rolledDef = IsoAbilities and IsoAbilities.BY_ID and IsoAbilities.BY_ID[res.ability]
-                                local rolledName = rolledDef and rolledDef.name or tostring(res.ability)
-                                for _, tName in ipairs(BD.TargetAbilities or {}) do
-                                    if string.upper(tostring(tName)) == string.upper(tostring(rolledName)) then
-                                        BD.AutoSpinAbility = false
-                                        notify("Auto Spin Ability", "Rolled Target Ability: " .. tostring(rolledName) .. "!", 5)
-                                        break
+                            if totalSpins >= 1 then
+                                local mode = (luckyCount > 0) and "lucky" or "normal"
+                                local res = IsoProfile.call("abilitySpin", mode, eqSlot, curAbilId, true)
+                                if type(res) == "table" and not res.ok and res.confirm then
+                                    res = IsoProfile.call("abilitySpin", mode, eqSlot, tostring(res.confirm), true)
+                                end
+                                if type(res) == "table" and res.ok and res.ability then
+                                    local rolledDef = IsoAbilities and IsoAbilities.BY_ID and IsoAbilities.BY_ID[res.ability]
+                                    local rolledName = rolledDef and rolledDef.name or tostring(res.ability)
+                                    for _, tName in ipairs(BD.TargetAbilities or {}) do
+                                        if string.upper(tostring(tName)) == string.upper(tostring(rolledName)) or string.lower(tostring(tName)) == string.lower(tostring(res.ability)) then
+                                            BD.AutoSpinAbility = false
+                                            notify("Auto Spin Ability", "Rolled Target Ability: " .. tostring(rolledName) .. "!", 5)
+                                            break
+                                        end
                                     end
                                 end
                             end
@@ -11611,11 +12083,7 @@ do
                     pcall(function()
                         local lost = tonumber(LocalPlayer and LocalPlayer:GetAttribute("StreakLost")) or 0
                         if lost > 0 then
-                            local sr = CoreRemotes and CoreRemotes:FindFirstChild("S_StreakRevive")
-                            local srCall = sr and sr:FindFirstChild("Call")
-                            if srCall and srCall:IsA("RemoteFunction") then
-                                srCall:InvokeServer("coins")
-                            end
+                            invokeCoreServiceFunction("S_StreakRevive", "Call", "coins")
                         end
                     end)
                 end
@@ -11649,7 +12117,7 @@ do
     createToggle(shootSec, "Auto Shoot", false, function(val)
         BD.AutoShoot = val
     end)
-    createSlider(shootSec, "Range", 5, 40, 26, 0.5, " ft", function(val)
+    createSlider(shootSec, "Range", 5, 20, 12, 0.5, " ft", function(val)
         BD.AutoShootRange = val
     end)
     createDropdown(shootSec, "Finisher Type", {
@@ -11683,7 +12151,7 @@ do
         BD.AutoDunk = val
         BD.SyncIsoPhysics()
     end)
-    createSlider(dunkSec, "Dunk Range", 5, 25, 11.5, 0.5, " ft", function(val)
+    createSlider(dunkSec, "Dunk Range", 5, 15, 10, 0.5, " ft", function(val)
         BD.DunkRange = val
         BD.SyncIsoPhysics()
     end)
@@ -11695,8 +12163,9 @@ do
     local dribbleSec = UI.createSectionBox(AttackTab, "Dribble", "Left")
     createToggle(dribbleSec, "Auto Dribble", false, function(val)
         BD.AutoDribble = val
+        BD.SyncIsoPhysics()
     end)
-    createSlider(dribbleSec, "Reaction Time", 0, 500, 85, 5, "ms", function(val)
+    createSlider(dribbleSec, "Reaction Time", 0, 500, 45, 5, "ms", function(val)
         BD.DribbleReactionMs = val
     end)
     createToggle(dribbleSec, "Always Ankle Break", false, function(val)
@@ -11772,7 +12241,7 @@ do
         BD.AutoSteal = val
         BD.SyncIsoPhysics()
     end)
-    createSlider(stealSec, "Steal Range", 3, 12, 5.2, 0.2, " ft", function(val)
+    createSlider(stealSec, "Steal Range", 4.9, 12, 5.2, 0.1, " ft", function(val)
         BD.StealRange = val
         BD.SyncIsoPhysics()
     end)
@@ -11915,6 +12384,7 @@ do
     local farmSec = UI.createSectionBox(MiscTab, "AutoFarm", "Right")
     createToggle(farmSec, "Instant CPU Match Auto Farm", false, function(val)
         BD.InstantCPUMatchFarm = val
+        BD.FarmActiveMatchToken = nil
         if not val then
             BD.InvokeIsoDebug("auto", "0")
             BD.InvokeIsoDebug("ts", "1")
@@ -12059,6 +12529,7 @@ do
     local camSec = UI.createSectionBox(VisualsTab, "Camera", "Right")
     createToggle(camSec, "Custom Camera Mode", false, function(val)
         BD.CustomCameraMode = val
+        BD.FreeCamInit = false
     end)
     createDropdown(camSec, "Camera Mode", {
         "Iso Broadcast",
@@ -12066,6 +12537,7 @@ do
         "Player Lock",
     }, "Iso Broadcast", function(opt)
         BD.CameraMode = opt
+        BD.FreeCamInit = false
     end)
     createSlider(camSec, "Custom FOV", 40, 110, 70, 1, "°", function(val)
         BD.CustomFOV = val
@@ -12080,6 +12552,7 @@ do
         BD.DisableSlowMo = val
     end)
 end
+
 
 -- TAB 8: SETTINGS (PERFORMANCE + CLIENT + SERVER + BACKGROUND + THEMES + FLOATING PILL + CONFIG MANAGER)
 do
@@ -12191,7 +12664,7 @@ do
         return pingVal
     end
 
-    local ServerGameLabel = makeTelemetryInfoLine(serverSec, "ServerGameLabel", "Game: " .. tostring(State.detectedGameName or "Prison Life"))
+    local ServerGameLabel = makeTelemetryInfoLine(serverSec, "ServerGameLabel", "Game: " .. tostring(State.detectedGameName or "Basketball Duels"))
     local ServerPlayersLabel = makeTelemetryInfoLine(serverSec, "ServerPlayersLabel", string.format("Players: %d/%d", #Players:GetPlayers(), Players.MaxPlayers or 24))
     local ServerDurationLabel = makeTelemetryInfoLine(serverSec, "ServerDurationLabel", "Time in server: " .. formatSessionDuration())
     local ServerPingLabel = makeTelemetryInfoLine(serverSec, "ServerPingLabel", string.format("Ping: %d ms", getCurrentPingMs()))
@@ -12207,7 +12680,7 @@ do
 
     local function updateServerTelemetryUI()
         if ServerGameLabel then
-            ServerGameLabel.Text = "Game: " .. tostring(State.detectedGameName or "Prison Life")
+            ServerGameLabel.Text = "Game: " .. tostring(State.detectedGameName or "Basketball Duels")
         end
         if ServerPlayersLabel then
             ServerPlayersLabel.Text = string.format("Players: %d/%d", #Players:GetPlayers(), Players.MaxPlayers or 24)
@@ -12998,6 +13471,93 @@ do
         end
     end)
 
+    do
+        local AUTO_LOAD_SCRIPT_FILE = FS_FOLDER .. "/AutoLoadTeleport_" .. CURRENT_PLACE_ID .. ".txt"
+        local AUTO_LOAD_GLOBAL_FILE = FS_FOLDER .. "/AutoLoadTeleport.txt"
+        local SCRIPT_RAW_URL = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Basketball-duels.lua"
+        local savedAutoLoadRaw = safeReadFile(AUTO_LOAD_SCRIPT_FILE)
+        if not savedAutoLoadRaw or savedAutoLoadRaw == "" then
+            savedAutoLoadRaw = safeReadFile(AUTO_LOAD_GLOBAL_FILE)
+        end
+        local initialAutoLoad = (savedAutoLoadRaw == "true" or savedAutoLoadRaw == "1")
+        ConfigState.AutoLoadScript = initialAutoLoad
+        local teleportQueuedThisSession = false
+
+        local function getQueueOnTeleportFn()
+            local g = (type(getgenv) == "function" and getgenv()) or _G
+            if type(queue_on_teleport) == "function" then return queue_on_teleport end
+            if type(queueonteleport) == "function" then return queueonteleport end
+            if type(g) == "table" then
+                if type(g.queue_on_teleport) == "function" then return g.queue_on_teleport end
+                if type(g.queueonteleport) == "function" then return g.queueonteleport end
+            end
+            if type(syn) == "table" and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
+            if type(fluxus) == "table" and type(fluxus.queue_on_teleport) == "function" then return fluxus.queue_on_teleport end
+            return nil
+        end
+
+        local function armAutoLoadQueue()
+            if not ConfigState.AutoLoadScript or teleportQueuedThisSession then
+                return
+            end
+            local qFn = getQueueOnTeleportFn()
+            if type(qFn) == "function" then
+                teleportQueuedThisSession = true
+                local payload = string.format([[
+                    task.spawn(function()
+                        if type(isfile) == "function" and type(readfile) == "function" then
+                            local okF, ex = pcall(isfile, "CoreXYZ_Data/AutoLoadTeleport.txt")
+                            if okF and ex then
+                                local okR, v = pcall(readfile, "CoreXYZ_Data/AutoLoadTeleport.txt")
+                                if okR and v == "false" then return end
+                            end
+                        end
+                        local g = (type(getgenv) == "function" and getgenv()) or _G
+                        if type(g) == "table" then
+                            if g.__CoreXYZ_TeleportAutoBooted then return end
+                            g.__CoreXYZ_TeleportAutoBooted = true
+                        end
+                        if not game:IsLoaded() then
+                            pcall(function() game.Loaded:Wait() end)
+                        end
+                        local ok, src = pcall(function() return game:HttpGet(%q) end)
+                        if ok and type(src) == "string" and #src > 100 then
+                            local fn = loadstring(src)
+                            if type(fn) == "function" then
+                                pcall(fn)
+                            end
+                        end
+                    end)
+                ]], SCRIPT_RAW_URL)
+                pcall(qFn, payload)
+            end
+        end
+
+        if initialAutoLoad then
+            task.defer(armAutoLoadQueue)
+        end
+
+        pcall(function()
+            LocalPlayer.OnTeleport:Connect(function()
+                if ConfigState.AutoLoadScript then
+                    armAutoLoadQueue()
+                end
+            end)
+        end)
+
+        createToggle(SettingsTab, "AutoLoad", initialAutoLoad, function(val)
+            ConfigState.AutoLoadScript = val == true
+            safeWriteFile(AUTO_LOAD_SCRIPT_FILE, val and "true" or "false")
+            safeWriteFile(AUTO_LOAD_GLOBAL_FILE, val and "true" or "false")
+            if val then
+                armAutoLoadQueue()
+                notify("Core.xyz", "AutoLoad enabled — script will auto-load on teleport.", 3)
+            else
+                notify("Core.xyz", "AutoLoad disabled.", 2.5)
+            end
+        end)
+    end
+
     createButton(SettingsTab, "View Changelog (" .. CHANGELOG_VERSION .. ")", function()
         if UI.showChangelogModal then
             UI.showChangelogModal(true)
@@ -13006,7 +13566,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 13. MAIN HUB LAUNCHER (KEYLESS DIRECT BOOT)
+-- 13. MAIN HUB LAUNCHER
 --------------------------------------------------------------------------------
 local function launchMainHub()
     State.isAuthorized = true
@@ -13036,7 +13596,10 @@ local function launchMainHub()
         State.loadConfigByName(autoCfg)
     end
 
-    notify("Core.xyz", "Core.xyz loaded (Keyless Mode)! Press RightShift or click the top pill to toggle.", 5)
+    task.spawn(function()
+        local keyTimeLeft = (type(State.getKeyTimeLeftText) == "function" and State.getKeyTimeLeftText()) or "Active"
+        notify("Core.xyz", "Script Loaded! Key Time Left : " .. tostring(keyTimeLeft), 5)
+    end)
 end
 
 --------------------------------------------------------------------------------

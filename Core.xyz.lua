@@ -8698,9 +8698,294 @@ do
     UI.HomeUserValue = createProfileRow(1, "User", userStr, "Info_User")
     UI.HomeExecutorValue = createProfileRow(2, "Executor", getDetectedExecutorName(), "Info_Executor")
     UI.HomeUserIdValue = createProfileRow(3, "User ID", tostring(LocalPlayer.UserId or 0), "Info_UserId")
-    UI.HomeAccessValue = createProfileRow(4, "Access Mode", "Keyless · Full Access", "Info_AccessMode")
-    if UI.HomeAccessValue then
-        UI.HomeAccessValue.TextColor3 = Theme.Success
+    UI.HomeAccessValue = createProfileRow(4, "Key Time", "Checking...", "Info_KeyDuration")
+    do
+        local durationLabel = UI.HomeAccessValue
+        local FLOWAUTH_PROJECT_ID = 10959
+        local FLOWAUTH_API_TOKEN = "adb858e40cf5dc946478beaa63d0693f51ad4b83ac4bef78"
+        local KEY_FILE_NAME = "CoreXYZ_Key.txt"
+        local KEY_META_NAME = "CoreXYZ_KeyMeta.json"
+        local DEFAULT_DURATION = 86400
+
+        local function trimStr(s)
+            if type(s) ~= "string" then return "" end
+            return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+        end
+
+        local function safeReadFile(path)
+            if type(Env.isfile) == "function" and type(Env.readfile) == "function" then
+                local okExists, exists = pcall(Env.isfile, path)
+                if okExists and exists then
+                    local okRead, content = pcall(Env.readfile, path)
+                    if okRead and type(content) == "string" then
+                        return content
+                    end
+                end
+            end
+            return nil
+        end
+
+        local function safeWriteFile(path, content)
+            if type(Env.writefile) == "function" then
+                pcall(Env.writefile, path, content)
+            end
+        end
+
+        local function safeJsonDecode(raw)
+            if type(raw) ~= "string" or raw == "" then return nil end
+            local ok, res = pcall(function() return HttpService:JSONDecode(raw) end)
+            return ok and res or nil
+        end
+
+        local function safeJsonEncode(tbl)
+            local ok, res = pcall(function() return HttpService:JSONEncode(tbl) end)
+            return ok and res or "{}"
+        end
+
+        local keyState = {
+            key = "",
+            keyId = nil,
+            tier = "premium",
+            isLifetime = false,
+            expiresAt = nil,
+            isValid = nil,
+            statusText = nil,
+            lastSync = 0,
+        }
+
+        local genvTbl = (type(getgenv) == "function" and getgenv()) or _G
+        local s = type(genvTbl) == "table" and genvTbl.__CoreXYZ_KeySession
+        if type(s) == "table" then
+            if type(s.key) == "string" and s.key ~= "" then
+                keyState.key = trimStr(s.key)
+            end
+            if s.keyId then
+                keyState.keyId = s.keyId
+            end
+            if type(s.tier) == "string" and s.tier ~= "" then
+                keyState.tier = s.tier
+            end
+            if s.isLifetime == true then
+                keyState.isLifetime = true
+                keyState.isValid = true
+            elseif tonumber(s.expiresAt) then
+                keyState.expiresAt = tonumber(s.expiresAt)
+                keyState.isValid = true
+            end
+        end
+
+        if type(genvTbl) == "table" and genvTbl.LRM_SecondsLeft ~= nil and keyState.isValid == nil then
+            local secLeft = tonumber(genvTbl.LRM_SecondsLeft)
+            if secLeft == math.huge then
+                keyState.isLifetime = true
+                keyState.isValid = true
+            elseif secLeft and secLeft > 0 then
+                keyState.expiresAt = os.time() + math.floor(secLeft)
+                keyState.isValid = true
+            end
+        end
+
+        if keyState.key == "" then
+            local savedKey = safeReadFile(KEY_FILE_NAME)
+            if savedKey then
+                keyState.key = trimStr(savedKey)
+            end
+        end
+
+        local savedMetaRaw = safeReadFile(KEY_META_NAME)
+        if savedMetaRaw then
+            local meta = safeJsonDecode(savedMetaRaw)
+            if type(meta) == "table" then
+                if keyState.key == "" and type(meta.key) == "string" then
+                    keyState.key = trimStr(meta.key)
+                end
+                if (meta.key == nil or trimStr(tostring(meta.key)) == keyState.key) then
+                    if meta.isLifetime == true then
+                        keyState.isLifetime = true
+                        keyState.isValid = true
+                    elseif keyState.expiresAt == nil and tonumber(meta.expiresAt) then
+                        keyState.expiresAt = tonumber(meta.expiresAt)
+                        keyState.isValid = true
+                    end
+                end
+            end
+        end
+
+        local function queryFlowAuthExpiry()
+            if type(Env.request) ~= "function" or keyState.key == "" then
+                return
+            end
+            local endpoint = string.format("https://flowauth.net/v1/projects/%d/keys/lookup", FLOWAUTH_PROJECT_ID)
+            local okReq, res = pcall(Env.request, {
+                Url = endpoint,
+                Method = "POST",
+                Headers = {
+                    ["Authorization"] = "Bearer " .. FLOWAUTH_API_TOKEN,
+                    ["Content-Type"] = "application/json",
+                },
+                Body = safeJsonEncode({ key_value = keyState.key }),
+            })
+            if okReq and type(res) == "table" then
+                local code = tonumber(res.StatusCode or res.status_code or res.status) or 0
+                if code == 200 then
+                    local data = safeJsonDecode(res.Body or res.body)
+                    if type(data) == "table" and data.id then
+                        keyState.keyId = data.id
+                        keyState.tier = tostring(data.tier or "premium")
+                        local effStatus = tostring(data.effective_status or data.status or "")
+                        if data.blacklist_id ~= nil then
+                            keyState.isValid = false
+                            keyState.statusText = "Blacklisted"
+                        elseif effStatus == "paused" then
+                            keyState.isValid = false
+                            keyState.statusText = "Paused"
+                        elseif effStatus == "expired" then
+                            keyState.isValid = false
+                            keyState.statusText = "Expired"
+                            keyState.expiresAt = os.time()
+                        elseif effStatus == "active" then
+                            keyState.isValid = true
+                            keyState.statusText = nil
+                            local now = os.time()
+                            local dur = type(data.duration) == "table" and data.duration or {}
+                            local isLife = (dur.is_lifetime == true) or (dur.state == "lifetime")
+                            keyState.isLifetime = isLife
+                            if isLife then
+                                keyState.expiresAt = nil
+                            else
+                                local remMs = tonumber(dur.remaining_ms) or tonumber(data.expires_after_ms)
+                                if remMs and remMs > 0 then
+                                    keyState.expiresAt = now + math.floor(remMs / 1000)
+                                elseif tonumber(data.expires_at) then
+                                    local expVal = tonumber(data.expires_at)
+                                    if expVal > 1e12 then
+                                        local evalMs = tonumber(dur.evaluated_at) or (now * 1000)
+                                        keyState.expiresAt = now + math.max(0, math.floor((expVal - evalMs) / 1000))
+                                    else
+                                        keyState.expiresAt = expVal
+                                    end
+                                elseif not keyState.expiresAt then
+                                    keyState.expiresAt = now + DEFAULT_DURATION
+                                end
+                            end
+                            safeWriteFile(KEY_META_NAME, safeJsonEncode({
+                                provider = "FlowAuth",
+                                projectId = FLOWAUTH_PROJECT_ID,
+                                key = keyState.key,
+                                keyId = keyState.keyId,
+                                tier = keyState.tier,
+                                isLifetime = keyState.isLifetime,
+                                expiresAt = keyState.expiresAt,
+                                verifiedAt = now,
+                            }))
+                        else
+                            keyState.isValid = false
+                            keyState.statusText = "Inactive"
+                        end
+                    end
+                elseif code == 404 then
+                    keyState.isValid = false
+                    keyState.statusText = "Invalid Key"
+                    keyState.expiresAt = os.time()
+                    pcall(function()
+                        if type(delfile) == "function" then
+                            pcall(delfile, KEY_FILE_NAME)
+                            pcall(delfile, KEY_META_NAME)
+                        end
+                    end)
+                end
+            end
+            keyState.lastSync = os.time()
+        end
+
+        local function formatDuration(remSec)
+            if remSec <= 0 then
+                return "Expired"
+            end
+            local days = math.floor(remSec / 86400)
+            local hours = math.floor((remSec % 86400) / 3600)
+            local mins = math.floor((remSec % 3600) / 60)
+            local secs = math.floor(remSec % 60)
+            if days > 0 then
+                return string.format("%dd %02dh %02dm %02ds", days, hours, mins, secs)
+            elseif hours > 0 then
+                return string.format("%02dh %02dm %02ds", hours, mins, secs)
+            end
+            return string.format("%02dm %02ds", mins, secs)
+        end
+
+        local function getKeyTimeLeftString()
+            if keyState.lastSync == 0 and keyState.key ~= "" and keyState.expiresAt == nil and not keyState.isLifetime then
+                pcall(queryFlowAuthExpiry)
+            end
+            if keyState.isLifetime then
+                return "Lifetime"
+            end
+            if keyState.expiresAt then
+                local rem = keyState.expiresAt - os.time()
+                if rem > 0 then
+                    return formatDuration(rem)
+                else
+                    return "Expired"
+                end
+            end
+            if keyState.isValid == false then
+                return keyState.statusText or ((keyState.key == "") and "No Active Key" or "Expired")
+            end
+            return (keyState.key ~= "") and "24h 00m 00s" or "Active"
+        end
+        State.getKeyTimeLeftText = getKeyTimeLeftString
+
+        local function renderKeyDuration()
+            if not durationLabel or not durationLabel.Parent then
+                return
+            end
+            if keyState.isValid == false then
+                durationLabel.Text = keyState.statusText or ((keyState.key == "") and "No Active Key" or "Expired")
+                durationLabel.TextColor3 = Theme.Error
+                return
+            end
+            if keyState.isLifetime then
+                local tierPrefix = (keyState.tier and keyState.tier ~= "") and (string.upper(string.sub(keyState.tier, 1, 1)) .. string.sub(keyState.tier, 2) .. " · ") or ""
+                durationLabel.Text = tierPrefix .. "Lifetime"
+                durationLabel.TextColor3 = Theme.Success
+                return
+            end
+            if keyState.expiresAt then
+                local rem = keyState.expiresAt - os.time()
+                if rem <= 0 then
+                    durationLabel.Text = "Expired"
+                    durationLabel.TextColor3 = Theme.Error
+                else
+                    durationLabel.Text = formatDuration(rem) .. " left"
+                    if rem <= 3600 then
+                        durationLabel.TextColor3 = Color3.fromRGB(255, 195, 70)
+                    else
+                        durationLabel.TextColor3 = Theme.Success
+                    end
+                end
+            else
+                durationLabel.Text = (keyState.key == "") and "No Active Key" or "Verifying..."
+                durationLabel.TextColor3 = (keyState.key == "") and Theme.Error or Theme.Silver
+            end
+        end
+
+        renderKeyDuration()
+        task.spawn(function()
+            queryFlowAuthExpiry()
+            renderKeyDuration()
+            while durationLabel and durationLabel.Parent do
+                task.wait(1)
+                if not durationLabel or not durationLabel.Parent then
+                    break
+                end
+                local now = os.time()
+                if (now - keyState.lastSync) >= 60 or (keyState.isValid == true and not keyState.isLifetime and keyState.expiresAt and (keyState.expiresAt - now) <= 0) then
+                    queryFlowAuthExpiry()
+                end
+                renderKeyDuration()
+            end
+        end)
     end
 
     createLabel(HomeTab, "Official Discord Community")
@@ -13120,6 +13405,93 @@ do
         end
     end)
 
+    do
+        local AUTO_LOAD_SCRIPT_FILE = FS_FOLDER .. "/AutoLoadTeleport_" .. CURRENT_PLACE_ID .. ".txt"
+        local AUTO_LOAD_GLOBAL_FILE = FS_FOLDER .. "/AutoLoadTeleport.txt"
+        local SCRIPT_RAW_URL = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Core.xyz.lua"
+        local savedAutoLoadRaw = safeReadFile(AUTO_LOAD_SCRIPT_FILE)
+        if not savedAutoLoadRaw or savedAutoLoadRaw == "" then
+            savedAutoLoadRaw = safeReadFile(AUTO_LOAD_GLOBAL_FILE)
+        end
+        local initialAutoLoad = (savedAutoLoadRaw == "true" or savedAutoLoadRaw == "1")
+        ConfigState.AutoLoadScript = initialAutoLoad
+        local teleportQueuedThisSession = false
+
+        local function getQueueOnTeleportFn()
+            local g = (type(getgenv) == "function" and getgenv()) or _G
+            if type(queue_on_teleport) == "function" then return queue_on_teleport end
+            if type(queueonteleport) == "function" then return queueonteleport end
+            if type(g) == "table" then
+                if type(g.queue_on_teleport) == "function" then return g.queue_on_teleport end
+                if type(g.queueonteleport) == "function" then return g.queueonteleport end
+            end
+            if type(syn) == "table" and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
+            if type(fluxus) == "table" and type(fluxus.queue_on_teleport) == "function" then return fluxus.queue_on_teleport end
+            return nil
+        end
+
+        local function armAutoLoadQueue()
+            if not ConfigState.AutoLoadScript or teleportQueuedThisSession then
+                return
+            end
+            local qFn = getQueueOnTeleportFn()
+            if type(qFn) == "function" then
+                teleportQueuedThisSession = true
+                local payload = string.format([[
+                    task.spawn(function()
+                        if type(isfile) == "function" and type(readfile) == "function" then
+                            local okF, ex = pcall(isfile, "CoreXYZ_Data/AutoLoadTeleport.txt")
+                            if okF and ex then
+                                local okR, v = pcall(readfile, "CoreXYZ_Data/AutoLoadTeleport.txt")
+                                if okR and v == "false" then return end
+                            end
+                        end
+                        local g = (type(getgenv) == "function" and getgenv()) or _G
+                        if type(g) == "table" then
+                            if g.__CoreXYZ_TeleportAutoBooted then return end
+                            g.__CoreXYZ_TeleportAutoBooted = true
+                        end
+                        if not game:IsLoaded() then
+                            pcall(function() game.Loaded:Wait() end)
+                        end
+                        local ok, src = pcall(function() return game:HttpGet(%q) end)
+                        if ok and type(src) == "string" and #src > 100 then
+                            local fn = loadstring(src)
+                            if type(fn) == "function" then
+                                pcall(fn)
+                            end
+                        end
+                    end)
+                ]], SCRIPT_RAW_URL)
+                pcall(qFn, payload)
+            end
+        end
+
+        if initialAutoLoad then
+            task.defer(armAutoLoadQueue)
+        end
+
+        pcall(function()
+            LocalPlayer.OnTeleport:Connect(function()
+                if ConfigState.AutoLoadScript then
+                    armAutoLoadQueue()
+                end
+            end)
+        end)
+
+        createToggle(SettingsTab, "AutoLoad", initialAutoLoad, function(val)
+            ConfigState.AutoLoadScript = val == true
+            safeWriteFile(AUTO_LOAD_SCRIPT_FILE, val and "true" or "false")
+            safeWriteFile(AUTO_LOAD_GLOBAL_FILE, val and "true" or "false")
+            if val then
+                armAutoLoadQueue()
+                notify("Core.xyz", "AutoLoad enabled — script will auto-load on teleport.", 3)
+            else
+                notify("Core.xyz", "AutoLoad disabled.", 2.5)
+            end
+        end)
+    end
+
     createButton(SettingsTab, "View Changelog (" .. CHANGELOG_VERSION .. ")", function()
         if UI.showChangelogModal then
             UI.showChangelogModal(true)
@@ -13128,7 +13500,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 13. MAIN HUB LAUNCHER (KEYLESS DIRECT BOOT)
+-- 13. MAIN HUB LAUNCHER
 --------------------------------------------------------------------------------
 local function launchMainHub()
     State.isAuthorized = true
@@ -13158,7 +13530,10 @@ local function launchMainHub()
         State.loadConfigByName(autoCfg)
     end
 
-    notify("Core.xyz", "Core.xyz loaded (Keyless Mode)! Press RightShift or click the top pill to toggle.", 5)
+    task.spawn(function()
+        local keyTimeLeft = (type(State.getKeyTimeLeftText) == "function" and State.getKeyTimeLeftText()) or "Active"
+        notify("Core.xyz", "Script Loaded! Key Time Left : " .. tostring(keyTimeLeft), 5)
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -13787,7 +14162,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 15. INSTANT KEYLESS DIRECT LAUNCH (NO LOADING SCREEN)
+-- 15. INSTANT DIRECT LAUNCH (NO LOADING SCREEN)
 --------------------------------------------------------------------------------
 launchMainHub()
 end)

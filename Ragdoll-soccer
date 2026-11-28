@@ -585,7 +585,7 @@ local State = {
     trackedEnemyDeathStates = {},
     isWindowFocused = true,
     effectivePerformanceMode = "Balanced",
-    detectedGameName = "Prison Life",
+    detectedGameName = "Ragdoll Soccer",
     detectedRegionCode = "IN",
     themeBoundElements = {},
     isUnderRoof = false,
@@ -9415,6 +9415,28 @@ do
             return string.format("%02dm %02ds", mins, secs)
         end
 
+        local function getKeyTimeLeftString()
+            if keyState.lastSync == 0 and keyState.key ~= "" and keyState.expiresAt == nil and not keyState.isLifetime then
+                pcall(queryFlowAuthExpiry)
+            end
+            if keyState.isLifetime then
+                return "Lifetime"
+            end
+            if keyState.expiresAt then
+                local rem = keyState.expiresAt - os.time()
+                if rem > 0 then
+                    return formatDuration(rem)
+                else
+                    return "Expired"
+                end
+            end
+            if keyState.isValid == false then
+                return keyState.statusText or ((keyState.key == "") and "No Active Key" or "Expired")
+            end
+            return (keyState.key ~= "") and "24h 00m 00s" or "Active"
+        end
+        State.getKeyTimeLeftText = getKeyTimeLeftString
+
         local function renderKeyDuration()
             if not durationLabel or not durationLabel.Parent then
                 return
@@ -17929,7 +17951,7 @@ do
         return pingVal
     end
 
-    local ServerGameLabel = makeTelemetryInfoLine(serverSec, "ServerGameLabel", "Game: " .. tostring(State.detectedGameName or "Prison Life"))
+    local ServerGameLabel = makeTelemetryInfoLine(serverSec, "ServerGameLabel", "Game: " .. tostring(State.detectedGameName or "Ragdoll Soccer"))
     local ServerPlayersLabel = makeTelemetryInfoLine(serverSec, "ServerPlayersLabel", string.format("Players: %d/%d", #Players:GetPlayers(), Players.MaxPlayers or 24))
     local ServerDurationLabel = makeTelemetryInfoLine(serverSec, "ServerDurationLabel", "Time in server: " .. formatSessionDuration())
     local ServerPingLabel = makeTelemetryInfoLine(serverSec, "ServerPingLabel", string.format("Ping: %d ms", getCurrentPingMs()))
@@ -17945,7 +17967,7 @@ do
 
     local function updateServerTelemetryUI()
         if ServerGameLabel then
-            ServerGameLabel.Text = "Game: " .. tostring(State.detectedGameName or "Prison Life")
+            ServerGameLabel.Text = "Game: " .. tostring(State.detectedGameName or "Ragdoll Soccer")
         end
         if ServerPlayersLabel then
             ServerPlayersLabel.Text = string.format("Players: %d/%d", #Players:GetPlayers(), Players.MaxPlayers or 24)
@@ -18736,6 +18758,93 @@ do
         end
     end)
 
+    do
+        local AUTO_LOAD_SCRIPT_FILE = FS_FOLDER .. "/AutoLoadTeleport_" .. CURRENT_PLACE_ID .. ".txt"
+        local AUTO_LOAD_GLOBAL_FILE = FS_FOLDER .. "/AutoLoadTeleport.txt"
+        local SCRIPT_RAW_URL = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer"
+        local savedAutoLoadRaw = safeReadFile(AUTO_LOAD_SCRIPT_FILE)
+        if not savedAutoLoadRaw or savedAutoLoadRaw == "" then
+            savedAutoLoadRaw = safeReadFile(AUTO_LOAD_GLOBAL_FILE)
+        end
+        local initialAutoLoad = (savedAutoLoadRaw == "true" or savedAutoLoadRaw == "1")
+        ConfigState.AutoLoadScript = initialAutoLoad
+        local teleportQueuedThisSession = false
+
+        local function getQueueOnTeleportFn()
+            local g = (type(getgenv) == "function" and getgenv()) or _G
+            if type(queue_on_teleport) == "function" then return queue_on_teleport end
+            if type(queueonteleport) == "function" then return queueonteleport end
+            if type(g) == "table" then
+                if type(g.queue_on_teleport) == "function" then return g.queue_on_teleport end
+                if type(g.queueonteleport) == "function" then return g.queueonteleport end
+            end
+            if type(syn) == "table" and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
+            if type(fluxus) == "table" and type(fluxus.queue_on_teleport) == "function" then return fluxus.queue_on_teleport end
+            return nil
+        end
+
+        local function armAutoLoadQueue()
+            if not ConfigState.AutoLoadScript or teleportQueuedThisSession then
+                return
+            end
+            local qFn = getQueueOnTeleportFn()
+            if type(qFn) == "function" then
+                teleportQueuedThisSession = true
+                local payload = string.format([[
+                    task.spawn(function()
+                        if type(isfile) == "function" and type(readfile) == "function" then
+                            local okF, ex = pcall(isfile, "CoreXYZ_Data/AutoLoadTeleport.txt")
+                            if okF and ex then
+                                local okR, v = pcall(readfile, "CoreXYZ_Data/AutoLoadTeleport.txt")
+                                if okR and v == "false" then return end
+                            end
+                        end
+                        local g = (type(getgenv) == "function" and getgenv()) or _G
+                        if type(g) == "table" then
+                            if g.__CoreXYZ_TeleportAutoBooted then return end
+                            g.__CoreXYZ_TeleportAutoBooted = true
+                        end
+                        if not game:IsLoaded() then
+                            pcall(function() game.Loaded:Wait() end)
+                        end
+                        local ok, src = pcall(function() return game:HttpGet(%q) end)
+                        if ok and type(src) == "string" and #src > 100 then
+                            local fn = loadstring(src)
+                            if type(fn) == "function" then
+                                pcall(fn)
+                            end
+                        end
+                    end)
+                ]], SCRIPT_RAW_URL)
+                pcall(qFn, payload)
+            end
+        end
+
+        if initialAutoLoad then
+            task.defer(armAutoLoadQueue)
+        end
+
+        pcall(function()
+            LocalPlayer.OnTeleport:Connect(function()
+                if ConfigState.AutoLoadScript then
+                    armAutoLoadQueue()
+                end
+            end)
+        end)
+
+        createToggle(SettingsTab, "AutoLoad", initialAutoLoad, function(val)
+            ConfigState.AutoLoadScript = val == true
+            safeWriteFile(AUTO_LOAD_SCRIPT_FILE, val and "true" or "false")
+            safeWriteFile(AUTO_LOAD_GLOBAL_FILE, val and "true" or "false")
+            if val then
+                armAutoLoadQueue()
+                notify("Core.xyz", "AutoLoad enabled — script will auto-load on teleport.", 3)
+            else
+                notify("Core.xyz", "AutoLoad disabled.", 2.5)
+            end
+        end)
+    end
+
     createButton(SettingsTab, "View Changelog (" .. CHANGELOG_VERSION .. ")", function()
         if UI.showChangelogModal then
             UI.showChangelogModal(true)
@@ -18744,7 +18853,7 @@ do
 end
 
 --------------------------------------------------------------------------------
--- 13. MAIN HUB LAUNCHER (KEYLESS DIRECT BOOT)
+-- 13. MAIN HUB LAUNCHER
 --------------------------------------------------------------------------------
 local function launchMainHub()
     State.isAuthorized = true
@@ -18774,7 +18883,10 @@ local function launchMainHub()
         State.loadConfigByName(autoCfg)
     end
 
-    notify("Core.xyz", "Core.xyz loaded (Keyless Mode)! Press RightShift or click the top pill to toggle.", 5)
+    task.spawn(function()
+        local keyTimeLeft = (type(State.getKeyTimeLeftText) == "function" and State.getKeyTimeLeftText()) or "Active"
+        notify("Core.xyz", "Script Loaded! Key Time Left : " .. tostring(keyTimeLeft), 5)
+    end)
 end
 
 --------------------------------------------------------------------------------
