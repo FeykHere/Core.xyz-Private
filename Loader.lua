@@ -17,10 +17,12 @@ flow_preinit(function()
 		SupportedGames = {
 			[9294074907] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
 			[10770730129] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
+			[10773229738] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Basketball-duels.lua",
 		},
 		SupportedPlaces = {
 			[90568084448279] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/One-shot.lua",
 			[106931373443671] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Ragdoll-soccer",
+			[134954408729617] = "https://raw.githubusercontent.com/FeykHere/Core.xyz-Private/main/Basketball-duels.lua",
 		},
 	}
 
